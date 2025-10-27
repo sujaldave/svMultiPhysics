@@ -69,6 +69,33 @@ include(SimVascularFunctionCheckCompilerFlags)
 
 # Add additional variables that can be set from the cmake gui or from the command line.
 #
+# Set CMake policy for CUDA
+cmake_policy(SET CMP0146 NEW)
+
+# Prefer a specific nvcc and set architectures in the cache BEFORE enabling CUDA
+# This prevents CMake from attempting to probe unsupported older GPU targets
+if(NOT DEFINED CMAKE_CUDA_COMPILER)
+  set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc" CACHE FILEPATH "CUDA compiler")
+endif()
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  # Use modern architectures by default; adjust to your GPU if needed.
+  set(CMAKE_CUDA_ARCHITECTURES "75;80;86" CACHE STRING "CUDA architectures to build for")
+endif()
+
+# Enable CUDA support after the cache variables are set
+enable_language(CUDA)
+find_package(CUDAToolkit REQUIRED)
+
+# Set CUDA flags and architectures
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+if(CUDAToolkit_FOUND)
+  message(STATUS "CUDA found: ${CUDAToolkit_VERSION}")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++17")
+  set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+endif()
 # These variables must later be add to 'ExternalProject_Add(svMultiPhysics' as -D options. 
 #
 set(SV_USE_TRILINOS OFF CACHE BOOL "Build with the Trilinos linear algebra package")
@@ -122,6 +149,9 @@ ExternalProject_Add(svMultiPhysics
   UPDATE_COMMAND ""
   INSTALL_COMMAND ""
   CMAKE_CACHE_ARGS
+  -DCMAKE_CUDA_COMPILER:STRING=${CMAKE_CUDA_COMPILER}
+  -DCMAKE_CUDA_FLAGS:STRING=${CMAKE_CUDA_FLAGS}
+  -DCMAKE_CUDA_ARCHITECTURES:STRING=${CMAKE_CUDA_ARCHITECTURES}
     -DCMAKE_CXX_COMPILER:STRING=${CMAKE_CXX_COMPILER}
     -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}

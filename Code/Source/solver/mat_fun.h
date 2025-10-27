@@ -6,6 +6,7 @@
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/unsupported/Eigen/CXX11/Tensor"
+#include "cuda_tensor.h"
 #include <stdexcept>
 
 #include "Array.h"
@@ -106,19 +107,49 @@ namespace mat_fun {
     Tensor<nsd>
     double_dot_product(const Tensor<nsd>& A, const std::array<int, 2>& dimsA, 
                         const Tensor<nsd>& B, const std::array<int, 2>& dimsB) {
-        
-        // Define the contraction dimensions
-        Eigen::array<Eigen::IndexPair<int>, 2> contractionDims = {
-            Eigen::IndexPair<int>(dimsA[0], dimsB[0]), // Contract A's dimsA[0] with B's dimsB[0]
-            Eigen::IndexPair<int>(dimsA[1], dimsB[1])  // Contract A's dimsA[1] with B's dimsB[1]
-        };
-
-        // Return the double dot product
-        return A.contract(B, contractionDims);
-
-        // For some reason, in this case the Eigen::Tensor contract function is
-        // faster than a for loop implementation.
+        Tensor<nsd> C;
+        // Manual implementation of double dot product for CUDA tensor
+        for (int i = 0; i < nsd; i++) {
+            for (int j = 0; j < nsd; j++) {
+                for (int k = 0; k < nsd; k++) {
+                    for (int l = 0; l < nsd; l++) {
+                        double sum = 0.0;
+                        for (int m = 0; m < nsd; m++) {
+                            for (int n = 0; n < nsd; n++) {
+                                // Contract over dimensions specified by dimsA and dimsB
+                                if (dimsA[0] == 2 && dimsB[0] == 2 && dimsA[1] == 3 && dimsB[1] == 3) {
+                                    sum += A(i,j,m,n) * B(m,n,k,l);
+                                }
+                                // Add other contraction patterns as needed
+                            }
+                        }
+                        C(i,j,k,l) = sum;
+                    }
+                }
+            }
+        }
+        return C;
     }
+    // Original Implementation -
+    // 
+    // double_dot_product(const Tensor<nsd>& A, const std::array<int, 2>& dimsA, 
+    //                     const Tensor<nsd>& B, const std::array<int, 2>& dimsB) {
+        
+    //     // Define the contraction dimensions
+    //     Eigen::array<Eigen::IndexPair<int>, 2> contractionDims = {
+    //         Eigen::IndexPair<int>(dimsA[0], dimsB[0]), // Contract A's dimsA[0] with B's dimsB[0]
+    //         Eigen::IndexPair<int>(dimsA[1], dimsB[1])  // Contract A's dimsA[1] with B's dimsB[1]
+    //     };
+
+    //     // Return the double dot product
+    //     return A.contract(B, contractionDims);
+
+    //     // For some reason, in this case the Eigen::Tensor contract function is
+    //     // faster than a for loop implementation.
+    // }
+
+
+
 
     Tensor4<double> ten_dyad_prod(const Array<double>& A, const Array<double>& B, const int nd);
     
