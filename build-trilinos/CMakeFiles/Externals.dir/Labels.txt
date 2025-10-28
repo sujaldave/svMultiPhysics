@@ -1,0 +1,13 @@
+# Target labels
+ Externals
+# Source files and their labels
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/Externals
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/Externals.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/Externals-complete.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-build.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-configure.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-download.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-install.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-mkdir.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-patch.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-prefix/src/Externals-stamp/Externals-update.rule

@@ -26,11 +26,24 @@
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Enable CUDA
+enable_language(CUDA)
+find_package(CUDA REQUIRED)
+
+# Add CUDA compilation flags
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++17)
+
+# Include CUDA configuration
+include(${CMAKE_CURRENT_SOURCE_DIR}/cuda_config.cmake)
+
 include_directories(${SV_SOURCE_DIR}/ThirdParty/eigen/include)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/parmetis_internal/simvascular_parmetis_internal/ParMETISLib)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tetgen/simvascular_tetgen)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tinyxml/simvascular_tinyxml)
 include_directories(${MPI_C_INCLUDE_PATH})
+
+# Add cuda_tensor.h to the include directories
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})  # This allows finding cuda_tensor.h
 
 # Find Trilinos package if requested
 if(SV_USE_TRILINOS)
@@ -149,6 +162,7 @@ set(lib ${SV_LIB_SVFSI_NAME})
 set(CSRCS 
   Array3.h Array3.cpp 
   Array.h Array.cpp
+  cuda_tensor.h
   LinearAlgebra.h LinearAlgebra.cpp
   FsilsLinearAlgebra.h FsilsLinearAlgebra.cpp
   PetscLinearAlgebra.h PetscLinearAlgebra.cpp
@@ -250,6 +264,15 @@ simvascular_add_executable(${SV_MULTIPHYSICS_EXE}
   INSTALL_SCRIPT_NAME "svmultiphysics"
   INSTALL_COMP CoreExecutables
   INSTALL_DESTINATION ${SV_INSTALL_RUNTIME_DIR})
+
+# Ensure source files that use Eigen::Tensor are compiled with the host C++
+# compiler language (not via Trilinos' nvcc_wrapper) to avoid nvcc compiling
+# Eigen header-only tensor internals which are not device-safe.
+set_source_files_properties(
+  ${CMAKE_CURRENT_SOURCE_DIR}/mat_models.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/mat_fun.cpp
+  PROPERTIES LANGUAGE CXX
+)
 
 target_link_libraries(${SV_MULTIPHYSICS_EXE}
   ${GLOBAL_LIBRARIES}

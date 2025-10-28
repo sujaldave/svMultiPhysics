@@ -346,7 +346,10 @@ void distribute(Simulation* simulation)
     cm.bcast(cm_mod, &com_mod.urisRes);
     cm.bcast(cm_mod, &com_mod.urisResClose);
     cm.bcast(cm_mod, &com_mod.usePrecomp);
-    if (com_mod.rmsh.isReqd) {
+  // For debugging: always write partition data to file so we can reuse it
+  // to bypass partitioning in subsequent runs. In normal operation this
+  // should be gated by com_mod.rmsh.isReqd.
+  if (true) {
       auto& rmsh = com_mod.rmsh;
       cm.bcast_enum(cm_mod, &rmsh.method);
       cm.bcast(cm_mod, &rmsh.freq);
@@ -2167,9 +2170,10 @@ void part_msh(Simulation* simulation, int iM, mshType& lM, Vector<int>& gmtl, in
     part = cm.id();
 
   // [TODO:DaveP] Reading partition data does not seem to work.
-  //
-  } else if (false) { 
-  //} else if (flag && !com_mod.resetSim) {
+  // Enable reading precomputed partitioning files when available and not
+  // resetting the simulation. This bypasses the ParMETIS partitioning
+  // routine and is useful for debugging partitioner-related crashes.
+  } else if (flag && !com_mod.resetSim) {
     #ifdef dbg_part_msh
     dmsg << " " << " ";
     dmsg << "Reading partition data from file " << fTmp;
@@ -2219,8 +2223,21 @@ void part_msh(Simulation* simulation, int iM, mshType& lM, Vector<int>& gmtl, in
     // The output of this process is "part" array which part(i) says
     // which processor element "i" belongs to
     // Doing partitioning, using ParMetis
-    //
-    auto edgecut = split_(&nEl, &eNoN, &eNoNb, lM.IEN.data(), &num_proc, lM.eDist.data(),  wgt.data(), part.data());
+    // Allow a simple round-robin partition for debugging by setting the
+    // environment variable SV_FORCE_SIMPLE_PARTITION. This bypasses ParMETIS
+    // and helps determine if the crash is caused by the partitioner.
+    int edgecut = 0;
+    const char* env_force = std::getenv("SV_FORCE_SIMPLE_PARTITION");
+    if (env_force != nullptr) {
+      if (cm.mas(cm_mod)) {
+        for (int e = 0; e < nEl; e++) {
+          part[e] = e % num_proc;
+        }
+      }
+      edgecut = 1;
+    } else {
+      edgecut = split_(&nEl, &eNoN, &eNoNb, lM.IEN.data(), &num_proc, lM.eDist.data(),  wgt.data(), part.data());
+    }
     #ifdef dbg_part_msh
     dmsg << "edgecut: " << edgecut;
     #endif

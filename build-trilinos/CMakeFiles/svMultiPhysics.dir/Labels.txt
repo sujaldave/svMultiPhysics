@@ -1,0 +1,13 @@
+# Target labels
+ svMultiPhysics
+# Source files and their labels
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/svMultiPhysics
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/svMultiPhysics.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/svMultiPhysics-complete.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-build.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-configure.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-download.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-install.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-mkdir.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-patch.rule
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-update.rule

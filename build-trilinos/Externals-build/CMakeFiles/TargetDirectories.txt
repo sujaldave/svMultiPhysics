@@ -1,0 +1,6 @@
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/edit_cache.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/rebuild_cache.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/list_install_components.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/install.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/install/local.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/Externals-build/CMakeFiles/install/strip.dir

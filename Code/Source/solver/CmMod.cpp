@@ -7,6 +7,7 @@
 #include "mpi.h"
 
 #include <iostream>
+#include <execinfo.h> // for backtrace
 
 CmMod::CmMod()
 {
@@ -121,6 +122,15 @@ void cmType::bcast(const CmMod& cm_mod, Array<int>& data, const std::string& nam
 void cmType::bcast(const CmMod& cm_mod, Vector<double>& data, const std::string& name) const
 {
   if (data.size() == 0) {
+    std::cerr << "DEBUG: Zero-size vector broadcast attempt for: " << name << std::endl;
+    std::cerr << "DEBUG: Stack trace:" << std::endl;
+    void* callstack[128];
+    int frames = backtrace(callstack, 128);
+    char** strs = backtrace_symbols(callstack, frames);
+    for (int i = 0; i < frames; i++) {
+      std::cerr << strs[i] << std::endl;
+    }
+    free(strs);
     throw std::runtime_error(name + ":bcast double vector has size 0.");
   }
   MPI_Bcast(data.data(), data.size(), cm_mod::mpreal, cm_mod.master, com());

@@ -1,0 +1,38 @@
+# First add CUDA support
+cmake_minimum_required(VERSION 3.8)  # This version added better CUDA support
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+# Enable CUDA
+enable_language(CUDA)
+find_package(CUDA REQUIRED)
+
+# Add CUDA compilation flags
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-std=c++17)
+
+# Add cuda_tensor.h to the include directories
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})  # This allows finding cuda_tensor.h
+
+# Rest of your existing includes
+include_directories(${SV_SOURCE_DIR}/ThirdParty/eigen/include)
+include_directories(${SV_SOURCE_DIR}/ThirdParty/parmetis_internal/simvascular_parmetis_internal/ParMETISLib)
+include_directories(${SV_SOURCE_DIR}/ThirdParty/tetgen/simvascular_tetgen)
+include_directories(${SV_SOURCE_DIR}/ThirdParty/tinyxml/simvascular_tinyxml)
+include_directories(${MPI_C_INCLUDE_PATH})
+
+# [Rest of your existing CMakeLists.txt content]
+
+# Modify the source files list to include cuda_tensor.h
+set(CSRCS 
+  Array3.h Array3.cpp 
+  Array.h Array.cpp
+  cuda_tensor.h  # Add this line
+  LinearAlgebra.h LinearAlgebra.cpp
+  # [Rest of your existing source files]
+)
+
+# Set CUDA architectures if needed
+set(CMAKE_CUDA_ARCHITECTURES 70 75 80)  # Adjust these numbers based on your GPU
+
+# [Rest of your existing CMakeLists.txt content]

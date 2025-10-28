@@ -1,0 +1,2 @@
+/home/sujal/research/lib/trilinos-cuda-epetra/bin/kokkos_launch_compiler /home/sujal/research/lib/trilinos-cuda-epetra/bin/nvcc_wrapper /usr/bin/c++ /usr/bin/ar qc ../../../lib/lib_simvascular_thirdparty_tetgen.a CMakeFiles/_simvascular_thirdparty_tetgen.dir/tetgen.cxx.o CMakeFiles/_simvascular_thirdparty_tetgen.dir/predicates.cxx.o
+/home/sujal/research/lib/trilinos-cuda-epetra/bin/kokkos_launch_compiler /home/sujal/research/lib/trilinos-cuda-epetra/bin/nvcc_wrapper /usr/bin/c++ /usr/bin/ranlib ../../../lib/lib_simvascular_thirdparty_tetgen.a

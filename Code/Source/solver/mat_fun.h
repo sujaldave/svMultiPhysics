@@ -26,7 +26,11 @@ namespace mat_fun {
     using Matrix = Eigen::Matrix<double, nsd, nsd>;
 
     template<size_t nsd>
+#if defined(__CUDACC__)
+    using Tensor = CudaTensor4<nsd>;
+#else
     using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+#endif
 
     // Function to convert Array<double> to Eigen::Matrix
     template <typename MatrixType>

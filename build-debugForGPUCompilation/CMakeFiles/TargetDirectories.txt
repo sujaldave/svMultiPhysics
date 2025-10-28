@@ -1,0 +1,4 @@
+/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/Externals.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/svMultiPhysics.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/edit_cache.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/rebuild_cache.dir

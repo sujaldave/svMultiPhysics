@@ -1,0 +1,56 @@
+#ifndef MAT_FUN_H 
+#define MAT_FUN_H 
+
+#include "eigen3/Eigen/Core"
+#include "eigen3/Eigen/Dense"
+#include "cuda_tensor.h"
+#include <stdexcept>
+
+#include "Array.h"
+#include "Tensor4.h"
+#include "Vector.h"
+
+namespace mat_fun {
+    // Define templated type aliases for Eigen matrices and tensors for convenience
+    template<size_t nsd>
+    using Matrix = Eigen::Matrix<double, nsd, nsd>;
+
+    // Replace Eigen::TensorFixedSize with our CUDA-compatible tensor
+    template<size_t nsd>
+    using Tensor = CudaTensor4<nsd>;
+
+    // [Rest of the file remains the same as before]
+    // ... [Previous content]
+    
+    template <int nsd>
+    Tensor<nsd>
+    double_dot_product(const Tensor<nsd>& A, const std::array<int, 2>& dimsA, 
+                        const Tensor<nsd>& B, const std::array<int, 2>& dimsB) {
+        Tensor<nsd> C;
+        // Manual implementation of double dot product for CUDA tensor
+        for (int i = 0; i < nsd; i++) {
+            for (int j = 0; j < nsd; j++) {
+                for (int k = 0; k < nsd; k++) {
+                    for (int l = 0; l < nsd; l++) {
+                        double sum = 0.0;
+                        for (int m = 0; m < nsd; m++) {
+                            for (int n = 0; n < nsd; n++) {
+                                // Contract over dimensions specified by dimsA and dimsB
+                                if (dimsA[0] == 2 && dimsB[0] == 2 && dimsA[1] == 3 && dimsB[1] == 3) {
+                                    sum += A(i,j,m,n) * B(m,n,k,l);
+                                }
+                                // Add other contraction patterns as needed
+                            }
+                        }
+                        C(i,j,k,l) = sum;
+                    }
+                }
+            }
+        }
+        return C;
+    }
+
+    // [Rest of the original implementations]
+};
+
+#endif

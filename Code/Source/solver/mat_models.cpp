@@ -20,7 +20,7 @@ template<size_t nsd>
 using Matrix = Eigen::Matrix<double, nsd, nsd>;
 
 template<size_t nsd>
-using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+using Tensor = mat_fun::Tensor<nsd>;
 
 
 

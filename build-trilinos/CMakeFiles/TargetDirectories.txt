@@ -1,0 +1,4 @@
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/Externals.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/svMultiPhysics.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/edit_cache.dir
+/home/sujal/research/svGPU/svMultiPhysics/build-trilinos/CMakeFiles/rebuild_cache.dir

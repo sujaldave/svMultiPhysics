@@ -1,0 +1,25 @@
+Invalid MIT-MAGIC-COOKIE-1 keyInvalid MIT-MAGIC-COOKIE-1 keyterminate called after throwing an instance of 'std::runtime_error'
+  what():  :bcast double vector has size 0.
+[casey-marsden-desktop:1130271] *** Process received signal ***
+[casey-marsden-desktop:1130271] Signal: Aborted (6)
+[casey-marsden-desktop:1130271] Signal code:  (-6)
+[casey-marsden-desktop:1130271] [ 0] /lib/x86_64-linux-gnu/libpthread.so.0(+0x14420)[0x7fc880f51420]
+[casey-marsden-desktop:1130271] [ 1] /lib/x86_64-linux-gnu/libc.so.6(gsignal+0xcb)[0x7fc880a3a00b]
+[casey-marsden-desktop:1130271] [ 2] /lib/x86_64-linux-gnu/libc.so.6(abort+0x12b)[0x7fc880a19859]
+[casey-marsden-desktop:1130271] [ 3] /usr/lib/x86_64-linux-gnu/libstdc++.so.6(+0x9e8d1)[0x7fc880ca28d1]
+[casey-marsden-desktop:1130271] [ 4] /usr/lib/x86_64-linux-gnu/libstdc++.so.6(+0xaa37c)[0x7fc880cae37c]
+[casey-marsden-desktop:1130271] [ 5] /usr/lib/x86_64-linux-gnu/libstdc++.so.6(+0xaa3e7)[0x7fc880cae3e7]
+[casey-marsden-desktop:1130271] [ 6] /usr/lib/x86_64-linux-gnu/libstdc++.so.6(+0xaa699)[0x7fc880cae699]
+[casey-marsden-desktop:1130271] [ 7] /home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-build/bin/svmultiphysics(+0x496aa8)[0x555d0c223aa8]
+[casey-marsden-desktop:1130271] [ 8] /home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-build/bin/svmultiphysics(+0x25f68f)[0x555d0bfec68f]
+[casey-marsden-desktop:1130271] [ 9] /home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-build/bin/svmultiphysics(+0x2c4397)[0x555d0c051397]
+[casey-marsden-desktop:1130271] [10] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3)[0x7fc880a1b083]
+[casey-marsden-desktop:1130271] [11] /home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-build/bin/svmultiphysics(+0x13ad8e)[0x555d0bec7d8e]
+[casey-marsden-desktop:1130271] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node casey-marsden-desktop exited on signal 6 (Aborted).
+--------------------------------------------------------------------------

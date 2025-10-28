@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/svMultiPhysics"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/svMultiPhysics.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/CMakeFiles/svMultiPhysics-complete.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-build.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-configure.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-download.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-install.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-mkdir.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-patch.rule"
+		},
+		{
+			"file" : "/home/sujal/research/svGPU/svMultiPhysics/build-debugForGPUCompilation/svMultiPhysics-prefix/src/svMultiPhysics-stamp/svMultiPhysics-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"svMultiPhysics"
+		],
+		"name" : "svMultiPhysics"
+	}
+}

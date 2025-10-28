@@ -1,0 +1,157 @@
+Debug report: CUDA / CMake integration — 2025-10-27
+
+Overview
+--------
+This document records the CUDA integration issue encountered while enabling CUDA support in the svMultiPhysics repo, the options and fixes attempted, and the final working changes. It also lists recommendations and things to take care of when switching CUDA architectures on local machines and HPC clusters.
+
+Initial problem (symptoms)
+--------------------------
+- CMake failed during configuration with errors about not finding CUDAConfig.cmake (CMake "Could not find a package configuration file provided by \"CUDA\""), and later ptxas errors such as:
+  "ptxas fatal : Value 'sm_30' is not defined for option 'gpu-name'"
+- CMake's CUDA compiler identification step attempted to compile for sm_30 (Kepler) which is unsupported by the installed CUDA toolkit (CUDA 12.x dropped Kepler support).
+- Later compile errors: when building targets the header `cuda_tensor.h` used `__host__` and `__device__` unguarded; g++ compilation failed with "`__host__` does not name a type" for translation units compiled with g++ (non-nvcc).
+
+Root causes
+-----------
+1. Mixed/legacy CMake usage:
+   - The project used both modern `CUDAToolkit` (CMake 3.17+) and legacy `FindCUDA`/`FindCUDA.cmake` paths. The legacy FindCUDA used older probing behaviors.
+   - Duplicate/contradictory calls to `enable_language(CUDA)` and `find_package(CUDA ...)` caused probing in different contexts.
+2. CMake's compiler-probing behavior:
+   - When `enable_language(CUDA)` is invoked before setting cache variables like `CMAKE_CUDA_COMPILER` and `CMAKE_CUDA_ARCHITECTURES`, CMake performs compiler identification probes that may pick default/legacy architectures (for example trying compute_30 / sm_30), invoking ptxas and failing if the installed toolkit does not support those archs.
+3. Header compatibility with host-only compilation:
+   - `cuda_tensor.h` used CUDA qualifiers (`__host__` / `__device__`) but was included by .cpp files compiled with the host compiler (g++). When not compiling with nvcc, those qualifiers were undefined and caused compile errors.
+
+Timeline & Options tried (chronological)
+----------------------------------------
+1. Initial attempts (before edits):
+   - Added CUDA language and attempted various `CMAKE_CUDA_ARCHITECTURES` settings directly in `CMakeLists.txt`.
+   - Tried `find_package(CUDA 12.0 REQUIRED)` (legacy) and `find_package(CUDAToolkit REQUIRED)` (modern) in different combinations.
+   - Repeated `enable_language(CUDA)` calls.
+   Result: CMake either failed to find CUDA config files or attempted to compile for sm_30 and failed with ptxas.
+
+2. Explicit CMake invocation attempts:
+   - Ran commands such as:
+     cmake -DSV_USE_TRILINOS:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc ..
+     cmake -DCMAKE_PREFIX_PATH=/usr/local/cuda -DCMAKE_CUDA_ARCHITECTURES="75;80;86" ..
+   - These helped find CUDA but did not fully avoid the sm_30 probe until we prevented CMake from probing legacy archs.
+
+3. Observed environment:
+   - nvcc at /usr/local/cuda/bin/nvcc (Cuda 12.2.91)
+   - GPU: Quadro K620 (Kepler) reported by `nvidia-smi -L` — Kepler (compute capability 3.0-3.2).
+   - CUDA 12 does not support sm_30; ptxas failed when ptx code targeted sm_30.
+
+4. Important code changes attempted and applied:
+   - Strategy: set `CMAKE_CUDA_COMPILER` and `CMAKE_CUDA_ARCHITECTURES` as CMake cache variables BEFORE calling `enable_language(CUDA)` so CMake's compiler identification does not probe unsupported architectures.
+   - Remove redundant/legacy `find_package(CUDA ...)` usage and standardize on `find_package(CUDAToolkit REQUIRED)` (modern approach) in top-level `CMakeLists.txt`.
+   - Added `CMAKE_PREFIX_PATH=/usr/local/cuda` when running cmake to help CMake locate CUDA's config files.
+   - For header compatibility, added guards in `Code/Source/solver/cuda_tensor.h` so `__host__` and `__device__` become no-ops when `__CUDACC__` is not defined (i.e., when compiling with g++). This allowed the header to be included in host-only translation units.
+
+What worked (final resolution)
+------------------------------
+Two complementary fixes together resolved the build:
+
+1) Ensure cache variables are set before enabling CUDA
+   - In the top-level `CMakeLists.txt` we set cache variables early (if not already defined):
+     - CMAKE_CUDA_COMPILER -> /usr/local/cuda/bin/nvcc
+     - CMAKE_CUDA_ARCHITECTURES -> "75;80;86" (example modern arch list)
+   - Then call `enable_language(CUDA)` and `find_package(CUDAToolkit REQUIRED)` after those cache entries exist.
+   Why this matters: when cache variables are pre-set, CMake's compiler identification and probing will use those values and won't try to probe/compile for legacy architectures (sm_30), avoiding ptxas errors.
+
+2) Make CUDA qualifier macros harmless for host-only builds
+   - Modified `Code/Source/solver/cuda_tensor.h` to define `__host__` and `__device__` as empty macros when `__CUDACC__` is not defined:
+     #if !defined(__CUDACC__)
+     #  ifndef __host__
+     #    define __host__
+     #  endif
+     #  ifndef __device__
+     #    define __device__
+     #  endif
+     #endif
+   - This permits including the header in g++-compiled files without errors.
+
+Verification
+------------
+- Reconfigured a clean build directory and ran:
+  cmake -DCMAKE_PREFIX_PATH=/usr/local/cuda ..
+  make -j4
+- Result: CMake configured successfully (found CUDAToolkit 12.2.91) and the entire project built successfully (executable linked). The previous ptxas sm_30 error and `__host__` compile errors no longer occurred.
+
+Files changed (high-level)
+-------------------------
+- `CMakeLists.txt` (top-level): added cache-setting logic for `CMAKE_CUDA_COMPILER` and `CMAKE_CUDA_ARCHITECTURES` before `enable_language(CUDA)`, standardized on `find_package(CUDAToolkit REQUIRED)` and set `CMAKE_CUDA_STANDARD`, `CMAKE_CUDA_SEPARABLE_COMPILATION`
+- `Code/Source/solver/cuda_tensor.h`: added macros to make `__host__`/`__device__` safe for non-nvcc compilation
+
+Caveats and things to take care of (local systems and HPC)
+---------------------------------------------------------
+1. GPU architecture compatibility
+   - CUDA toolkits drop older GPU support over time. CUDA 12+ removed Kepler (sm_30/sm_35) support. If you have an older GPU (e.g., Quadro K620), you have three options:
+     a) Use an older CUDA toolkit (e.g., CUDA 10.x/11.x) that still supports Kepler. You must then point CMake to that CUDA installation (set CMAKE_CUDA_COMPILER to that nvcc). This is less desirable long-term.
+     b) Use a newer GPU for development or compilation that matches the active CUDA toolchain.
+     c) Build host-only or CPU fallback binaries for older GPUs and use GPU-enabled builds only on nodes with newer GPUs.
+   - On HPC systems pick the CUDA/toolkit version that matches the compute nodes' modules and set `CMAKE_CUDA_COMPILER` and `CMAKE_PREFIX_PATH` appropriately (or use module load to get the right nvcc in PATH).
+
+2. How to change/choose CUDA architectures
+   - CMake's `CMAKE_CUDA_ARCHITECTURES` expects compute capability numbers such as `60;70;75;80` or `75;80;86`. You can pass them on the command line:
+     cmake -DCMAKE_CUDA_ARCHITECTURES="75;80;86" -DCMAKE_CUDA_COMPILER=/path/to/nvcc ..
+   - Important: when changing architectures or CUDA compiler, clean the build directory (rm -rf build && mkdir build) and re-run cmake; otherwise an existing CMake cache may cause inconsistent probes.
+   - If you need to build fat binaries for multiple architectures (targeting a range of GPUs), list them in `CMAKE_CUDA_ARCHITECTURES` (e.g. "70;75;80;86"). But be mindful of toolkit support: if your installed toolkit does not contain support for an arch, the probe may fail.
+
+3. Finding CUDA with CMake
+   - Prefer `find_package(CUDAToolkit REQUIRED)` (modern) over the legacy `FindCUDA` module. The modern `CUDAToolkit` uses `CUDAConfig.cmake` provided by the CUDA installation and aligns with modern CMake policies.
+   - If CMake can't find CUDAConfig.cmake, use `-DCMAKE_PREFIX_PATH=/path/to/cuda` or set `CUDA_DIR` to the CUDA install prefix.
+   - If workspaces or ExternalProject_Add calls spawn sub-configurations (as in this repo), ensure the child projects receive the correct cache values (pass `-DCMAKE_CUDA_COMPILER:STRING=${CMAKE_CUDA_COMPILER}`, etc., through `ExternalProject_Add`'s `CMAKE_CACHE_ARGS` or `CMAKE_ARGS`).
+
+4. CMake policy CMP0146 and legacy FindCUDA
+   - CMP0146 removes the old `FindCUDA` module. If your project contains `find_package(CUDA ...)` calls or custom `cuda_config.cmake` files, you will see CMP0146 warnings. The long-term fix is to migrate to `CUDAToolkit` and remove legacy FindCUDA usage in sub-CMake files.
+
+5. Source-level CUDA compatibility (device code)
+   - When writing CUDA-aware classes/headers used in both host and device translation units:
+     - Prefer to keep device code in .cu files compiled with nvcc, and expose a minimal header interface for host code.
+     - If headers must include CUDA qualifiers, make them conditional (guard `__host__`/`__device__`) so g++ can parse them.
+     - Avoid C++ STL in device code; use thrust or raw device arrays.
+     - Avoid large fixed-size arrays on device stack; prefer device-allocated memory or small PODs with careful consideration of per-thread stack limits.
+     - Annotate performance-sensitive pointers with `__restrict__` when appropriate and ensure proper memory alignment.
+
+6. Separating host and device builds
+   - Some code should be compiled by nvcc to get proper device and unified host-device functions. Where practical, keep device kernels in .cu files and call them via small host wrappers in .cpp files.
+   - Use `CMAKE_CUDA_SEPARABLE_COMPILATION ON` if you need separable compilation (device linking across translation units).
+
+Practical commands (examples)
+----------------------------
+- Configure with explicit CUDA prefix and archs (clean build dir first):
+
+  rm -rf build && mkdir build && cd build
+  cmake -DCMAKE_PREFIX_PATH=/usr/local/cuda -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+        -DCMAKE_CUDA_ARCHITECTURES="75;80;86" ..
+
+- Or pass architectures from the command line to an existing build dir (you should clear cache):
+  cmake -DCMAKE_CUDA_ARCHITECTURES="75;80;86" ..
+
+- Clean and rebuild after changes to CUDA architecture or compiler:
+  rm -rf build && mkdir build && cd build
+  cmake <args> ..
+  make -j4
+
+Notes about this repo's recent edits
+-----------------------------------
+- Top-level `CMakeLists.txt` was updated to set cache entries for `CMAKE_CUDA_COMPILER` and `CMAKE_CUDA_ARCHITECTURES` before `enable_language(CUDA)`. Also standardized on `find_package(CUDAToolkit REQUIRED)` and set `CMAKE_CUDA_STANDARD` and `CMAKE_CUDA_SEPARABLE_COMPILATION` where appropriate.
+- `Code/Source/solver/cuda_tensor.h` gained conditional macro definitions so headers that expose `__host__`/`__device__` are safe to include from g++-compiled translation units.
+
+Recommended follow-ups
+----------------------
+1. Migrate remaining legacy `find_package(CUDA ...)` calls (in sub-CMake files such as `Source/solver/cuda_config.cmake`) to `CUDAToolkit` and remove reliance on legacy FindCUDA behaviors.
+2. Add a tiny CUDA compilation test target to the top-level CMake that builds a simple .cu file using `CudaTensor4` to verify device compilation with nvcc in CI.
+3. Document supported CUDA versions and target architectures in the repo README or developer docs so contributors know which toolkit to use.
+4. If cross-building for multiple cluster targets, add a small helper script or CMake presets for common HPC environments (module load commands, architecture lists, CUDA versions) and include them in Documentation/ or Docker/ for reproducibility.
+
+Summary (quick)
+---------------
+- Problem: CMake and nvcc probing tried to target an unsupported architecture (sm_30) and headers using CUDA qualifiers caused compile failures with the host compiler.
+- Fixes applied: set `CMAKE_CUDA_COMPILER` and `CMAKE_CUDA_ARCHITECTURES` in the cache before `enable_language(CUDA)` and `find_package(CUDAToolkit`, plus make `__host__`/`__device__` safe for non-nvcc compilation.
+- Result: CMake config and full project build succeeded with `make -j4` using CUDA 12.2.91; the sm_30 ptxas error and `__host__` compile errors were resolved.
+
+If you want, next I can:
+- (A) Add a small device unit test (.cu + CMake target) to verify `CudaTensor4` device compilation, or
+- (B) Scan other CMake files (e.g., `Source/solver/cuda_config.cmake`) and migrate any remaining legacy FindCUDA uses to the modern `CUDAToolkit` approach.
+
+End of report.

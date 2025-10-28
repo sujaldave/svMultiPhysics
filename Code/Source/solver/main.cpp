@@ -11,6 +11,7 @@
 
 #include "all_fun.h"
 #include "bf.h"
+#include "gpu_diagnostic.hpp"
 #include "contact.h"
 #include "distribute.h"
 #include "eq_assem.h"
@@ -888,6 +889,12 @@ int main(int argc, char *argv[])
     for (int iEq = 0; iEq < simulation->com_mod.nEq; iEq++) {
       auto& eq = simulation->com_mod.eq[iEq];
       add_eq_linear_algebra(simulation->com_mod, eq);
+    }
+
+    // Run GPU diagnostic to verify device compute
+    if (cm.mas(simulation->cm_mod)) {
+      std::cout << "\n[GPU Diagnostic] Running device computation test..." << std::endl;
+      gpu_diagnostic::verify_gpu_compute(argc, argv);
     }
 
     #ifdef debug_main
