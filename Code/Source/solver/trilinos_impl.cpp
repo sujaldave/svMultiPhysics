@@ -812,15 +812,19 @@ void checkDiagonalIsZero(const Teuchos::RCP<Trilinos> &trilinos_)
   Tpetra_Vector diagonal(rowMap);
   trilinos_->K->getLocalDiagCopy(diagonal);
   bool isZeroDiag = false;
-  auto diagData = diagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
-  for (size_t i = 0; i < diagData.extent(0); ++i)
+  
   {
-    if (diagData(i, 0) == 0.0)
+    // NEW scope to ensure diagData dies before replaceDiagonalCrsMatrix()
+    auto diagData = diagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
+    for (size_t i = 0; i < diagData.extent(0); ++i)
     {
-      diagData(i, 0) = 1.0;
-      isZeroDiag = true;
+      if (diagData(i, 0) == 0.0)
+      {
+        diagData(i, 0) = 1.0;
+        isZeroDiag = true;
+      }
     }
-  }
+  } // diagData dies here; host view released
   Tpetra::replaceDiagonalCrsMatrix(*trilinos_->K, diagonal);
 
 } // void checkDiagonalIsZero()
@@ -837,33 +841,43 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
   Teuchos::RCP<const Tpetra_Map> map = diagonal.getMap();
 
   // Set Dirichlet weights
-  for (int i = 0; i < localNodes; ++i) {
-    for (int j = 0; j < dof; ++j) {
-      GO gid = localToGlobalSorted[i] * dof + j;
-      if (map->isNodeGlobalElement(gid)) {
-        size_t lid = map->getLocalElement(gid);
-        diagonal.replaceLocalValue(lid, dirW[i * dof + j]);
-      } else {
-        std::cerr << "[ERROR] Setting Dirichlet diagonal scaling value failed at GID " 
-                  << gid << std::endl;
-        exit(1);
+  {
+    // NEW scope block
+    for (int i = 0; i < localNodes; ++i) {
+      for (int j = 0; j < dof; ++j) {
+        GO gid = localToGlobalSorted[i] * dof + j;
+        if (map->isNodeGlobalElement(gid)) {
+          size_t lid = map->getLocalElement(gid);
+          diagonal.replaceLocalValue(lid, dirW[i * dof + j]);
+        } else {
+          std::cerr << "[ERROR] Setting Dirichlet diagonal scaling value failed at GID " 
+                    << gid << std::endl;
+          exit(1);
+        }
       }
     }
-  }
+  } // host writes to 'diagonal' (local replaceLocalValue) are now done
 
   // Extract and modify diagonal of K
-  Tpetra_Vector Kdiag(trilinos_->K->getRowMap());
-  trilinos_->K->getLocalDiagCopy(Kdiag);
+  {
+    // NEW scope block
+    Tpetra_Vector Kdiag(trilinos_->K->getRowMap());
+    trilinos_->K->getLocalDiagCopy(Kdiag);
 
-  auto KdiagView = Kdiag.getLocalViewHost(Tpetra::Access::ReadWrite);
-  for (size_t i = 0; i < KdiagView.extent(0); ++i) {
-    if (KdiagView(i, 0) == 0.0)
-      KdiagView(i, 0) = 1.0;
-    KdiagView(i, 0) = 1.0 / std::sqrt(std::abs(KdiagView(i, 0)));
-  }
+    { 
+      // NEW nested block: limit lifetime of KdiagView
 
-  // diagonal = diagonal * Kdiag (element-wise)
-  diagonal.elementWiseMultiply(1.0, diagonal, Kdiag, 0.0);
+      auto KdiagView = Kdiag.getLocalViewHost(Tpetra::Access::ReadWrite);
+      for (size_t i = 0; i < KdiagView.extent(0); ++i) {
+        if (KdiagView(i, 0) == 0.0)
+          KdiagView(i, 0) = 1.0;
+        KdiagView(i, 0) = 1.0 / std::sqrt(std::abs(KdiagView(i, 0)));
+      }
+    } // KdiagView dies here; host view released
+
+    // diagonal = diagonal * Kdiag (element-wise)
+    diagonal.elementWiseMultiply(1.0, diagonal, Kdiag, 0.0);
+  } // Kdiag dies here
 
   // Apply scaling to K and F
   trilinos_->K->leftScale(diagonal);
