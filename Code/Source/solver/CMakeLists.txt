@@ -85,6 +85,11 @@ endif()
 if(USE_TRILINOS)
   ADD_DEFINITIONS(-DWITH_TRILINOS)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+  # Addition to link SVMultiPhysics with CUDA/Tacho
+  # We built Trilinos with CUDA/Tacho, so we also need CUDA TPLs available here.
+  # This gives us CUDA::cusolver, CUDA::cublas, CUDA::cudart, etc.
+  find_package(CUDAToolkit REQUIRED)
 endif()
 
 # Build with the PETSc linear algebra package.
@@ -242,6 +247,12 @@ if(USE_TRILINOS)
   include_directories(${Trilinos_INCLUDE_DIRS})
   link_directories(${Trilinos_LIBRARY_DIRS})
   link_directories(${Trilinos_TPL_LIBRARY_DIRS})
+
+  # Addition to link SVMultiPhysics with CUDA/Tacho
+  if (CUDAToolkit_FOUND)
+    include_directories(${CUDAToolkit_INCLUDE_DIRS})
+  endif()
+
 endif()
 
 simvascular_add_executable(${SV_MULTIPHYSICS_EXE}
@@ -271,7 +282,12 @@ if(SV_MPI_EXTRA_LIBRARY)
 endif()
 
 if(USE_TRILINOS)
-  target_link_libraries(${SV_MULTIPHYSICS_EXE} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
+  target_link_libraries(${SV_MULTIPHYSICS_EXE} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES}
+  # Addition to link SVMultiPhysics with CUDA/Tacho
+  CUDA::cusolver
+  CUDA::cublas
+  CUDA::cudart
+  )
 endif()
 
 if(USE_PETSC)
@@ -290,9 +306,9 @@ if(ENABLE_COVERAGE)
   # add coverage target
   add_custom_target(coverage
     # gather data
-    COMMAND ${LCOV} --directory . --capture --output-file coverage.info --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
+    COMMAND ${LCOV} --directory . --capture --output-file coverage.info
     # exclude externals
-    COMMAND ${LCOV} --remove coverage.info -o coverage.info '/usr/*' '/opt/*' "${PROJECT_SOURCE_DIR}/ThirdParty/*" '/Library/*' 'v1/*' --ignore-errors unused
+    COMMAND ${LCOV} --remove coverage.info -o coverage.info '/usr/*' '/opt/*' '${PROJECT_SOURCE_DIR}/ThirdParty/*' '/Library/*' 'v1/*'
     # generate report
     COMMAND ${GENHTML} --demangle-cpp -o coverage coverage.info
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -338,7 +354,12 @@ if(ENABLE_UNIT_TEST)
   add_executable(run_all_unit_tests ${CSRCS})
   
   if(USE_TRILINOS)
-    target_link_libraries(run_all_unit_tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
+    target_link_libraries(run_all_unit_tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES}
+  # Addition to link SVMultiPhysics with CUDA/Tacho
+  CUDA::cusolver
+  CUDA::cublas
+  CUDA::cudart
+  )
   endif()
 
   if(USE_PETSC)
@@ -372,3 +393,4 @@ if(ENABLE_UNIT_TEST)
   add_test(NAME all_unit_tests COMMAND run_all_unit_tests)
 
 endif()
+

@@ -1,13 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) Stanford University, The Regents of the University of California, and others.
 // SPDX-License-Identifier: BSD-3-Clause
 
-/* This material model implementation is based on the following paper: 
-Peirlinck, M., Hurtado, J.A., Rausch, M.K. et al. A universal material model subroutine 
-for soft matter systems. Engineering with Computers 41, 905–927 (2025). 
-https://doi.org/10.1007/s00366-024-02031-w */
-
-// The functions required for CANN material model implementations are defined here
-
 #include "ArtificialNeuralNetMaterial.h"
 #include "ComMod.h"
 #include "mat_fun.h"
@@ -117,81 +110,230 @@ const Matrix<nsd>& C, const Matrix<nsd>& fl, int nfd, double J2d, double J4d, co
 const Matrix<nsd>& Idm, const double Tfa, Matrix<nsd>& N1, double& psi, double (&Inv)[9],std::array<Matrix<nsd>,9>& dInv,
 std::array<Tensor<nsd>,9>& ddInv) const {
 
-    // double Inv[9] = {0};
-    Matrix<nsd> C2 = C * C;
+    // Create raw arrays to avoid dynamic initialization
+    double C_data[3][3] = {{0}};  // Store C matrix data
+    double fl_data[3][2] = {{0}}; // Store fl matrix data
+    double Ci_data[3][3] = {{0}}; // Store Ci matrix data
+    double Idm_data[3][3] = {{0}}; // Store Idm matrix data
+    double N1_data[3][3] = {{0}}; // Store N1 matrix data
+    double N2_data[3][3] = {{0}}; // Store N2 matrix data
+    double N12_data[3][3] = {{0}}; // Store N12 matrix data
+    double dInv_data[9][3][3] = {{{0}}}; // Store first derivatives
+    double ddInv_data[9][3][3][3][3] = {{{{0}}}}; // Store second derivatives
+    double C2_data[3][3] = {{0}}; // Store C*C data
 
-    Inv[0] = J2d * C.trace();
-    Inv[1] = 0.50 * (Inv[0]*Inv[0] - J4d * (C*C).trace());
-    Inv[2] = C.determinant();
-    Inv[3] = J2d * (fl.col(0).dot(C * fl.col(0)));
-    Inv[4] = J4d * (fl.col(0).dot(C2 * fl.col(0)));
-
-    Matrix<nsd> dInv1 = -Inv[0]/3 * Ci + J2d * Idm;
-    Matrix<nsd> dInv2 = (C2.trace()/3)*Ci + Inv[0]*dInv1 + J4d*C;
-    Matrix<nsd> dInv3 = Inv[2]*Ci;
-    N1 = fl.col(0)*fl.col(0).transpose();
-    Matrix<nsd> dInv4 = -Inv[3]/3*Ci + J2d*N1;
-    Matrix<nsd> dInv5 = J4d*(N1*C + C*N1) - Inv[4]/3*Ci;
-
-    Matrix<nsd> dInv6, dInv7, dInv8, dInv9;
-    Tensor<nsd> ddInv6, ddInv7, ddInv8, ddInv9;
-    // initialize to 0
-    dInv6.setZero();
-    dInv7.setZero();
-    dInv8.setZero();
-    dInv9.setZero();
-    ddInv6.setZero();
-    ddInv7.setZero();
-    ddInv8.setZero();
-    ddInv9.setZero();
-
-    Tensor<nsd> dCidC = -symmetric_dyadic_product<nsd>(Ci, Ci);
-    Matrix<nsd> dJ4ddC = -2.0/3.0 * J4d * Ci;
-
-    Tensor<nsd> ddInv1 = (-1.0/3.0)*(dyadic_product<nsd>(dInv1,Ci) + Inv[0]*dCidC + J2d*dyadic_product(Ci,Idm));
-    Tensor<nsd> ddInv2 = dyadic_product<nsd>(dInv1,dInv1) + Inv[0]*ddInv1 + (1.0/3.0)*C2.trace()*dCidC 
-                        + (1.0/3.0)*dyadic_product<nsd>((C2.trace()*dJ4ddC + 2*J4d*C),Ci) 
-                        + dyadic_product<nsd>(dJ4ddC,C) - J4d*fourth_order_identity<nsd>();
-    Tensor<nsd> ddInv3 = dyadic_product<nsd>(dInv3,Ci) + Inv[2]*dCidC;
-    Tensor<nsd> ddInv4 = (-1.0/3.0)*(dyadic_product<nsd>(dInv4,Ci) + J2d*dyadic_product<nsd>(Ci,N1) + Inv[3]*dCidC);
-    Matrix<nsd> sum1 = (N1*C + C*N1);
-    Tensor<nsd> ddInv5 = (-1.0/3.0)*(dyadic_product<nsd>(dInv5,Ci) + Inv[4]*dCidC + 2*J4d*dyadic_product(Ci,sum1))
-                        + J4d*(2*symmetric_dyadic_product(N1,Idm) - dyadic_product(N1,Idm)
-                        + 2*symmetric_dyadic_product(Idm,N1) - dyadic_product(Idm,N1));
-
-    if (nfd == 2) {
-        Inv[5] = J2d * (fl.col(0).dot(C * fl.col(1)));
-        Inv[6] = J4d * (fl.col(0).dot(C2 * fl.col(1)));
-        Inv[7] = J2d * (fl.col(1).dot(C * fl.col(1)));
-        Inv[8] = J4d * (fl.col(1).dot(C2 * fl.col(1)));
-
-        Matrix<nsd> N2 = fl.col(1)*fl.col(1).transpose();
-        Matrix<nsd> N12 = 0.5*(fl.col(0)*fl.col(1).transpose() + fl.col(1)*fl.col(0).transpose());
-        
-
-        dInv6 = -Inv[5]/3*Ci + J2d*N12;
-        dInv7 = J4d*(N12*C + C*N12) - Inv[6]/3*Ci;
-        dInv8 = -Inv[7]/3*Ci + J2d*N2;
-        dInv9 = J4d*(N2*C + C*N2) - Inv[8]/3*Ci;
-
-        ddInv6 = -1.0/3.0*(dyadic_product(dInv6,Ci) + J2d*dyadic_product(Ci,N12) + Inv[5]*dCidC);
-        Matrix<nsd> sum12 = (N12*C + C*N12);
-        ddInv7 = -1.0/3.0*(dyadic_product(dInv7,Ci) + Inv[6]*dCidC + 2*J4d*dyadic_product(Ci,sum12))
-                + J4d*(2*symmetric_dyadic_product(N12,Idm) - dyadic_product(N12,Idm)
-                + 2*symmetric_dyadic_product(Idm,N12) - dyadic_product(Idm,N12));
-        ddInv8 = -1.0/3.0*(dyadic_product(dInv8,Ci) + J2d*dyadic_product(Ci,N2) + Inv[7]*dCidC);
-        Matrix<nsd> sum2 = (N2*C + C*N2);
-        ddInv9 = -1.0/3.0*(dyadic_product(dInv9,Ci) + Inv[8]*dCidC + 2*J4d*dyadic_product(Ci,sum2))
-                + J4d*(2*symmetric_dyadic_product(N2,Idm) - dyadic_product(N2,Idm)
-                + 2*symmetric_dyadic_product(Idm,N2) - dyadic_product(Idm,N2));
+    // Copy input matrices to raw arrays
+    for(int i = 0; i < nsd; i++) {
+        for(int j = 0; j < nsd; j++) {
+            C_data[i][j] = C(i,j);
+            Ci_data[i][j] = Ci(i,j);
+            Idm_data[i][j] = Idm(i,j);
+            if(j < 2) {
+                fl_data[i][j] = fl(i,j);
+            }
+        }
     }
 
-    dInv = {dInv1, dInv2, dInv3, dInv4, dInv5, dInv6, dInv7, dInv8, dInv9};
-    ddInv = {ddInv1, ddInv2, ddInv3, ddInv4, ddInv5, ddInv6, ddInv7, ddInv8, ddInv9};
+    // Calculate C2 = C * C using raw arrays
+    for(int i = 0; i < nsd; i++) {
+        for(int j = 0; j < nsd; j++) {
+            C2_data[i][j] = 0;
+            for(int k = 0; k < nsd; k++) {
+                C2_data[i][j] += C_data[i][k] * C_data[k][j];
+            }
+        }
+    }
+
+    // Calculate traces
+    double trC = 0, trC2 = 0;
+    for(int i = 0; i < nsd; i++) {
+        trC += C_data[i][i];
+        trC2 += C2_data[i][i];
+    }
+
+    // Calculate invariants using raw arrays
+    Inv[0] = J2d * trC;
+    Inv[1] = 0.50 * (Inv[0]*Inv[0] - J4d * trC2);
+    
+    if(nsd == 2) {
+        Inv[2] = C_data[0][0]*C_data[1][1] - C_data[0][1]*C_data[1][0];
+    } else {
+        Inv[2] = C_data[0][0]*C_data[1][1]*C_data[2][2] + 
+                 C_data[0][1]*C_data[1][2]*C_data[2][0] + 
+                 C_data[0][2]*C_data[1][0]*C_data[2][1] - 
+                 C_data[0][2]*C_data[1][1]*C_data[2][0] - 
+                 C_data[0][0]*C_data[1][2]*C_data[2][1] - 
+                 C_data[0][1]*C_data[1][0]*C_data[2][2];
+    }
+
+    // Initialize N1 and other direction tensors
+    for(int i = 0; i < nsd; i++) {
+        for(int j = 0; j < nsd; j++) {
+            N1_data[i][j] = fl_data[i][0] * fl_data[j][0];
+            N1(i,j) = N1_data[i][j]; // Also update N1 matrix for output
+            
+            if(nfd == 2) {
+                N2_data[i][j] = fl_data[i][1] * fl_data[j][1];
+                N12_data[i][j] = 0.5*(fl_data[i][0]*fl_data[j][1] + fl_data[i][1]*fl_data[j][0]);
+            }
+        }
+    }
+
+    // Calculate additional fiber invariants
+    double flC[3] = {0}; // fl_data[*][0] * C_data
+    double flC2[3] = {0}; // fl_data[*][0] * C2_data
+    
+    for(int i = 0; i < nsd; i++) {
+        for(int j = 0; j < nsd; j++) {
+            flC[i] += fl_data[i][0] * C_data[i][j];
+            flC2[i] += fl_data[i][0] * C2_data[i][j];
+        }
+    }
+
+    double flCfl = 0, flC2fl = 0;
+    for(int i = 0; i < nsd; i++) {
+        flCfl += flC[i] * fl_data[i][0];
+        flC2fl += flC2[i] * fl_data[i][0];
+    }
+
+    Inv[3] = J2d * flCfl;
+    Inv[4] = J4d * flC2fl;
+
+    // Calculate first derivatives using raw arrays
+    for(int i = 0; i < nsd; i++) {
+        for(int j = 0; j < nsd; j++) {
+            dInv_data[0][i][j] = -Inv[0]/3.0 * Ci_data[i][j] + J2d * Idm_data[i][j];
+            dInv_data[1][i][j] = (trC2/3.0)*Ci_data[i][j] + Inv[0]*dInv_data[0][i][j] + J4d*C_data[i][j];
+            dInv_data[2][i][j] = Inv[2]*Ci_data[i][j];
+            dInv_data[3][i][j] = -Inv[3]/3.0*Ci_data[i][j] + J2d*N1_data[i][j];
+            dInv_data[4][i][j] = J4d*(N1_data[i][j]*C_data[i][j] + C_data[i][j]*N1_data[i][j]) - 
+                               Inv[4]/3.0*Ci_data[i][j];
+
+            // Zero remaining matrices
+            for(int k = 5; k < 9; k++) {
+                dInv_data[k][i][j] = 0.0;
+            }
+        }
+    }
+
+    // Initialize second derivatives
+    for(int n = 0; n < 9; n++) {
+        for(int i = 0; i < nsd; i++) {
+            for(int j = 0; j < nsd; j++) {
+                for(int k = 0; k < nsd; k++) {
+                    for(int l = 0; l < nsd; l++) {
+                        if(n < 5) {  // Only set first 5 tensors initially
+                            if(n == 0) {
+                                ddInv_data[0][i][j][k][l] = (-1.0/3.0)*(dInv_data[0][i][j]*Ci_data[k][l] + 
+                                    Inv[0]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0 + 
+                                    J2d*Ci_data[i][j]*Idm_data[k][l]);
+                            } else if(n == 1) {
+                                ddInv_data[1][i][j][k][l] = dInv_data[0][i][j]*dInv_data[0][k][l] + 
+                                    Inv[0]*ddInv_data[0][i][j][k][l] + 
+                                    (trC2/3.0)*(-Ci_data[i][k]*Ci_data[j][l] - Ci_data[i][l]*Ci_data[j][k])/2.0;
+                            } else if(n == 2) {
+                                ddInv_data[2][i][j][k][l] = Inv[2]*(Ci_data[i][k]*Ci_data[j][l] + 
+                                    Ci_data[i][l]*Ci_data[j][k])/2.0;
+                            } else if(n == 3) {
+                                ddInv_data[3][i][j][k][l] = (-1.0/3.0)*(dInv_data[3][i][j]*Ci_data[k][l] + 
+                                    J2d*Ci_data[i][j]*N1_data[k][l] + 
+                                    Inv[3]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0);
+                            } else if(n == 4) {
+                                ddInv_data[4][i][j][k][l] = (-1.0/3.0)*(dInv_data[4][i][j]*Ci_data[k][l] + 
+                                    Inv[4]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0 + 
+                                    2*J4d*Ci_data[i][j]*(N1_data[k][l]*C_data[k][l] + C_data[k][l]*N1_data[k][l]));
+                            }
+                        } else {
+                            ddInv_data[n][i][j][k][l] = 0.0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (nfd == 2) {
+        // Additional fiber calculations for nfd == 2
+        double flC1[3] = {0}; // fl.col(1) * C
+        double flC2_1[3] = {0}; // fl.col(1) * C2
+        
+        for(int i = 0; i < nsd; i++) {
+            for(int j = 0; j < nsd; j++) {
+                flC1[i] += fl_data[i][1] * C_data[i][j];
+                flC2_1[i] += fl_data[i][1] * C2_data[i][j];
+            }
+        }
+
+        double flCf2 = 0, flC2f2 = 0;
+        double flCf12 = 0, flC2f12 = 0;
+        
+        for(int i = 0; i < nsd; i++) {
+            flCf2 += flC1[i] * fl_data[i][1];
+            flC2f2 += flC2_1[i] * fl_data[i][1];
+            flCf12 += flC[i] * fl_data[i][1];
+            flC2f12 += flC2[i] * fl_data[i][1];
+        }
+
+        // Set remaining invariants
+        Inv[5] = J2d * flCf12;
+        Inv[6] = J4d * flC2f12;
+        Inv[7] = J2d * flCf2;
+        Inv[8] = J4d * flC2f2;
+
+        // Calculate additional derivatives
+        for(int i = 0; i < nsd; i++) {
+            for(int j = 0; j < nsd; j++) {
+                dInv_data[5][i][j] = -Inv[5]/3.0*Ci_data[i][j] + J2d*N12_data[i][j];
+                dInv_data[6][i][j] = J4d*(N12_data[i][j]*C_data[i][j] + C_data[i][j]*N12_data[i][j]) - 
+                                   Inv[6]/3.0*Ci_data[i][j];
+                dInv_data[7][i][j] = -Inv[7]/3.0*Ci_data[i][j] + J2d*N2_data[i][j];
+                dInv_data[8][i][j] = J4d*(N2_data[i][j]*C_data[i][j] + C_data[i][j]*N2_data[i][j]) - 
+                                   Inv[8]/3.0*Ci_data[i][j];
+            }
+        }
+
+        // Additional tensor derivatives for nfd == 2
+        for(int i = 0; i < nsd; i++) {
+            for(int j = 0; j < nsd; j++) {
+                for(int k = 0; k < nsd; k++) {
+                    for(int l = 0; l < nsd; l++) {
+                        ddInv_data[5][i][j][k][l] = (-1.0/3.0)*(dInv_data[5][i][j]*Ci_data[k][l] + 
+                            J2d*Ci_data[i][j]*N12_data[k][l] + 
+                            Inv[5]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0);
+
+                        ddInv_data[6][i][j][k][l] = (-1.0/3.0)*(dInv_data[6][i][j]*Ci_data[k][l] + 
+                            Inv[6]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0 + 
+                            2*J4d*Ci_data[i][j]*(N12_data[k][l]*C_data[k][l] + C_data[k][l]*N12_data[k][l]));
+
+                        ddInv_data[7][i][j][k][l] = (-1.0/3.0)*(dInv_data[7][i][j]*Ci_data[k][l] + 
+                            J2d*Ci_data[i][j]*N2_data[k][l] + 
+                            Inv[7]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0);
+
+                        ddInv_data[8][i][j][k][l] = (-1.0/3.0)*(dInv_data[8][i][j]*Ci_data[k][l] + 
+                            Inv[8]*(Ci_data[i][k]*Ci_data[j][l] + Ci_data[i][l]*Ci_data[j][k])/2.0 + 
+                            2*J4d*Ci_data[i][j]*(N2_data[k][l]*C_data[k][l] + C_data[k][l]*N2_data[k][l]));
+                    }
+                }
+            }
+        }
+    }
+
+    // Copy final results back to matrices and tensors
+    for(int n = 0; n < 9; n++) {
+        for(int i = 0; i < nsd; i++) {
+            for(int j = 0; j < nsd; j++) {
+                dInv[n](i,j) = dInv_data[n][i][j];
+                for(int k = 0; k < nsd; k++) {
+                    for(int l = 0; l < nsd; l++) {
+                        ddInv[n](i,j,k,l) = ddInv_data[n][i][j][k][l];
+                    }
+                }
+            }
+        }
+    }
 }
 
-
-// Template instantiation
+// Template instantiations
 template void ArtificialNeuralNetMaterial::computeInvariantsAndDerivatives<2>(
 const Matrix<2>& C, const Matrix<2>& fl, int nfd, double J2d, double J4d, const Matrix<2>& Ci,
 const Matrix<2>& Idm, const double Tfa, Matrix<2>& N1, double& psi, double (&Inv)[9], std::array<Matrix<2>,9>& dInv,

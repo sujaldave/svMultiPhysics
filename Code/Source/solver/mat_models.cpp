@@ -15,12 +15,12 @@
 
 namespace mat_models {
 
-// Define templated type aliases for Eigen matrices and 4th order tensors for convenience
+// Define templated type aliases
 template<size_t nsd>
-using Matrix = Eigen::Matrix<double, nsd, nsd>;
+using Matrix = mat_fun::Matrix<nsd>;
 
-template<size_t nsd>
-using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+template<size_t nsd> 
+using Tensor = mat_fun::Tensor<nsd>;
 
 
 
@@ -251,27 +251,98 @@ void compute_fib_stress(const ComMod& com_mod, const CepMod& cep_mod, const fibS
 template<size_t nsd>
 std::pair<Matrix<nsd>, Tensor<nsd>> bar_to_iso(
   const Matrix<nsd>& S_bar, const Tensor<nsd> &CC_bar, 
-  const double J2d, const Matrix<nsd>& C, const Matrix<nsd>& Ci) 
-  {
+  const double J2d, const Matrix<nsd>& C, const Matrix<nsd>& Ci) {
 
   using namespace mat_fun;
 
-  // Useful scalar
-  double r1 = J2d * double_dot_product<nsd>(C, S_bar) / nsd;
+#ifdef __CUDA_ARCH__
+  // CUDA device code path - use raw arrays
+  double s_iso_raw[3][3];
+  double cc_iso_raw[3][3][3][3];
+  // Initialize raw arrays
+  for(int i = 0; i < nsd; i++) {
+    for(int j = 0; j < nsd; j++) {
+      s_iso_raw[i][j] = 0.0;
+      for(int k = 0; k < nsd; k++) {
+        for(int l = 0; l < nsd; l++) {
+          cc_iso_raw[i][j][k][l] = 0.0;
+        }
+      }
+    }
+  }
+#else
+  // Initialize outputs
+  Matrix<nsd> S_iso;
+  Tensor<nsd> CC_iso;
+#endif
 
-  // Compute isochoric 2nd Piola-Kirchhoff stress
-  auto S_iso = J2d*S_bar - r1*Ci;
+  double r1 = 0.0;
+  // Calculate r1 manually for both paths
+  for(int i = 0; i < nsd; i++) {
+    for(int j = 0; j < nsd; j++) {
+      r1 += C(i,j) * S_bar(i,j);
+    }
+  }
+  r1 = (J2d * r1) / nsd;
 
-  // Compute isochoric material elasticity tensor
-  Tensor<nsd> PP = fourth_order_identity<nsd>() - (1.0/nsd) * dyadic_product<nsd>(Ci, C); // Important: using auto here causes tests to fail
-  auto CC_iso = double_dot_product<nsd>(CC_bar, {2,3}, PP, {2,3});
-  CC_iso = transpose<nsd>(CC_iso);
-  CC_iso = double_dot_product<nsd>(PP, {2,3}, CC_iso, {2,3});
-  CC_iso += (-2.0/nsd) * (dyadic_product<nsd>(Ci, S_iso) + dyadic_product<nsd>(S_iso, Ci));
-  CC_iso += 2.0 * r1 * symmetric_dyadic_product<nsd>(Ci, Ci) + (- 2.0*r1/nsd) * dyadic_product<nsd>(Ci, Ci);
+  #ifdef __CUDA_ARCH__
+  // CUDA path: manual calculations
+  for(int i = 0; i < nsd; i++) {
+    for(int j = 0; j < nsd; j++) {
+      s_iso_raw[i][j] = J2d*S_bar(i,j) - r1*Ci(i,j);
 
-  // TODO: make_pair makes copies of the objects, which may be inefficient. Is there a better way?
-  return std::make_pair(S_iso, CC_iso);
+      for(int k = 0; k < nsd; k++) {
+        for(int l = 0; l < nsd; l++) {
+          double pp_term = ((i == k && j == l) ? 1.0 : 0.0) - (1.0/nsd) * Ci(i,j) * C(k,l);
+
+          double sum = 0.0;
+          for(int m = 0; m < nsd; m++) {
+            for(int n = 0; n < nsd; n++) {
+              sum += CC_bar(i,j,m,n) * pp_term;
+            }
+          }
+
+          cc_iso_raw[i][j][k][l] = sum
+                   + (-2.0/nsd) * (Ci(i,j) * s_iso_raw[k][l] + s_iso_raw[i][j] * Ci(k,l))
+                   + 2.0 * r1 * (0.5 * (Ci(i,k) * Ci(j,l) + Ci(i,l) * Ci(j,k)))
+                   - (2.0*r1/nsd) * Ci(i,j) * Ci(k,l);
+        }
+      }
+    }
+  }
+  #else
+  // CPU path: use Eigen operations
+  Matrix<nsd> S_iso_cpu = J2d*S_bar - r1*Ci;
+  
+  Tensor<nsd> PP = fourth_order_identity<nsd>() - (1.0/nsd) * dyadic_product<nsd>(Ci, C);
+  Tensor<nsd> CC_iso_cpu = double_dot_product<nsd>(CC_bar, {2,3}, PP, {2,3});
+  CC_iso_cpu = transpose<nsd>(CC_iso_cpu);
+  CC_iso_cpu = double_dot_product<nsd>(PP, {2,3}, CC_iso_cpu, {2,3});
+  CC_iso_cpu += (-2.0/nsd) * (dyadic_product<nsd>(Ci, S_iso_cpu) + dyadic_product<nsd>(S_iso_cpu, Ci));
+  CC_iso_cpu += 2.0 * r1 * symmetric_dyadic_product<nsd>(Ci, Ci) + (- 2.0*r1/nsd) * dyadic_product<nsd>(Ci, Ci);
+  
+  S_iso = S_iso_cpu;
+  CC_iso = CC_iso_cpu;
+  #endif
+
+  #ifdef __CUDA_ARCH__
+  // Create return objects and copy data
+  Matrix<nsd> S_iso_ret;
+  Tensor<nsd> CC_iso_ret;
+  for(int i = 0; i < nsd; i++) {
+    for(int j = 0; j < nsd; j++) {
+      S_iso_ret(i,j) = s_iso_raw[i][j];
+      for(int k = 0; k < nsd; k++) {
+        for(int l = 0; l < nsd; l++) {
+          CC_iso_ret(i,j,k,l) = cc_iso_raw[i][j][k][l];
+        }
+      }
+    }
+  }
+  return std::make_pair(std::move(S_iso_ret), std::move(CC_iso_ret));
+  #else
+  return std::make_pair(std::move(S_iso), std::move(CC_iso));
+  #endif
 }
 
 
