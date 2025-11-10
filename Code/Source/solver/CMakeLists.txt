@@ -287,6 +287,8 @@ if(USE_TRILINOS)
   CUDA::cusolver
   CUDA::cublas
   CUDA::cudart
+  # Addition to linke HYPRE with cuRAND
+  CUDA::curand
   )
 endif()
 
