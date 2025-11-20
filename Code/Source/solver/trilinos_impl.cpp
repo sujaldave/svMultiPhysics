@@ -754,8 +754,10 @@ void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
   mueluParams.set("aggregation: min agg size", 2);
   mueluParams.set("aggregation: max agg size", 8);
   mueluParams.set("aggregation: ordering", "natural");
-  mueluParams.set("aggregation: drop scheme", "classical");
-  mueluParams.set("aggregation: strength-of-connection: measure", "smoothed aggregation");
+  // To check if this is the issue why trilinos-ml doesn't work with
+  // CUDA aware MPI, Trilinos build
+  // mueluParams.set("aggregation: strength-of-connection: measure", "smoothed aggregation");
+  // mueluParams.set("aggregation: drop scheme", "classical");
   mueluParams.set("aggregation: number of random vectors", 5);
   mueluParams.set("aggregation: number of times to pre or post smooth", 3);
 
