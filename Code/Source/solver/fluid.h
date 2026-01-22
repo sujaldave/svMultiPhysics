@@ -10,6 +10,9 @@
 
 namespace fluid {
 
+// Maximum size of arrays sized by (3,eNoNw) -> (3,MAX_SIZE).
+const int MAX_SIZE = 27;
+
 void b_fluid(ComMod& com_mod, const int eNoN, const double w, const Vector<double>& N, const Vector<double>& y,   
     const double h, const Vector<double>& nV, Array<double>& lR, Array3<double>& lK);
 
@@ -42,6 +45,15 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
     const Vector<double>& Nw, const Vector<double>& Nq, const Array<double>& Nwx, const Array<double>& Nqx, 
     const Array<double>& Nwxx, const Array<double>& al, const Array<double>& yl, const Array<double>& bfl, 
     Array<double>& lR, Array3<double>& lK, double K_inverse_darcy_permeability, double DDir=0.0);
+
+void getLocalFluidQuant(bool mvMsh, int eNoNw, int eNoNq, const Vector<double>& Nw, const Vector<double>& Nq,
+    const Array<double>& Nwx, const Array<double>& Nqx, const Array<double>& Nwxx, const Array<double>& al, 
+    const Array<double>& yl, const Array<double>& bfl, std::array<double,3>& ud, double u[3], double ux[3][3], 
+    double uxx[3][3][3], double& divU, std::array<double,3>& d2u2, double& p, double px[3], double es[3][3], 
+    double esNx[3][MAX_SIZE], double es_x[3][3][3], std::array<double,3>& mu_x, double& gam);
+
+void getStabilizationTauM( double dt, double K_inverse_darcy_permeability, double mu, double rho, double Res,
+   double DDir, const double u[3], const Array<double>& Kxi, double& tauM);
 
 void get_viscosity(const ComMod& com_mod, const dmnType& lDmn, double& gamma, double& mu, double& mu_s, double& mu_x);
 
