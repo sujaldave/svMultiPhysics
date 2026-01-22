@@ -1,4 +1,4 @@
-build
+build*
 
 # System files osx 
 **/.DS_Store
