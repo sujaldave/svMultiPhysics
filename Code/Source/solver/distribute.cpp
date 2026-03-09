@@ -1470,6 +1470,7 @@ void dist_eq(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, const std::
   cm.bcast(cm_mod, &lEq.tol);
   cm.bcast(cm_mod, &lEq.useTLS);
   cm.bcast(cm_mod, &lEq.assmTLS);
+  cm.bcast(cm_mod, &lEq.expl_geom_cpl);
 
   #ifdef dist_eq
   dmsg << "lEq.nOutput: " << lEq.nOutput;
@@ -1557,14 +1558,15 @@ void dist_eq(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, const std::
         cm.bcast(cm_mod, &cep.odes.relTol);
       }
 
-      cm.bcast(cm_mod, &cep_mod.ttp.G_Na);
-      cm.bcast(cm_mod, &cep_mod.ttp.G_CaL);
-      cm.bcast(cm_mod, &cep_mod.ttp.G_Kr);
-      cm.bcast(cm_mod, cep_mod.ttp.G_Ks);
-      cm.bcast(cm_mod, cep_mod.ttp.G_to);
+      // Broadcast domain-specific model parameters
+      cm.bcast(cm_mod, &cep.ttp.G_Na);
+      cm.bcast(cm_mod, &cep.ttp.G_CaL);
+      cm.bcast(cm_mod, &cep.ttp.G_Kr);
+      cm.bcast(cm_mod, cep.ttp.G_Ks);
+      cm.bcast(cm_mod, cep.ttp.G_to);
 
-      cm.bcast(cm_mod, cep_mod.bo.tau_si);
-      cm.bcast(cm_mod, cep_mod.bo.tau_fi);
+      cm.bcast(cm_mod, cep.bo.tau_si);
+      cm.bcast(cm_mod, cep.bo.tau_fi);
     } 
 
     if ((dmn.phys == EquationType::phys_struct) || (dmn.phys == EquationType::phys_ustruct)) {
@@ -1732,7 +1734,11 @@ void dist_mat_consts(const ComMod& com_mod, const CmMod& cm_mod, const cmType& c
    cm.bcast(cm_mod, lStM.Tf.gt.r, "lStM.Tf.gt.r");
    cm.bcast(cm_mod, lStM.Tf.gt.i, "lStM.Tf.gt.i");
   }
+  
+  // Broadcast directional stress distribution parameters
+  cm.bcast(cm_mod, &lStM.Tf.eta_f);
   cm.bcast(cm_mod, &lStM.Tf.eta_s);
+  cm.bcast(cm_mod, &lStM.Tf.eta_n);
 
   // Distribute CANN parameter table
   if (lStM.isoType == ConstitutiveModelType::stArtificialNeuralNet) {

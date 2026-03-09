@@ -35,6 +35,14 @@
 // If a section does not contain any sub-sections then all parameters can be parsed automatically. 
 // See LinearSolverParameters::set_values() for an example. 
 //
+// Each section can read in parameters stored in an external XML file by adding an 'include_xml'
+// 'Parameter<std::string>' used to set the external XML file name. This is currently supported
+// for the following sections
+//   - GeneralSimulationParameters 
+//   - MeshParameters 
+//   - DomainParameters 
+//   - EquationParameters 
+//
 #include "Parameters.h"
 #include "consts.h"
 #include "LinearAlgebra.h"
@@ -73,6 +81,26 @@ void xml_util_set_parameters( std::function<void(const std::string&, const std::
     }
 
     item = item->NextSiblingElement();
+  }
+}
+
+//-----------------------
+// IncludeParametersFile
+//-----------------------
+// Set the root element of external XML file.
+//
+std::string IncludeParametersFile::NAME = "Include_xml";
+
+IncludeParametersFile::IncludeParametersFile(const char* cfile_name)
+{
+  std::string file_name(cfile_name);
+  file_name.erase(std::remove_if(file_name.begin(), file_name.end(), ::isspace), file_name.end());
+  auto error = document.LoadFile(file_name.c_str());
+  root_element = document.FirstChildElement(Parameters::FSI_FILE.c_str());
+
+  if (root_element == nullptr) {
+    throw std::runtime_error("The following error occured while reading the XML file '" + 
+        file_name + "'.\n" + "[svMultiPhysics] ERROR " + std::string(document.ErrorStr())); 
   }
 }
 
@@ -1588,6 +1616,7 @@ DomainParameters::DomainParameters()
   set_parameter("Force_y", 0.0, !required, force_y);
   set_parameter("Force_z", 0.0, !required, force_z);
 
+  set_parameter("Include_xml", "", !required, include_xml);
   set_parameter("Isotropic_conductivity", 0.0, !required, isotropic_conductivity);
 
   set_parameter("Mass_damping", 0.0, !required, mass_damping);
@@ -1642,17 +1671,29 @@ void DomainParameters::print_parameters()
   solid_viscosity.print_parameters();
 }
 
-void DomainParameters::set_values(tinyxml2::XMLElement* domain_elem)
+//------------
+// set_values
+//------------
+// Set the domain parameter values from the XML.
+//
+// If 'from_external_xml' is true then parameter values are read from an external xml file
+// using the 'Include_xml' parameter.
+//
+void DomainParameters::set_values(tinyxml2::XMLElement* domain_elem, bool from_external_xml)
 {
   using namespace tinyxml2;
   std::string error_msg = "Unknown " + xml_element_name_ + " XML element '"; 
 
-  const char* sid;
-  auto result = domain_elem->QueryStringAttribute("id", &sid);
-  if (sid == nullptr) {
-    throw std::runtime_error("No ID found in the  <Domain id=ID> XML element.");
+  // If not reading from an external xml file then get the <Domain id=ID> 'id' attrribute.
+  //
+  if (!from_external_xml) {
+    const char* sid;
+    auto result = domain_elem->QueryStringAttribute("id", &sid);
+    if (sid == nullptr) {
+      throw std::runtime_error("No ID found in the  <Domain id=ID> XML element.");
+    }
+    id.set(std::string(sid));
   }
-  id.set(std::string(sid));
 
   auto item = domain_elem->FirstChildElement();
   
@@ -1680,6 +1721,11 @@ void DomainParameters::set_values(tinyxml2::XMLElement* domain_elem)
       else {
         throw std::runtime_error("Viscosity model not supported for equation '" + equation.value() + "'.");
       }
+
+    } else if (name == include_xml.name()) { 
+      auto value = item->GetText();
+      IncludeParametersFile include_parameters(value);
+      set_values(include_parameters.root_element, true);
   
     } else if (item->GetText() != nullptr) {
       auto value = item->GetText();
@@ -1713,6 +1759,108 @@ void DomainParameters::set_values(tinyxml2::XMLElement* domain_elem)
 }
 
 //////////////////////////////////////////////////////////
+//        DirectionalDistributionParameters            //
+//////////////////////////////////////////////////////////
+
+/// @brief Define the XML element name for directional distribution parameters.
+const std::string DirectionalDistributionParameters::xml_element_name_ = "Directional_distribution";
+
+DirectionalDistributionParameters::DirectionalDistributionParameters()
+{
+  bool required = false;
+  
+  // Default: all stress in fiber direction
+  set_parameter("Fiber_direction", 1.0, required, fiber_direction);
+  set_parameter("Sheet_direction", 0.0, required, sheet_direction);
+  set_parameter("Sheet_normal_direction", 0.0, required, sheet_normal_direction);
+}
+
+void DirectionalDistributionParameters::set_values(tinyxml2::XMLElement* xml_elem)
+{
+  using namespace tinyxml2;
+  std::string error_msg = "Unknown " + xml_element_name_ + " XML element '";
+
+  using std::placeholders::_1;
+  using std::placeholders::_2;
+
+  std::function<void(const std::string&, const std::string&)> ftpr =
+      std::bind(&DirectionalDistributionParameters::set_parameter_value, *this, _1, _2);
+
+  xml_util_set_parameters(ftpr, xml_elem, error_msg);
+
+  value_set = true;
+}
+
+void DirectionalDistributionParameters::validate() const
+{
+  if (!value_set) {
+    return;  // No validation needed if not set (will use defaults)
+  }
+  
+  // Check how many parameters are defined
+  bool fiber_defined = fiber_direction.defined();
+  bool sheet_defined = sheet_direction.defined();
+  bool normal_defined = sheet_normal_direction.defined();
+  
+  int num_defined = fiber_defined + sheet_defined + normal_defined;
+  
+  // Empty block is invalid - if block exists, must specify all three
+  if (num_defined == 0) {
+    throw std::runtime_error("Directional_distribution block is empty. "
+      "Either remove the block entirely (to use defaults: fiber=1.0, sheet=0.0, normal=0.0) "
+      "or specify all three directions: Fiber_direction, Sheet_direction, Sheet_normal_direction.");
+  }
+  
+  // Partial specification is invalid
+  if (num_defined < 3) {
+    std::string msg = "Directional_distribution requires all three directions to be specified. Found: ";
+    if (fiber_defined) msg += "Fiber_direction ";
+    if (sheet_defined) msg += "Sheet_direction ";
+    if (normal_defined) msg += "Sheet_normal_direction ";
+    msg += "\nMissing: ";
+    if (!fiber_defined) msg += "Fiber_direction ";
+    if (!sheet_defined) msg += "Sheet_direction ";
+    if (!normal_defined) msg += "Sheet_normal_direction ";
+    throw std::runtime_error(msg);
+  }
+  
+  // All three are specified, validate their values
+  double eta_f = fiber_direction.value();
+  double eta_s = sheet_direction.value();
+  double eta_n = sheet_normal_direction.value();
+  
+  // Validate that eta_f + eta_s + eta_n = 1.0
+  double eta_sum = eta_f + eta_s + eta_n;
+  const double tol = 1.0e-10;
+  if (std::abs(eta_sum - 1.0) > tol) {
+    throw std::runtime_error("Directional distribution fractions must sum to 1.0. " 
+      "Got: Fiber_direction=" + std::to_string(eta_f) + 
+      ", Sheet_direction=" + std::to_string(eta_s) + 
+      ", Sheet_normal_direction=" + std::to_string(eta_n) + 
+      ", sum=" + std::to_string(eta_sum));
+  }
+  
+  // Validate that each eta is non-negative
+  if (eta_f < 0.0 || eta_s < 0.0 || eta_n < 0.0) {
+    throw std::runtime_error("Directional distribution fractions must be non-negative. "
+      "Got: Fiber_direction=" + std::to_string(eta_f) + 
+      ", Sheet_direction=" + std::to_string(eta_s) + 
+      ", Sheet_normal_direction=" + std::to_string(eta_n));
+  }
+}
+
+void DirectionalDistributionParameters::print_parameters()
+{
+  if (!value_set) {
+    return;
+  }
+  std::cout << "  Directional Distribution:" << std::endl;
+  std::cout << "    Fiber_direction: " << fiber_direction.value() << std::endl;
+  std::cout << "    Sheet_direction: " << sheet_direction.value() << std::endl;
+  std::cout << "    Sheet_normal_direction: " << sheet_normal_direction.value() << std::endl;
+}
+
+//////////////////////////////////////////////////////////
 //            FiberReinforcementStressParameters        //
 //////////////////////////////////////////////////////////
 
@@ -1740,22 +1888,34 @@ void FiberReinforcementStressParameters::set_values(tinyxml2::XMLElement* xml_el
   using namespace tinyxml2;
   std::string error_msg = "Unknown " + xml_element_name_ + " XML element '";
 
-  // Get the 'type' from the <LS type=TYPE> element.
+  // Get the 'type' from the element attribute.
   const char* stype;
   auto result = xml_elem->QueryStringAttribute("type", &stype);
   if (stype == nullptr) {
-    throw std::runtime_error("No TYPE given in the XML <Stimulus=TYPE> element.");
+    throw std::runtime_error("No TYPE given in the XML <Fiber_reinforcement_stress type=TYPE> element.");
   }
   type.set(std::string(stype));
   auto item = xml_elem->FirstChildElement();
-
-  using std::placeholders::_1;
-  using std::placeholders::_2;
-
-  std::function<void(const std::string&, const std::string&)> ftpr =
-      std::bind( &FiberReinforcementStressParameters::set_parameter_value, *this, _1, _2);
-
-  xml_util_set_parameters(ftpr, xml_elem, error_msg);
+  
+  while (item != nullptr) {
+    std::string name = item->Value();
+    
+    if (name == DirectionalDistributionParameters::xml_element_name_) {
+      directional_distribution.set_values(item);
+      
+    } else if (item->GetText() != nullptr) {
+      auto value = item->GetText();
+      try {
+        set_parameter_value(name, value);
+      } catch (const std::bad_function_call& exception) {
+        throw std::runtime_error(error_msg + name + "'.");
+      }
+    } else {
+      throw std::runtime_error(error_msg + name + "'.");
+    }
+    
+    item = item->NextSiblingElement();
+  }
 
   value_set = true;
 }
@@ -1775,6 +1935,9 @@ void FiberReinforcementStressParameters::print_parameters()
   for (auto& [ key, value ] : params_name_value) {
     std::cout << key << ": " << value << std::endl;
   }
+  
+  // Print directional distribution if defined
+  directional_distribution.print_parameters();
 }
 
 //////////////////////////////////////////////////////////
@@ -1980,6 +2143,7 @@ EquationParameters::EquationParameters()
   //
   set_parameter("Coupled", false, !required, coupled);
 
+  set_parameter(IncludeParametersFile::NAME, "", !required, include_xml);
   set_parameter("Initialize", "", !required, initialize);
   set_parameter("Initialize_RCR_from_flow", false, !required, initialize_rcr_from_flow);
 
@@ -1990,6 +2154,8 @@ EquationParameters::EquationParameters()
 
   set_parameter("Tolerance", 0.5, !required, tolerance);
   set_parameter("Use_taylor_hood_type_basis", false, !required, use_taylor_hood_type_basis);
+  set_parameter("Explicit_geometric_coupling", false, !required, explicit_geometric_coupling);
+
 }
 
 void EquationParameters::print_parameters()
@@ -2034,10 +2200,24 @@ void EquationParameters::print_parameters()
   ecg_leads.print_parameters();
 }
 
-void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
+void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem, DomainParameters* domain)
 {
-  using namespace tinyxml2;
-  default_domain = new DomainParameters();
+  static std::set<std::string> viscosity_names {
+      FluidViscosityParameters::xml_element_name_, 
+      SolidViscosityParameters::xml_element_name_
+  };
+
+  static std::set<consts::EquationType> fluid_eqs {
+      consts::EquationType::phys_fluid,
+      consts::EquationType::phys_CMM,
+      consts::EquationType::phys_stokes 
+   };
+
+  if (domain == nullptr) {
+    default_domain = new DomainParameters();
+    domain = default_domain;
+  }
+
   auto item = eq_elem->FirstChildElement();
 
   // Parse XML sub-elements.
@@ -2058,8 +2238,8 @@ void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
       boundary_conditions.push_back(bc_params);
 
     } else if (name == ConstitutiveModelParameters::xml_element_name_) {
-      default_domain->constitutive_model.set_values(item);
-      default_domain->constitutive_model.check_constitutive_model(type);
+      domain->constitutive_model.set_values(item);
+      domain->constitutive_model.check_constitutive_model(type);
 
     } else if (name == CoupleCplBCParameters::xml_element_name_) {
       couple_to_cplBC.set_values(item);
@@ -2076,7 +2256,7 @@ void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
       domains.push_back(domain_params);
 
     } else if (name == FiberReinforcementStressParameters::xml_element_name_) {
-      default_domain->fiber_reinforcement_stress.set_values(item);
+      domain->fiber_reinforcement_stress.set_values(item);
 
     } else if (name == LinearSolverParameters::xml_element_name_) {
       linear_solver.set_values(item);
@@ -2090,14 +2270,15 @@ void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
       remesher.set_values(item);
 
     } else if (name == StimulusParameters::xml_element_name_) {
-      default_domain->stimulus.set_values(item);
+      domain->stimulus.set_values(item);
 
-    } else if (name == FluidViscosityParameters::xml_element_name_ || name == SolidViscosityParameters::xml_element_name_) {
+    } else if (viscosity_names.count(name)) { 
       auto eq_type = consts::equation_name_to_type.at(type.value());
-      if (eq_type == consts::EquationType::phys_fluid || eq_type == consts::EquationType::phys_CMM || eq_type == consts::EquationType::phys_stokes) {
-        default_domain->fluid_viscosity.set_values(item);
+
+      if (fluid_eqs.count(eq_type)) {
+        domain->fluid_viscosity.set_values(item);
       } else if (eq_type == consts::EquationType::phys_struct || eq_type == consts::EquationType::phys_ustruct) {
-        default_domain->solid_viscosity.set_values(item);
+        domain->solid_viscosity.set_values(item);
       } else {
         throw std::runtime_error("Viscosity model not supported for equation '" + type.value() + "'.");
       }
@@ -2107,6 +2288,11 @@ void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
 
     } else if (name == VariableWallPropsParameters::xml_element_name_) {
       variable_wall_properties.set_values(item);
+
+    } else if (name == include_xml.name()) { 
+      auto value = item->GetText();
+      IncludeParametersFile include_parameters(value);
+      set_values(include_parameters.root_element, default_domain);
 
     } else if (item->GetText() != nullptr) {
       auto value = item->GetText();
@@ -2124,8 +2310,9 @@ void EquationParameters::set_values(tinyxml2::XMLElement* eq_elem)
         }
       }
 
+
     } else {
-      throw std::runtime_error("Unknown " + xml_element_name_ + " XML element '" + name + ".");
+      throw std::runtime_error("[Equation] Unknown " + xml_element_name_ + " XML element '" + name + ".");
     }
 
     item = item->NextSiblingElement();
@@ -2162,6 +2349,7 @@ GeneralSimulationParameters::GeneralSimulationParameters()
 
   set_parameter("Debug", false, !required, debug);
 
+  set_parameter("Include_xml", "", !required, include_xml);
   set_parameter("Increment_in_saving_restart_files", 0, !required, increment_in_saving_restart_files);
   set_parameter("Increment_in_saving_VTK_files", 0, !required, increment_in_saving_vtk_files);
 
@@ -2204,28 +2392,45 @@ void GeneralSimulationParameters::print_parameters()
 }
 
 /// @brief Set general parameters values from XML.
-void GeneralSimulationParameters::set_values(tinyxml2::XMLElement* xml_element)
+void GeneralSimulationParameters::set_values(tinyxml2::XMLElement* xml_element, bool from_external_xml)
 {
   using namespace tinyxml2;
+  tinyxml2::XMLElement* item;
 
   // Set parameter values from the XML elements.
   //
-  auto general_params = xml_element->FirstChildElement(xml_element_name.c_str());
-  auto item = general_params->FirstChildElement();
+  if (from_external_xml) {
+    item = xml_element->FirstChildElement();
+  } else {
+    auto general_params = xml_element->FirstChildElement(xml_element_name.c_str());
+    item = general_params->FirstChildElement();
+  }
 
   while (item != nullptr) {
     std::string name = std::string(item->Value());
     auto value = item->GetText();
-    try {
-      set_parameter_value(name, value);
-    } catch (const std::bad_function_call& exception) {
-      throw std::runtime_error("Unknown XML GeneralSimulationParameters element '" + name + ".");
+
+    if (name == include_xml.name()) {
+      auto value = item->GetText();
+      IncludeParametersFile include_parameters(value);
+      set_values(include_parameters.root_element, true);
+
+    } else {
+
+      try {
+        set_parameter_value(name, value);
+      } catch (const std::bad_function_call& exception) {
+        throw std::runtime_error("Unknown XML GeneralSimulationParameters element '" + name + ".");
+      }
     }
+
     item = item->NextSiblingElement();
   }
 
   // Check that required parameters have been set.
-  check_required();
+  if (!from_external_xml) {
+    check_required();
+  }
 }
 
 //////////////////////////////////////////////////////////
@@ -2407,6 +2612,7 @@ MeshParameters::MeshParameters()
   set_parameter("Mesh_scale_factor", 1.0, !required, mesh_scale_factor);
   set_parameter("Prestress_file_path", "", !required, prestress_file_path);
 
+  set_parameter("Include_xml", "", !required, include_xml);
   set_parameter("Initial_displacements_file_path", "", !required, initial_displacements_file_path);
   set_parameter("Initial_pressures_file_path", "", !required, initial_pressures_file_path);
   set_parameter("Initial_velocities_file_path", "", !required, initial_velocities_file_path);
@@ -2439,7 +2645,7 @@ void MeshParameters::print_parameters()
   }
 }
 
-void MeshParameters::set_values(tinyxml2::XMLElement* mesh_elem)
+void MeshParameters::set_values(tinyxml2::XMLElement* mesh_elem, bool from_external_xml)
 {
   using namespace tinyxml2;
   std::string error_msg = "Unknown " + xml_element_name_ + " XML element '"; 
@@ -2462,6 +2668,11 @@ void MeshParameters::set_values(tinyxml2::XMLElement* mesh_elem)
       VectorParameter<double> dir("Fiber_direction", {}, false, {});
       dir.set(value);
       fiber_directions.push_back(dir);
+
+    } else if (name == include_xml.name()) {
+      auto value = item->GetText();
+      IncludeParametersFile include_parameters(value);
+      set_values(include_parameters.root_element, true);
 
     // Just a simple element. 
     } else if (item->GetText() != nullptr) {

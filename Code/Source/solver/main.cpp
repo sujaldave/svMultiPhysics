@@ -831,9 +831,17 @@ void run_simulation(Simulation* simulation)
 //
 int main(int argc, char *argv[])
 {
-  if (argc != 2) {
+  if (argc < 2) {
     std::cout << "[svMultiPhysics] ERROR: The svMultiPhysics program requires the solver input XML file name as an argument." << std::endl;
     exit(1);
+  }
+
+  // Process extra arguments for XML parameter substitution.
+  for (int i = 2; i < argc; i++) {
+    std::string str(argv[i]);
+    int pos = str.find("=");
+    auto name = str.substr(0,pos);
+    auto value = str.substr(pos+1,str.size());
   }
 
   std::cout << std::scientific << std::setprecision(16);
@@ -844,8 +852,12 @@ int main(int argc, char *argv[])
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-  //std::cout << "[svFSI] MPI rank: " << mpi_rank << std::endl;
-  //std::cout << "[svFSI] MPI size: " << mpi_size << std::endl;
+
+#ifdef ENABLE_ARRAY_INDEX_CHECKING
+  if (mpi_rank == 0) {
+    std::cout << "WARNING: Index checking is enabled" << std::endl;
+  }
+#endif
 
   // Create a Simulation object that stores all data structures for a simulation.
   //
