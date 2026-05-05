@@ -476,8 +476,10 @@ void bw_fluid_3d(ComMod& com_mod, const int eNoNw, const int eNoNq, const double
 /// equations. Dirichlet boundary conditions are either treated
 /// strongly or weakly.
 //
-void construct_fluid(ComMod& com_mod, const mshType& lM, const Array<double>& Ag, const Array<double>& Yg)
+void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& solutions)
 {
+  const auto& Ag = solutions.intermediate.get_acceleration();
+  const auto& Yg = solutions.intermediate.get_velocity();
   #define n_debug_construct_fluid
   #ifdef debug_construct_fluid
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -2239,11 +2241,11 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   // Local residue
   for (int a = 0; a < eNoNw; a++) {
       lR(0,a) = lR(0,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[0]+up[0])
-                        + Res*DDir*w*Nw(a)*(u[0]+up[0]);
+                        + Res*DDir*w*Nw(a)*u[0];
       lR(1,a) = lR(1,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[1]+up[1])
-                        + Res*DDir*w*Nw(a)*(u[1]+up[1]);
+                        + Res*DDir*w*Nw(a)*u[1];
       lR(2,a) = lR(2,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[2]+up[2])
-                        + Res*DDir*w*Nw(a)*(u[2]+up[2]);
+                        + Res*DDir*w*Nw(a)*u[2];
   }
 
 }

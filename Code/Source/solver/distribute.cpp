@@ -6,6 +6,7 @@
 #include "distribute.h"
 
 #include "all_fun.h"
+#include "CepModTtp.h"
 #include "ComMod.h"
 #include "consts.h"
 #include "nn.h"
@@ -563,7 +564,8 @@ void distribute(Simulation* simulation)
       cplBC.xo.resize(cplBC.nX);
     }
 
-  } else { 
+  } else {
+    // RCR (Windkessel): nX/xo sized in read_files from nFa; not genBC/svZeroD.
     cm.bcast(cm_mod, &cplBC.nX);
     if (cplBC.xo.size() == 0) {
        cplBC.xo.resize(cplBC.nX);
@@ -780,6 +782,12 @@ void dist_bc(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, bcType& lBc
 
   if (has_robin_bc) {
     lBc.robin_bc.distribute(com_mod, cm_mod, cm, com_mod.msh[lBc.iM].fa[lBc.iFa]);
+  }
+
+  // Communicating Coupled BC
+  //
+  if (utils::btest(lBc.bType, static_cast<int>(BoundaryConditionType::bType_Coupled))) {
+    lBc.coupled_bc.distribute(com_mod, cm_mod, cm, com_mod.msh[lBc.iM].fa[lBc.iFa]);
   }
 
 
@@ -1470,6 +1478,7 @@ void dist_eq(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, const std::
   cm.bcast(cm_mod, &lEq.tol);
   cm.bcast(cm_mod, &lEq.useTLS);
   cm.bcast(cm_mod, &lEq.assmTLS);
+  cm.bcast(cm_mod, &lEq.expl_geom_cpl);
 
   #ifdef dist_eq
   dmsg << "lEq.nOutput: " << lEq.nOutput;
@@ -1557,14 +1566,12 @@ void dist_eq(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, const std::
         cm.bcast(cm_mod, &cep.odes.relTol);
       }
 
-      cm.bcast(cm_mod, &cep_mod.ttp.G_Na);
-      cm.bcast(cm_mod, &cep_mod.ttp.G_CaL);
-      cm.bcast(cm_mod, &cep_mod.ttp.G_Kr);
-      cm.bcast(cm_mod, cep_mod.ttp.G_Ks);
-      cm.bcast(cm_mod, cep_mod.ttp.G_to);
+      // Broadcast domain-specific model parameters
+      cep.ttp.distribute_conductance(cm_mod, cm);
+      cep.ttp.distribute_initial_state(cm_mod, cm);
 
-      cm.bcast(cm_mod, cep_mod.bo.tau_si);
-      cm.bcast(cm_mod, cep_mod.bo.tau_fi);
+      cm.bcast(cm_mod, cep.bo.tau_si);
+      cm.bcast(cm_mod, cep.bo.tau_fi);
     } 
 
     if ((dmn.phys == EquationType::phys_struct) || (dmn.phys == EquationType::phys_ustruct)) {

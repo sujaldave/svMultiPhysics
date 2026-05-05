@@ -31,6 +31,8 @@ include_directories(${SV_SOURCE_DIR}/ThirdParty/parmetis_internal/simvascular_pa
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tetgen/simvascular_tetgen)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tinyxml/simvascular_tinyxml)
 include_directories(${MPI_C_INCLUDE_PATH})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Core)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/FE/Common)
 
 # Find Trilinos package if requested
 if(SV_USE_TRILINOS)
@@ -181,6 +183,7 @@ set(CSRCS
   heatf.h heatf.cpp
   heats.h heats.cpp
   initialize.h initialize.cpp
+  Integrator.h Integrator.cpp
   l_elas.h l_elas.cpp
   lhsa.h lhsa.cpp
   ls.h ls.cpp
@@ -191,7 +194,6 @@ set(CSRCS
   nn.h nn.cpp
   output.h output.cpp
   load_msh.h load_msh.cpp
-  pic.h pic.cpp
   post.h post.cpp
   read_files.h read_files.cpp
   read_msh.h read_msh.cpp
@@ -201,7 +203,7 @@ set(CSRCS
   shells.h shells.cpp
   stokes.h stokes.cpp
   sv_struct.h sv_struct.cpp
-  svZeroD_subroutines.h svZeroD_subroutines.cpp
+  svZeroD_interface.h svZeroD_interface.cpp
   txt.h txt.cpp
   utils.h utils.cpp
   ustruct.h ustruct.cpp
@@ -227,6 +229,23 @@ set(CSRCS
 
   BoundaryCondition.h BoundaryCondition.cpp
   RobinBoundaryCondition.h RobinBoundaryCondition.cpp
+  CoupledBoundaryCondition.h CoupledBoundaryCondition.cpp
+)
+
+file(GLOB SOLVER_CORE_SRCS CONFIGURE_DEPENDS
+  Core/*.cpp
+  Core/*.h
+  Core/*.inl
+)
+
+file(GLOB SOLVER_FE_COMMON_SRCS CONFIGURE_DEPENDS
+  FE/Common/*.cpp
+  FE/Common/*.h
+)
+
+list(APPEND CSRCS
+  ${SOLVER_CORE_SRCS}
+  ${SOLVER_FE_COMMON_SRCS}
 )
 
   # Set PETSc interace code.

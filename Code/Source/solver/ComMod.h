@@ -12,11 +12,13 @@
 
 #include "Array.h"
 #include "Array3.h"
+#include "SolutionStates.h"
 #include "CepMod.h"
 #include "ChnlMod.h"
 #include "CmMod.h"
 #include "Parameters.h"
 #include "RobinBoundaryCondition.h"
+#include "CoupledBoundaryCondition.h"
 #include "Timer.h"
 #include "Vector.h"
 
@@ -34,6 +36,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <fstream>
 #include <sstream>
@@ -198,6 +201,9 @@ class bcType
 
     // Robin BC class
     RobinBoundaryCondition robin_bc;
+
+    // Coupled BC class
+    CoupledBoundaryCondition coupled_bc;
 };
 
 /// @brief Class storing data for B-Splines.
@@ -780,10 +786,6 @@ class svZeroDSolverInterfaceType
     // The path/name of the 0D solver shared library.
     std::string solver_library;
 
-    // Maps a 0D block name with a 3D face name representing the 
-    // coupling of a 0D block with a 3D face.
-    std::map<std::string,std::string> block_surface_map;
-
     // The path/name of the 0D solver JSON file.
     std::string configuration_file;
 
@@ -803,7 +805,6 @@ class svZeroDSolverInterfaceType
     bool has_data = false;
 
     void set_data(const svZeroDSolverInterfaceParameters& params);
-    void add_block_face(const std::string& block_name, const std::string& face_name);
 };
 
 /// @brief For coupled 0D-3D problems
@@ -826,6 +827,12 @@ class cplBCType
 
     /// @brief Number of coupled faces
     int nFa = 0;
+
+    /// @brief Number of \c Time_dependence Coupled BCs for svZeroD (set in \c init_svZeroD).
+    int nSvZeroD_coupled_bc = 0;
+
+    /// @brief (\c iEq, \c iBc) for each svZeroD coupled BC in deterministic traversal order.
+    std::vector<std::pair<int, int>> svZeroD_coupled_bc_idxs;
 
     /// @brief Number of unknowns in the 0D domain
     int nX = 0;
@@ -1208,6 +1215,9 @@ class eqType
 
     /// @brief URIS: Outputs
     std::vector<outputType> outURIS;
+
+    /// @brief Explicit geometry coupling
+    bool expl_geom_cpl = false;
 
     /// @brief Body force associated with this equation
     std::vector<bfType> bf;
@@ -1604,6 +1614,10 @@ class ComMod {
     /// @brief URIS resistance when the valve is closed
     double urisResClose;
 
+    /// @brief Fluid-related node mask for URIS SDF. Built once when
+    /// consistent with tnNo; rebuilt automatically if tnNo changes.
+    std::vector<bool> urisFluidNodeMask;
+
     /// @brief Whether to use precomputed state-variable solutions
     bool usePrecomp = false;
     //----- int members -----//
@@ -1749,18 +1763,6 @@ class ComMod {
     /// @brief RIS mapping array, with global (total) enumeration
      std::vector<Array2D> grisMapList;
 
-    /// @brief Old time derivative of variables (acceleration); known result at current time step
-    Array<double>  Ao;
-
-    /// @brief New time derivative of variables (acceleration); unknown result at next time step
-    Array<double>  An;
-
-    /// @brief Old integrated variables (displacement)
-    Array<double>  Do;
-
-    /// @brief New integrated variables (displacement)
-    Array<double>  Dn;
-
     /// @brief Residual vector
     Array<double>  R;
 
@@ -1769,12 +1771,6 @@ class ComMod {
 
     /// @brief Position vector of mesh nodes (in ref config)
     Array<double>  x;
-
-    /// @brief Old variables (velocity); known result at current time step
-    Array<double>  Yo;
-
-    /// @brief New variables (velocity); unknown result at next time step
-    Array<double>  Yn;
 
     /// @brief Body force
     Array<double>  Bf;

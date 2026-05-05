@@ -629,6 +629,83 @@ Array<int> VtkVtpData::get_connectivity() const
   return  conn;
 }
 
+/// @brief Copy an array of cell data from a polydata mesh into the given Array.
+//
+void VtkVtpData::copy_cell_data(const std::string& data_name, Array<double>& mesh_data)
+{
+  auto vtk_data = vtkDoubleArray::SafeDownCast(impl->vtk_polydata->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return; 
+  }       
+
+  int num_comp = vtk_data->GetNumberOfComponents();
+
+  // Set the data.
+  for (int i = 0; i < num_data; i++) {
+    auto tuple = vtk_data->GetTuple(i);
+    for (int j = 0; j < num_comp; j++) {
+      mesh_data(j, i) = tuple[j];
+    }
+  }
+}
+
+void VtkVtpData::copy_cell_data(const std::string& data_name, Vector<double>& mesh_data)
+{
+  auto vtk_data = vtkDoubleArray::SafeDownCast(impl->vtk_polydata->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return;
+  }
+
+  // Set the data.
+  for (int i = 0; i < num_data; i++) {
+    mesh_data(i) = vtk_data->GetValue(i);
+  }
+}
+
+/// @brief Copy an array of cell data from a polydata mesh into the given Vector<int>.
+//
+void VtkVtpData::copy_cell_data(const std::string& data_name, Vector<int>& mesh_data)
+{
+  auto vtk_data = vtkIntArray::SafeDownCast(impl->vtk_polydata->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return;
+  }
+
+  int num_comp = vtk_data->GetNumberOfComponents();
+
+  for (int i = 0; i < num_data; i++) {
+    auto tuple = vtk_data->GetTuple(i);
+    for (int j = 0; j < num_comp; j++) {
+      mesh_data(i) = tuple[j];
+    }
+  }
+}
+
+std::pair<int,int> VtkVtpData::get_cell_data_dimensions(const std::string& data_name) const
+{
+  auto vtk_array = impl->vtk_polydata->GetCellData()->GetArray(data_name.c_str());
+  if (vtk_array == nullptr) {
+    return std::make_pair(0, 0);
+  }
+
+  return std::make_pair(vtk_array->GetNumberOfComponents(), vtk_array->GetNumberOfTuples());
+}
+
 /// @brief Copy an array of point data from an polydata mesh into the given Array.
 //
 void VtkVtpData::copy_point_data(const std::string& data_name, Array<double>& mesh_data)
@@ -774,6 +851,19 @@ Array<double> VtkVtpData::get_points() const
   return points_array;
 }
 
+bool VtkVtpData::has_cell_data(const std::string& data_name)
+{
+  int num_arrays = impl->vtk_polydata->GetCellData()->GetNumberOfArrays();
+
+  for (int i = 0; i < num_arrays; i++) {
+    if (!strcmp(impl->vtk_polydata->GetCellData()->GetArrayName(i), data_name.c_str())) {
+      return true;
+    }
+  }
+
+  return false; 
+}
+
 bool VtkVtpData::has_point_data(const std::string& data_name)
 {
   int num_arrays = impl->vtk_polydata->GetPointData()->GetNumberOfArrays();
@@ -911,6 +1001,71 @@ std::vector<std::string> VtkVtuData::get_point_data_names()
   return data_names;
 }
 
+void VtkVtuData::copy_cell_data(const std::string& data_name, Array<double>& mesh_data)
+{
+  auto vtk_data = vtkDoubleArray::SafeDownCast(impl->vtk_ugrid->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return;
+  }
+
+  int num_comp = vtk_data->GetNumberOfComponents();
+
+  // Set the data.
+  for (int i = 0; i < num_data; i++) {
+    auto tuple = vtk_data->GetTuple(i);
+    for (int j = 0; j < num_comp; j++) {
+      mesh_data(j, i) = tuple[j];
+    }
+  }
+}
+
+void VtkVtuData::copy_cell_data(const std::string& data_name, Vector<double>& mesh_data)
+{
+  auto vtk_data = vtkDoubleArray::SafeDownCast(impl->vtk_ugrid->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return;
+  }
+
+  // Set the data.
+  for (int i = 0; i < num_data; i++) {
+    mesh_data[i] = vtk_data->GetValue(i);
+  }
+}
+
+/// @brief Copy an array of cell data from an unstructured mesh into the given Vector.
+//
+void VtkVtuData::copy_cell_data(const std::string& data_name, Vector<int>& mesh_data)
+{
+  auto vtk_data = vtkIntArray::SafeDownCast(impl->vtk_ugrid->GetCellData()->GetArray(data_name.c_str()));
+  if (vtk_data == nullptr) {
+    return;
+  }
+
+  int num_data = vtk_data->GetNumberOfTuples();
+  if (num_data == 0) {
+    return;
+  }
+
+  int num_comp = vtk_data->GetNumberOfComponents();
+
+  for (int i = 0; i < num_data; i++) {
+    auto tuple = vtk_data->GetTuple(i);
+    for (int j = 0; j < num_comp; j++) {
+      mesh_data(i) = tuple[j];
+    }
+  }
+}
+
 /// @brief Copy an array of point data from an unstructured grid into the given Array.
 //
 void VtkVtuData::copy_point_data(const std::string& data_name, Array<double>& mesh_data)
@@ -994,6 +1149,19 @@ void VtkVtuData::copy_points(Array<double>& points)
   } 
   
   return;
+}
+
+bool VtkVtuData::has_cell_data(const std::string& data_name)
+{
+  int num_arrays = impl->vtk_ugrid->GetCellData()->GetNumberOfArrays();
+
+  for (int i = 0; i < num_arrays; i++) {
+    if (!strcmp(impl->vtk_ugrid->GetCellData()->GetArrayName(i), data_name.c_str())) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool VtkVtuData::has_point_data(const std::string& data_name)

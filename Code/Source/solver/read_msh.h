@@ -5,6 +5,7 @@
 #define READ_MSH_H 
 
 #include "ComMod.h"
+#include "SolutionStates.h"
 #include "Simulation.h"
 #include "Vector.h"
 
@@ -21,11 +22,11 @@ namespace read_msh_ns {
       Vector<int> gN;
   };
 
-  void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag);
-  void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag);
-  void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag);
+  void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions);
+  void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions);
+  void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions);
 
-  void calc_mesh_props(ComMod& com_mod, const CmMod& cm_mod, const int nMesh, std::vector<mshType>& mesh);
+  void calc_mesh_props(ComMod& com_mod, const CmMod& cm_mod, const int nMesh, std::vector<mshType>& mesh, const SolutionStates& solutions);
 
   void calc_nbc(mshType& mesh, faceType& face);
 
@@ -52,7 +53,7 @@ namespace read_msh_ns {
   void read_msh(Simulation* simulation);
 
   void set_dmn_id_ff(Simulation* simulation, mshType& mesh, const std::string& file_name);
-  void set_dmn_id_vtk(Simulation* simulation, mshType& mesh, const std::string& file_name, const std::string& kwrd);
+  void set_dmn_id_vtk(Simulation* simulation, mshType& lM, const std::string& file_name, const std::string& kwrd);
   void set_projector(Simulation* simulation, utils::stackType& avNds);
   void set_ris_projector(Simulation* simulation);
   void set_uris_meshes(Simulation* simulation);

@@ -12,7 +12,7 @@
 #include "set_bc.h"
 #include "utils.h"
 #include <math.h>
-#include "svZeroD_subroutines.h"
+#include "svZeroD_interface.h"
 
 namespace txt_ns {
 
@@ -140,8 +140,14 @@ void create_volume_integral_file(const ComMod& com_mod, CmMod& cm_mod, const eqT
 // init_write - if true then this is the start of the simulation and 
 //   so create a new file to initialize output.
 //
-void txt(Simulation* simulation, const bool init_write) 
+void txt(Simulation* simulation, const bool init_write, const SolutionStates& solutions)
 {
+  // Local aliases for solution arrays
+  auto& An = solutions.current.get_acceleration();
+  auto& Yn = solutions.current.get_velocity();
+  auto& Dn = solutions.current.get_displacement();
+  const auto& Do = solutions.old.get_displacement();
+
   using namespace consts;
   using namespace utils;
 
@@ -160,10 +166,7 @@ void txt(Simulation* simulation, const bool init_write)
   dmsg << "cplBC.coupled: " << cplBC.coupled;
   #endif
 
-  int fid = 1;
-
-  // Writing data related to cplBC
-  //
+  // Writing data related to cplBC (genBC, svZeroD, or RCR).
   if (!com_mod.resetSim) {
     if (cplBC.coupled) {
       bool ltmp = false;
@@ -171,49 +174,20 @@ void txt(Simulation* simulation, const bool init_write)
       if (!init_write) {
         if (cplBC.useGenBC) {
           set_bc::genBC_Integ_X(com_mod, cm_mod, "L");
-
-        } else if (cplBC.useSvZeroD){
+        } else if (cplBC.useSvZeroD) {
           svZeroD::calc_svZeroD(com_mod, cm_mod, 'L');
-          
         } else {
-
           for (auto& bc : com_mod.eq[0].bc) {
             if (utils::btest(bc.bType, iBC_RCR)) {
               ltmp = true;
               break;
             }
           }
-
           set_bc::cplBC_Integ_X(com_mod, cm_mod, ltmp);
         }
       }
-
-      if (com_mod.cm.mas(cm_mod) && !cplBC.useGenBC) {
-        if (init_write) {
-          if (com_mod.cTS == 0 || !ltmp) {
-            //OPEN(fid, FILE=cplBC.saveName)
-            //CLOSE(fid, STATUS='DELETE')
-          } else {
-            //CALL TRIMFILE(cTS,cplBC.saveName)
-          }
-        } else {
-          //OPEN(fid, FILE=cplBC.saveName, POSITION='APPEND')
-          //WRITE(fid,'(ES14.6E2)',ADVANCE='NO') cplBC.xp(1)
-
-          for (int i = 0; i < cplBC.nX; i++) {
-            // WRITE(fid,'(2(1X,ES14.6E2))',ADVANCE='NO') cplBC.xn(i), cplBC.fa(i).y
-          }
-
-          for (int i = 1; i < cplBC.nXp; i++) {
-            //WRITE(fid,'(ES14.6E2)',ADVANCE='NO') cplBC.xp(i)
-          }
-
-          //WRITE(fid,*)
-          //CLOSE(fid)
-        }
-      }
     }
-  } // resetSim
+  }
 
   // Process eq outputs
   //
@@ -269,7 +243,7 @@ void txt(Simulation* simulation, const bool init_write)
         case OutputNameType::outGrp_A:
           for (int j = 0; j < tnNo; j++) {
             for (int i = 0; i < l; i++) {
-              tmpV(i,j) = com_mod.An(i+s,j);
+              tmpV(i,j) = An(i+s,j);
             }
           }
         break;
@@ -277,7 +251,7 @@ void txt(Simulation* simulation, const bool init_write)
         case OutputNameType::outGrp_Y:
           for (int j = 0; j < tnNo; j++) {
             for (int i = 0; i < l; i++) {
-              tmpV(i,j) = com_mod.Yn(i+s,j);
+              tmpV(i,j) = Yn(i+s,j);
             }
           }
 
@@ -289,7 +263,7 @@ void txt(Simulation* simulation, const bool init_write)
         case OutputNameType::outGrp_D:
           for (int j = 0; j < tnNo; j++) {
             for (int i = 0; i < l; i++) {
-              tmpV(i,j) = com_mod.Dn(i+s,j);
+              tmpV(i,j) = Dn(i+s,j);
             }
           }
         break;
@@ -297,7 +271,7 @@ void txt(Simulation* simulation, const bool init_write)
         case OutputNameType::outGrp_WSS: 
         case OutputNameType::outGrp_vort: 
         case OutputNameType::outGrp_trac:
-          post::all_post(simulation, tmpV, com_mod.Yn, com_mod.Dn, oGrp, iEq);
+          post::all_post(simulation, tmpV, solutions, oGrp, iEq);
           for (int a = 0; a < tnNo; a++) {
             auto vec = tmpV.col(a, {0,nsd-1});
             tmpV(0,a) = sqrt(norm(vec));
@@ -310,13 +284,13 @@ void txt(Simulation* simulation, const bool init_write)
         case OutputNameType::outGrp_divV: 
         case OutputNameType::outGrp_J: 
         case OutputNameType::outGrp_mises:
-          post::all_post(simulation, tmpV, com_mod.Yn, com_mod.Dn, oGrp, iEq);
+          post::all_post(simulation, tmpV, solutions, oGrp, iEq);
         break;
 
         case OutputNameType::outGrp_absV:
           for (int a = 0; a < tnNo; a++) {
             for (int i = 0; i < l; i++) {
-              tmpV(i,a) = com_mod.Yn(i,a) - com_mod.Yn(i+nsd+1,a);
+              tmpV(i,a) = Yn(i,a) - Yn(i+nsd+1,a);
             }
           }
         break;
@@ -367,10 +341,10 @@ void txt(Simulation* simulation, const bool init_write)
 
       } else {
         if (output_options.boundary_integral) {
-          write_boundary_integral_data(com_mod, cm_mod, eq, l, boundary_file_name, tmpV, div, pflag);
+          write_boundary_integral_data(com_mod, cm_mod, eq, l, boundary_file_name, tmpV, div, pflag, solutions);
         }
         if (output_options.volume_integral) {
-          write_volume_integral_data(com_mod, cm_mod, eq, l, volume_file_name, tmpV, div, pflag);
+          write_volume_integral_data(com_mod, cm_mod, eq, l, volume_file_name, tmpV, div, pflag, solutions);
         }
       }
     }
@@ -408,8 +382,11 @@ void txt(Simulation* simulation, const bool init_write)
 /// NOTE: Be carefu of a potential indexing problem here because 'm' is a length and not an index.
 //
 void write_boundary_integral_data(const ComMod& com_mod, CmMod& cm_mod, const eqType& lEq, const int m, 
-    const std::string file_name, const Array<double>& tmpV, const bool div, const bool pFlag)
+    const std::string file_name, const Array<double>& tmpV, const bool div, const bool pFlag, const SolutionStates& solutions)
 {
+  // Local alias for old displacement
+  const auto& Do = solutions.old.get_displacement();
+
   #define n_debug_write_boundary_integral_data
   #ifdef debug_write_boundary_integral_data
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -451,17 +428,17 @@ void write_boundary_integral_data(const ComMod& com_mod, CmMod& cm_mod, const eq
       if (m == 1) {
         if (div) {
           tmp = fa.area;
-          tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0) / tmp;
+          tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, solutions, std::nullopt, false, consts::MechanicalConfigurationType::reference) / tmp;
         } else {
           if (pFlag && lTH) {
-            tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, true);
+            tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, solutions, std::nullopt, true, consts::MechanicalConfigurationType::reference);
           } else {
-            tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0);
+            tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, solutions, std::nullopt, false, consts::MechanicalConfigurationType::reference);
           }
         }
 
       } else if (m == nsd) {
-        tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, m-1);
+        tmp = all_fun::integ(com_mod, cm_mod, fa, tmpV, 0, solutions, m-1, false, consts::MechanicalConfigurationType::reference);
       } else {
         throw std::runtime_error("WTXT only accepts 1 and nsd");
       }
@@ -483,8 +460,11 @@ void write_boundary_integral_data(const ComMod& com_mod, CmMod& cm_mod, const eq
 /// NOTE: Be carefu of a potential indexing problem here because 'm' is a length and not an index.
 //
 void write_volume_integral_data(const ComMod& com_mod, CmMod& cm_mod, const eqType& lEq, const int m, 
-    const std::string file_name, const Array<double>& tmpV, const bool div, const bool pFlag)
+    const std::string file_name, const Array<double>& tmpV, const bool div, const bool pFlag, const SolutionStates& solutions)
 {
+  // Local alias for old displacement
+  const auto& Do = solutions.old.get_displacement();
+
   #define n_debug_write_volume_integral_data
   #ifdef debug_write_volume_integral_data
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -517,9 +497,9 @@ void write_volume_integral_data(const ComMod& com_mod, CmMod& cm_mod, const eqTy
 
     if (div) {
       tmp = dmn.v;
-      tmp = all_fun::integ(com_mod, cm_mod, dmn.Id, tmpV, 0, m-1) / tmp;
+      tmp = all_fun::integ(com_mod, cm_mod, dmn.Id, tmpV, 0, m-1, solutions, pFlag) / tmp;
     } else {
-      tmp = all_fun::integ(com_mod, cm_mod, dmn.Id, tmpV, 0, m-1, pFlag);
+      tmp = all_fun::integ(com_mod, cm_mod, dmn.Id, tmpV, 0, m-1, solutions, pFlag);
     }
 
     if (com_mod.cm.mas(cm_mod)) {

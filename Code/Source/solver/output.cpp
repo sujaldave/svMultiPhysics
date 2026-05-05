@@ -172,8 +172,12 @@ void read_restart_header(ComMod& com_mod, std::array<int,7>& tStamp, double& tim
 
 /// @brief Reproduces the Fortran 'WRITERESTART' subroutine.
 //
-void write_restart(Simulation* simulation, std::array<double,3>& timeP)
+void write_restart(Simulation* simulation, std::array<double,3>& timeP, const SolutionStates& solutions)
 {
+  const auto& An = solutions.current.get_acceleration();
+  const auto& Yn = solutions.current.get_velocity();
+  const auto& Dn = solutions.current.get_displacement();
+
   auto& com_mod = simulation->com_mod;
   #define n_debug_write_restart
   #ifdef debug_write_restart
@@ -202,10 +206,7 @@ void write_restart(Simulation* simulation, std::array<double,3>& timeP)
 
   auto& cplBC = com_mod.cplBC;
   auto& Ad = com_mod.Ad;
-  auto& An = com_mod.An;
-  auto& Dn = com_mod.Dn;
   auto& pS0 = com_mod.pS0;
-  auto& Yn = com_mod.Yn;
   auto& Xion = cep_mod.Xion;
   auto& cem = cep_mod.cem;
 
@@ -277,90 +278,59 @@ void write_restart(Simulation* simulation, std::array<double,3>& timeP)
       restart_file.write((char*)Dn.data(), Dn.msize());
 
       if (sstEq) {
+
         if (pstEq) {
           restart_file.write((char*)pS0.data(), pS0.msize());
           restart_file.write((char*)Ad.data(), Ad.msize());
+
         } else if (cepEq) {
           restart_file.write((char*)Ad.data(), Ad.msize());
           restart_file.write((char*)Xion.data(), Xion.msize());
           restart_file.write((char*)cem.Ya.data(), cem.Ya.msize());
+
         } else if (risFlag) {
           restart_file.write((char*)Ad.data(), Ad.msize());
-          std::vector<char> clsFlagChar(com_mod.ris.clsFlg.size());
-          for (int i = 0; i < com_mod.ris.clsFlg.size(); i++) {
-            clsFlagChar[i] = com_mod.ris.clsFlg[i] ? 1 : 0;}
-          restart_file.write(clsFlagChar.data(), clsFlagChar.size()*sizeof(char));
+          write_ris_data(com_mod, restart_file);
+
         } else if (urisFlag) {
           restart_file.write((char*)Ad.data(), Ad.msize());
-          Vector<int> urisCnt(com_mod.nUris);
-          std::vector<char> urisClsFlagChar(com_mod.nUris);
-          for (int i = 0; i < com_mod.nUris; i++) {
-            urisCnt(i) = com_mod.uris[i].cnt;
-            urisClsFlagChar[i] = com_mod.uris[i].clsFlg ? 1 : 0;}
-          restart_file.write((char*)urisCnt.data(), urisCnt.msize());
-          restart_file.write(urisClsFlagChar.data(), urisClsFlagChar.size()*sizeof(char));
+          write_uris_data(com_mod, restart_file);
+
         } else {
           restart_file.write((char*)Ad.data(), Ad.msize());
         }
 
+      // If not sstEq.
+
       } else {
+
         if (pstEq) {
           restart_file.write((char*)pS0.data(), pS0.msize());
+
         } else if (cepEq) {
           restart_file.write((char*)Xion.data(), Xion.msize());
           restart_file.write((char*)cem.Ya.data(), cem.Ya.msize());
+
         } else if (risFlag) {
-          std::vector<char> clsFlagChar(com_mod.ris.clsFlg.size());
-          for (int i = 0; i < com_mod.ris.clsFlg.size(); i++) {
-            clsFlagChar[i] = com_mod.ris.clsFlg[i] ? 1 : 0;}
-          restart_file.write(clsFlagChar.data(), clsFlagChar.size()*sizeof(char));
+          write_ris_data(com_mod, restart_file);
+
         } else if (urisFlag) {
-          Vector<int> urisCnt(com_mod.nUris);
-          std::vector<char> urisClsFlagChar(com_mod.nUris);
-          for (int i = 0; i < com_mod.nUris; i++) {
-            urisCnt(i) = com_mod.uris[i].cnt;
-            urisClsFlagChar[i] = com_mod.uris[i].clsFlg ? 1 : 0;}
-          restart_file.write((char*)urisCnt.data(), urisCnt.msize());
-          restart_file.write(urisClsFlagChar.data(), urisClsFlagChar.size()*sizeof(char));
-        } else {
-          restart_file.write((char*)Dn.data(), Dn.msize());
+          write_uris_data(com_mod, restart_file);
         }
       }
+
+    // If not dFlag.
 
     } else {
       if (cepEq) {
         restart_file.write((char*)Xion.data(), Xion.msize());
-      } else if (risFlag) {
-        std::vector<char> clsFlagChar(com_mod.ris.clsFlg.size());
-        for (int i = 0; i < com_mod.ris.clsFlg.size(); i++) {
-          clsFlagChar[i] = com_mod.ris.clsFlg[i] ? 1 : 0;}
-        restart_file.write(clsFlagChar.data(), clsFlagChar.size()*sizeof(char));
-      } else if (urisFlag) {
-        Vector<int> urisCnt(com_mod.nUris);
-        std::vector<char> urisClsFlagChar(com_mod.nUris);
-        for (int i = 0; i < com_mod.nUris; i++) {
-          urisCnt(i) = com_mod.uris[i].cnt;
-          urisClsFlagChar[i] = com_mod.uris[i].clsFlg ? 1 : 0;}
-        restart_file.write((char*)urisCnt.data(), urisCnt.msize());
-        restart_file.write(urisClsFlagChar.data(), urisClsFlagChar.size()*sizeof(char));
-      } else {
-        //WRITE(fid, REC=myID) stamp, cTS, time, CPUT()-timeP(1), eq%iNorm, cplBC%xn, Yn, An
-      }
-    }
 
-  // ibFlag = true
-  //
-  // [NOTE] not implemented.
-  //
-  } else {
-    if (dFlag) {
-      if (pstEq) {
-        //WRITE(fid, REC=myID) stamp, cTS, time, CPUT()-timeP(1), eq.iNorm, cplBC.xn, Yn, An, Dn, pS0, ib.Yb, ib.Auo, ib.Ubo
-      } else {
-        //WRITE(fid, REC=myID) stamp, cTS, time, CPUT()-timeP(1), eq.iNorm, cplBC.xn, Yn, An, Dn, ib.Yb, ib.Auo, ib.Ubo
+      } else if (risFlag) {
+        write_ris_data(com_mod, restart_file);
+
+      } else if (urisFlag) {
+        write_uris_data(com_mod, restart_file);
       }
-    } else {
-      //WRITE(fid, REC=myID) stamp, cTS, time, CPUT()-timeP(1), eq.iNorm, cplBC.xn, Yn, An, ib.Yb, ib.Auo, ib.Ubo
     }
   }
 
@@ -372,6 +342,31 @@ void write_restart(Simulation* simulation, std::array<double,3>& timeP)
     std::string cmd = "ln -f " + fName + " " + tmpS;
     std::system(cmd.c_str());
   }
+}
+
+void write_ris_data(ComMod& com_mod, std::ofstream& restart_file)
+{
+  std::vector<char> clsFlagChar(com_mod.ris.clsFlg.size());
+
+  for (int i = 0; i < com_mod.ris.clsFlg.size(); i++) {
+    clsFlagChar[i] = com_mod.ris.clsFlg[i];
+  }
+
+  restart_file.write(clsFlagChar.data(), clsFlagChar.size()*sizeof(char));
+}
+
+void write_uris_data(ComMod& com_mod, std::ofstream& restart_file)
+{
+  Vector<int> urisCnt(com_mod.nUris);
+  std::vector<char> urisClsFlagChar(com_mod.nUris);
+
+  for (int i = 0; i < com_mod.nUris; i++) {
+    urisCnt(i) = com_mod.uris[i].cnt;
+    urisClsFlagChar[i] = com_mod.uris[i].clsFlg;
+  }
+
+  restart_file.write((char*)urisCnt.data(), urisCnt.msize());
+  restart_file.write(urisClsFlagChar.data(), urisClsFlagChar.size()*sizeof(char));
 }
 
 void write_restart_header(ComMod& com_mod, std::array<double,3>& timeP, std::ofstream& restart_file)
@@ -395,13 +390,13 @@ void write_restart_header(ComMod& com_mod, std::array<double,3>& timeP, std::ofs
 ///
 /// Reproduces: WRITE(fid, REC=myID) stamp, cTS, time,CPUT()-timeP(1), eq.iNorm, cplBC.xn, Yn, An, Dn
 //
-void write_results(ComMod& com_mod, const std::array<double,3>& timeP, const std::string& fName, const bool sstEq)
+void write_results(ComMod& com_mod, const std::array<double,3>& timeP, const std::string& fName, const bool sstEq, const SolutionStates& solutions)
 {
-  int cTS = com_mod.cTS;
+  const auto& An = solutions.current.get_acceleration();
+  const auto& Yn = solutions.current.get_velocity();
+  const auto& Dn = solutions.current.get_displacement();
 
-  auto& An = com_mod.An;
-  auto& Dn = com_mod.Dn;
-  auto& Yn = com_mod.Yn;
+  int cTS = com_mod.cTS;
 
   auto& stamp = com_mod.stamp;
 

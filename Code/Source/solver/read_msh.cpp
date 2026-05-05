@@ -52,8 +52,9 @@ std::map<consts::ElementType, std::function<void(mshType&)>> check_element_conn 
 
 /// @brief Calculate element Aspect Ratio of a given mesh
 //
-void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag)
+void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions)
 {
+  const auto& Do = solutions.old.get_displacement();
   #define n_debug_calc_elem_ar  
   #ifdef debug_calc_elem_ar
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -85,7 +86,7 @@ void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag
       xl.set_col(a, com_mod.x.col(Ac));
       if (com_mod.mvMsh) {
         for (int i = 0; i < nsd; i++) {
-          dol(i,a) = com_mod.Do(i+nsd+1,Ac);
+          dol(i,a) = Do(i+nsd+1,Ac);
         }
       }
     }
@@ -147,8 +148,9 @@ void calc_elem_ar(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag
 
 /// @brief Calculate element Jacobian of a given mesh.
 //
-void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag)
+void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions)
 {
+  const auto& Do = solutions.old.get_displacement();
   #define n_debug_calc_elem_jac 
   #ifdef debug_calc_elem_jac 
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -182,8 +184,8 @@ void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rfla
       xl.set_col(a, com_mod.x.col(Ac));
       if (com_mod.mvMsh) {
         for (int i = 0; i < nsd; i++) {
-          dol(i,a) = com_mod.Do(i+nsd+1,Ac);
-          //dol(i,a) = com_mod.Do(i+nsd,Ac);
+          dol(i,a) = Do(i+nsd+1,Ac);
+          //dol(i,a) = Do(i+nsd,Ac);
         }
       }
     }
@@ -267,8 +269,9 @@ void calc_elem_jac(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rfla
 
 /// @brief Calculate element Skewness of a given mesh.
 //
-void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag)
+void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rflag, const SolutionStates& solutions)
 {
+  const auto& Do = solutions.old.get_displacement();
   #define n_debug_calc_elem_skew
   #ifdef debug_calc_elem_skew
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
@@ -299,7 +302,7 @@ void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rfl
       xl.set_col(a, com_mod.x.col(Ac));
       if (com_mod.mvMsh) {
         for (int i = 0; i < nsd; i++) {
-          dol(i,a) = com_mod.Do(i+nsd+1,Ac);
+          dol(i,a) = Do(i+nsd+1,Ac);
         }
       }
     }
@@ -355,7 +358,7 @@ void calc_elem_skew(ComMod& com_mod, const CmMod& cm_mod, mshType& lM, bool& rfl
   #endif
 }
 
-void calc_mesh_props(ComMod& com_mod, const CmMod& cm_mod, const int nMesh, std::vector<mshType>& mesh)
+void calc_mesh_props(ComMod& com_mod, const CmMod& cm_mod, const int nMesh, std::vector<mshType>& mesh, const SolutionStates& solutions)
 {
   #define n_debug_calc_mesh_props
   #ifdef debug_calc_mesh_props
@@ -378,9 +381,9 @@ void calc_mesh_props(ComMod& com_mod, const CmMod& cm_mod, const int nMesh, std:
     dmsg << "----- mesh " + mesh[iM].name << " -----";
     #endif
     bool flag = false;
-    calc_elem_jac(com_mod, cm_mod, mesh[iM], flag);
-    calc_elem_skew(com_mod, cm_mod, mesh[iM], flag);
-    calc_elem_ar(com_mod, cm_mod, mesh[iM], flag);
+    calc_elem_jac(com_mod, cm_mod, mesh[iM], flag, solutions);
+    calc_elem_skew(com_mod, cm_mod, mesh[iM], flag, solutions);
+    calc_elem_ar(com_mod, cm_mod, mesh[iM], flag, solutions);
     rmsh.flag[iM] = flag;
     #ifdef debug_calc_mesh_props
     dmsg << "mesh[iM].flag: " << rmsh.flag[iM];
@@ -2086,16 +2089,32 @@ void set_dmn_id_ff(Simulation* simulation, mshType& lM, const std::string& file_
   }
 }
 
-/// @brief Read mesh domains from a vtu/vtp file.
+/// @brief Read mesh domains from a vtk vtu/vtp file.
 ///
-/// \todo [NOTE] Not implemented.
-//
-void set_dmn_id_vtk(Simulation* simulation, mshType& mesh, const std::string& file_name, const std::string& kwrd)
+void set_dmn_id_vtk(Simulation* simulation, mshType& lM, const std::string& file_name, const std::string& data_name)
 {
-  int btSiz = std::numeric_limits<int>::digits;
+  #define n_debug_set_dmn_id_vtk
+  #ifdef debug_set_dmn_id_vtk
+  DebugMsg dmsg(__func__, simulation->com_mod.cm.idcm());
+  dmsg.banner();
+  dmsg << "file_name: " << file_name; 
+  dmsg << "lM.gnEl: " << lM.gnEl;
+  #endif
+  
+  if (lM.eId.size() == 0) {
+    lM.eId.resize(lM.gnEl);
+  }
+
+  Vector<int> element_data(lM.gnEl);
+  vtk_xml::read_element_data(lM, file_name, data_name, element_data);
+
+  for (int a = 0; a < lM.gnEl; a++) {
+    lM.eId(a) = lM.eId(a) | (1UL << element_data(a));
+  }
+
 }
 
-/// @brief This routines associates two faces with each other and sets gN.
+/// @brief Associate two faces with each other and set gN.
 ///
 /// Data set
 /// \code {.cpp}
