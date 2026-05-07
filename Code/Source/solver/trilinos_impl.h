@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <vector>
 #include <iostream>
+#include <string>
 #include "mpi.h"
 #include <time.h>
 #include <numeric>
@@ -115,10 +116,18 @@ using MueLu_Preconditioner = Tpetra_Operator;
 #define TRILINOS_RILUK0_PRECONDITIONER 706
 #define TRILINOS_RILUK1_PRECONDITIONER 707
 #define TRILINOS_ML_PRECONDITIONER 708
+#define TRILINOS_RESISTANCE_PRECONDITIONER 712
 
 /// @brief Initialize all Epetra types we need separate from Fortran
 struct Trilinos
 {
+  struct ResistanceFaceData {
+    int face_id = -1;
+    double resistance = 0.0;
+    double s_tilde_norm2 = 0.0;
+    double alpha = 0.0;
+  };
+
   Teuchos::RCP<const Tpetra_Map> Map;
   Teuchos::RCP<const Tpetra_Map> ghostMap;
   Teuchos::RCP<Tpetra_MultiVector> F;
@@ -127,6 +136,11 @@ struct Trilinos
   Teuchos::RCP<Tpetra_Vector> X;
   Teuchos::RCP<Tpetra_Vector> ghostX;
   Teuchos::RCP<Tpetra_Import> Importer;
+
+  // One pair of vectors per coupled outlet face.  After construction and
+  // Jacobi scaling, bdryVec_list[f] stores sqrt(abs(R_f)) * S_f, where S_f is
+  // the scaled outlet surface integral vector.  bdryCapVec_list[f] stores the
+  // corresponding cap contribution used only in the scalar flow projection.
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> bdryVec_list;
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> bdryCapVec_list;
   Teuchos::RCP<const Teuchos::Comm<int>> comm;
@@ -134,7 +148,13 @@ struct Trilinos
 
   Teuchos::RCP<Tpetra_Operator> MueluPrec;
   Teuchos::RCP<Ifpack2_Preconditioner> ifpackPrec;
-  Trilinos() : MueluPrec(nullptr), ifpackPrec(nullptr) {}
+  Teuchos::RCP<Tpetra_Operator> resistancePrec;
+
+  // Per-face diagnostic and coefficient data for the resistance
+  // Sherman-Morrison inverse:
+  // alpha_f = -R_f / (1 + R_f * ||S_f||^2).
+  std::vector<ResistanceFaceData> resistanceFaces;
+  Trilinos() : MueluPrec(nullptr), ifpackPrec(nullptr), resistancePrec(nullptr) {}
 };
 
 /**
@@ -231,6 +251,9 @@ void checkDiagonalIsZero(const Teuchos::RCP<Trilinos> &trilinos_);
 
 void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const double *dirW,
               Tpetra_Vector &diagonal);
+
+void logResistancePreconditioner(const Teuchos::RCP<Trilinos> &trilinos_,
+              const std::string& file_name);
 
 // --- Debugging functions ----------------------------------------------------
 void printMatrixToFile(const Teuchos::RCP<Trilinos> &trilinos_);

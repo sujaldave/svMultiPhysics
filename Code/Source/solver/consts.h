@@ -421,7 +421,8 @@ enum class PreconditionerType
   PREC_TRILINOS_ML = 708,
   PREC_RCS = 709,
   PREC_PETSC_JACOBI = 710,
-  PREC_PETSC_RCS = 711
+  PREC_PETSC_RCS = 711,
+  PREC_TRILINOS_RESISTANCE = 712
 };
 
 extern const std::set<PreconditionerType> fsils_preconditioners;
@@ -496,4 +497,3 @@ enum class LinearAlgebraType {
 };
 
 #endif
-

@@ -257,7 +257,8 @@ const std::set<PreconditionerType> trilinos_preconditioners = {
   PreconditionerType::PREC_TRILINOS_ILUT,
   PreconditionerType::PREC_TRILINOS_RILUK0,
   PreconditionerType::PREC_TRILINOS_RILUK1,
-  PreconditionerType::PREC_TRILINOS_ML
+  PreconditionerType::PREC_TRILINOS_ML,
+  PreconditionerType::PREC_TRILINOS_RESISTANCE
 };
 
 /// @brief The list of FSILS preconditioners. 
@@ -289,6 +290,7 @@ const std::map<std::string,PreconditionerType> preconditioner_name_to_type =
   {"trilinos-riluk0", PreconditionerType::PREC_TRILINOS_RILUK0},
   {"trilinos-riluk1", PreconditionerType::PREC_TRILINOS_RILUK1},
   {"trilinos-ml", PreconditionerType::PREC_TRILINOS_ML},
+  {"trilinos-resistance", PreconditionerType::PREC_TRILINOS_RESISTANCE},
 
   {"petsc-jacobi", PreconditionerType::PREC_PETSC_JACOBI},
   {"petsc-rcs", PreconditionerType::PREC_PETSC_RCS}
@@ -307,6 +309,7 @@ const std::map<PreconditionerType, std::string> preconditioner_type_to_name {
   {PreconditionerType::PREC_TRILINOS_RILUK0, "trilinos-riluk0"}, 
   {PreconditionerType::PREC_TRILINOS_RILUK1, "trilinos-riluk1"}, 
   {PreconditionerType::PREC_TRILINOS_ML, "trilinos-ml"},
+  {PreconditionerType::PREC_TRILINOS_RESISTANCE, "trilinos-resistance"},
   {PreconditionerType::PREC_PETSC_JACOBI, "petsc-jacobi"},
   {PreconditionerType::PREC_PETSC_RCS, "petsc-rcs"}
 };
@@ -332,4 +335,3 @@ const std::map<std::string,SolverType> solver_name_to_type
 
 
 };
-

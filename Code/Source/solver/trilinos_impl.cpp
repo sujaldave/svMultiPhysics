@@ -14,6 +14,9 @@
 
 #include "trilinos_impl.h"
 #include "ComMod.h"
+#include <cmath>
+#include <fstream>
+#include <iomanip>
 #define NOOUTPUT
 
 /// Nodal degrees of freedom
@@ -93,6 +96,129 @@ void TrilinosMatVec::apply(const Tpetra_MultiVector& x, Tpetra_MultiVector& y,
     }
   }
 }
+
+// ----------------------------------------------------------------------------
+/**
+ * Resistance preconditioner for coupled outlet rank-one terms.
+ *
+ * A resistance outlet adds a dense rank-one term to the linearized system:
+ *
+ *   A_bc = R_f * S_f * (S_f + C_f)^T
+ *
+ * where S_f is the outlet face integral vector and C_f is an optional cap
+ * contribution.  C_f participates in the flow/pressure scalar projection but
+ * does not receive the pressure update rows, matching FSILS add_bc_mul.cpp.
+ *
+ * The matrix-free Trilinos operator stores v_f = sqrt(abs(R_f)) * S_f, so the
+ * system matvec can add sign(R_f) * v_f * (v_f + vcap_f)^T.  The
+ * preconditioner applies the Sherman-Morrison inverse:
+ *
+ *   (I + R S S^T)^{-1} x = x - R S (S^T x) / (1 + R S^T S).
+ *
+ * Written in terms of the stored scaled vector v = sqrt(abs(R)) * S, this
+ * becomes:
+ *
+ *   y = x - sign(R) * v * (v^T x) / (1 + R ||S||^2).
+ */
+class TrilinosResistanceOp final : public Tpetra_Operator
+{
+public:
+  explicit TrilinosResistanceOp(const Teuchos::RCP<Trilinos>& trilinos) :
+    trilinos_(trilinos) {}
+
+  Teuchos::RCP<const Tpetra_Map> getDomainMap() const override
+  {
+    return trilinos_->K->getDomainMap();
+  }
+
+  Teuchos::RCP<const Tpetra_Map> getRangeMap() const override
+  {
+    return trilinos_->K->getRangeMap();
+  }
+
+  void compute()
+  {
+    const size_t num_faces = std::min(trilinos_->bdryVec_list.size(),
+                                      trilinos_->resistanceFaces.size());
+
+    for (size_t i = 0; i < num_faces; ++i) {
+      const double R = trilinos_->resistanceFaces[i].resistance;
+
+      if (R == 0.0) {
+        trilinos_->resistanceFaces[i].s_tilde_norm2 = 0.0;
+        trilinos_->resistanceFaces[i].alpha = 0.0;
+        continue;
+      }
+
+      Teuchos::Array<Scalar_d> scaled_norm2(1);
+
+      // Tpetra::MultiVector::dot performs the MPI reduction over the vector
+      // map.  Since bdryVec = sqrt(abs(R)) * S, this returns
+      // ||bdryVec||^2 = abs(R) * ||S||^2 using the same global ownership map as
+      // the Jacobian.
+      trilinos_->bdryVec_list[i]->dot(*trilinos_->bdryVec_list[i], scaled_norm2());
+
+      // Recover the FSILS quantity face.nS = ||S||^2 from the scaled vector.
+      // This is the denominator norm used in:
+      //   alpha_f = -R_f / (1 + R_f * ||S_f||^2).
+      const double s_tilde_norm2 = scaled_norm2[0] / std::abs(R);
+      trilinos_->resistanceFaces[i].s_tilde_norm2 = s_tilde_norm2;
+      trilinos_->resistanceFaces[i].alpha =
+        -R / (1.0 + R * s_tilde_norm2);
+    }
+  }
+
+  void apply(const Tpetra_MultiVector& X, Tpetra_MultiVector& Y,
+             Teuchos::ETransp mode = Teuchos::NO_TRANS,
+             Scalar_d alpha = Teuchos::ScalarTraits<Scalar_d>::one(),
+             Scalar_d beta = Teuchos::ScalarTraits<Scalar_d>::zero()) const override
+  {
+    if (mode != Teuchos::NO_TRANS) {
+      throw std::runtime_error("TrilinosResistanceOp does not support transpose apply.");
+    }
+
+    Y.update(alpha, X, beta);
+
+    const size_t num_faces = std::min(trilinos_->bdryVec_list.size(),
+                                      trilinos_->resistanceFaces.size());
+
+    for (size_t i = 0; i < num_faces; ++i) {
+      const double R = trilinos_->resistanceFaces[i].resistance;
+      if (R == 0.0) {
+        continue;
+      }
+
+      auto bdryVec = trilinos_->bdryVec_list[i];
+      auto bdryCapVec = trilinos_->bdryCapVec_list[i];
+
+      Teuchos::Array<Scalar_d> dot_face(1), dot_cap(1);
+
+      // Compute the global scalar flow projection:
+      //   q_f = S_f^T x + C_f^T x.
+      // The stored vectors include sqrt(abs(R_f)); the same scaling is used in
+      // the denominator below, so the Sherman-Morrison update is algebraically
+      // identical to the FSILS coefficient form.
+      X.dot(*bdryVec, dot_face());
+      X.dot(*bdryCapVec, dot_cap());
+
+      // Denominator of the outlet inverse:
+      //   1 + R_f * ||S_f||^2.
+      // scaled_alpha is the coefficient multiplying the stored scaled vector
+      // v_f = sqrt(abs(R_f)) * S_f.
+      const double denom = 1.0 + R * trilinos_->resistanceFaces[i].s_tilde_norm2;
+      const double sign_R = (R > 0.0) ? 1.0 : -1.0;
+      const double scaled_alpha = -sign_R / denom;
+
+      // Apply:
+      //   y <- y - sign(R_f) * v_f * (v_f + vcap_f)^T x
+      //             / (1 + R_f * ||S_f||^2).
+      Y.update(alpha * scaled_alpha * (dot_face[0] + dot_cap[0]), *bdryVec, 1.0);
+    }
+  }
+
+private:
+  Teuchos::RCP<Trilinos> trilinos_;
+};
 
 // ----------------------------------------------------------------------------
 /**
@@ -665,6 +791,8 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
 
   if (trilinos_->MueluPrec != Teuchos::null) trilinos_->MueluPrec = Teuchos::null;
   if (trilinos_->ifpackPrec != Teuchos::null) trilinos_->ifpackPrec = Teuchos::null;
+  if (trilinos_->resistancePrec != Teuchos::null) trilinos_->resistancePrec = Teuchos::null;
+  trilinos_->resistanceFaces.clear();
 
   trilinos_->K = Teuchos::null;
 
@@ -677,6 +805,24 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
   if (precondType == TRILINOS_DIAGONAL_PRECONDITIONER ||
       precondType == NO_PRECONDITIONER) {
     BelosProblem->setLeftPrec(Teuchos::null);
+    return;
+  }
+
+  if (precondType == TRILINOS_RESISTANCE_PRECONDITIONER) {
+    auto resistancePrec = Teuchos::rcp(new TrilinosResistanceOp(trilinos_));
+
+    // Precompute the MPI-invariant per-face quantities used by apply():
+    //   ||S_f||^2 and alpha_f = -R_f / (1 + R_f ||S_f||^2).
+    // These are logged immediately so the Trilinos and FSILS paths can be
+    // compared before Belos starts iterating.
+    resistancePrec->compute();
+    trilinos_->resistancePrec = resistancePrec;
+
+    // Left preconditioning makes Belos solve approximately
+    //   P^{-1} A x = P^{-1} b
+    // using the outlet inverse implemented in TrilinosResistanceOp::apply().
+    BelosProblem->setLeftPrec(trilinos_->resistancePrec);
+    logResistancePreconditioner(trilinos_, "trilinos_resistance.log");
     return;
   }
 
@@ -853,7 +999,9 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
 {
   Teuchos::RCP<const Tpetra_Map> map = diagonal.getMap();
 
-  // Set Dirichlet weights
+  // Start from the Dirichlet mask W_D supplied by svMultiPhysics.  Entries on
+  // constrained rows/columns are zeroed in the same spirit as FSILS
+  // precond_diag(), while unconstrained entries remain one.
   for (int i = 0; i < localNodes; ++i) {
     for (int j = 0; j < dof; ++j) {
       GO gid = localToGlobalSorted[i] * dof + j;
@@ -868,26 +1016,40 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
     }
   }
 
-  // Extract and modify diagonal of K
+  // Extract diag(K) and compute the Jacobi factor:
+  //   W_J(i) = 1 / sqrt(abs(K_ii)).
+  // The Kokkos kernel keeps this large diagonal operation on the active device.
   Tpetra_Vector Kdiag(trilinos_->K->getRowMap());
   trilinos_->K->getLocalDiagCopy(Kdiag);
 
-  auto KdiagView = Kdiag.getLocalViewHost(Tpetra::Access::ReadWrite);
-  for (size_t i = 0; i < KdiagView.extent(0); ++i) {
-    if (KdiagView(i, 0) == 0.0)
-      KdiagView(i, 0) = 1.0;
-    KdiagView(i, 0) = 1.0 / std::sqrt(std::abs(KdiagView(i, 0)));
-  }
+  auto KdiagView = Kdiag.getLocalViewDevice(Tpetra::Access::ReadWrite);
+  using execution_space = typename Node::execution_space;
+  Kokkos::parallel_for("svmp_trilinos_jacobi_scaling",
+      Kokkos::RangePolicy<execution_space>(0, KdiagView.extent(0)),
+      KOKKOS_LAMBDA(const int i) {
+        double diag = KdiagView(i, 0);
+        if (diag == 0.0) {
+          diag = 1.0;
+        }
+        KdiagView(i, 0) = 1.0 / sqrt(fabs(diag));
+      });
+  Kokkos::fence();
 
-  // diagonal = diagonal * Kdiag (element-wise)
+  // Final symmetric scaling vector:
+  //   W = W_D * W_J.
   diagonal.elementWiseMultiply(1.0, diagonal, Kdiag, 0.0);
 
-  // Apply scaling to K and F
+  // Apply the same symmetric scaling as FSILS:
+  //   K_tilde = W K W,    F_tilde = W F.
   trilinos_->K->leftScale(diagonal);
   trilinos_->F->elementWiseMultiply(1.0, diagonal, *trilinos_->F, 0.0);
   trilinos_->K->rightScale(diagonal);
 
-  // Scale boundary vectors if coupledBC is set
+  // Scale each outlet vector by the same W:
+  //   S_f <- W S_f.
+  // This is the Trilinos equivalent of FSILS face.valM = face.val * W.  The
+  // norms used by the resistance preconditioner must be computed after this
+  // step to match FSILS face.nS.
   if (coupledBC) {
     for (auto bdryVec : trilinos_->bdryVec_list) {
       bdryVec->elementWiseMultiply(1.0, diagonal, *bdryVec, 0.0);
@@ -897,6 +1059,38 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
     }
   }
 } // void constructJacobiScaling()
+
+// ----------------------------------------------------------------------------
+void logResistancePreconditioner(const Teuchos::RCP<Trilinos> &trilinos_,
+    const std::string& file_name)
+{
+  if (trilinos_->comm != Teuchos::null && trilinos_->comm->getRank() != 0) {
+    return;
+  }
+
+  std::ofstream log(file_name);
+  log << std::scientific << std::setprecision(17);
+
+  // One line per coupled face.  These columns intentionally match the FSILS
+  // logger in gmres.cpp/ns_solver.cpp for a direct diff:
+  //   resistance      = R_f
+  //   s_tilde_norm2   = ||W S_f||^2
+  //   s_tilde_norm    = sqrt(||W S_f||^2)
+  //   alpha           = -R_f / (1 + R_f ||W S_f||^2)
+  log << "# face_id resistance s_tilde_norm2 s_tilde_norm alpha\n";
+
+  for (const auto& face : trilinos_->resistanceFaces) {
+    if (face.resistance == 0.0) {
+      continue;
+    }
+
+    log << face.face_id << " "
+        << face.resistance << " "
+        << face.s_tilde_norm2 << " "
+        << std::sqrt(face.s_tilde_norm2) << " "
+        << face.alpha << "\n";
+  }
+}
 
 // ----------------------------------------------------------------------------
 /**
@@ -911,22 +1105,39 @@ void trilinos_bc_create_(const Teuchos::RCP<Trilinos> &trilinos_,
 
   if (isCoupledBC)
   {
-    for (int i = 0; i < ghostAndLocalNodes; ++i)
-    {
-      auto globalRow = static_cast<GO>(localToGlobalSorted[i]);
+    // v_list/vcap_list are first built on the local+ghost node layout because
+    // outlet faces may be split by MPI partitions.  Exporting ghostMap -> Map
+    // with ADD globally sums shared face contributions onto the unique Tpetra
+    // map.  This is what makes the later dot products and norms independent of
+    // the number of MPI ranks.
+    Tpetra::Export<LO, GO, Node> exporter(trilinos_->ghostMap, trilinos_->Map);
 
-      for (int k = 0; k < v_list.size(); ++k)
-      {
-        const double* v = v_list[k].data();
-        auto bdryVec = trilinos_->bdryVec_list[k];
-        const double* vcap = vcap_list[k].data();
-        auto bdryCapVec = trilinos_->bdryCapVec_list[k];
+    for (int k = 0; k < v_list.size(); ++k) {
+      const double* v = v_list[k].data();
+      const double* vcap = vcap_list[k].data();
+
+      Tpetra_MultiVector ghostBdryVec(trilinos_->ghostMap, 1);
+      Tpetra_MultiVector ghostBdryCapVec(trilinos_->ghostMap, 1);
+      ghostBdryVec.putScalar(0.0);
+      ghostBdryCapVec.putScalar(0.0);
+
+      for (int i = 0; i < ghostAndLocalNodes; ++i) {
+        auto globalRow = static_cast<GO>(localToGlobalSorted[i]);
+
         for (int j = 0; j < dof; ++j)
         {
-          bdryVec->replaceGlobalValue(globalRow * dof + j, 0, v[i * dof + j]);
-          bdryCapVec->replaceGlobalValue(globalRow * dof + j, 0, vcap[i * dof + j]);
+          ghostBdryVec.replaceGlobalValue(globalRow * dof + j, 0, v[i * dof + j]);
+          ghostBdryCapVec.replaceGlobalValue(globalRow * dof + j, 0, vcap[i * dof + j]);
         }
       }
+
+      trilinos_->bdryVec_list[k]->putScalar(0.0);
+      trilinos_->bdryCapVec_list[k]->putScalar(0.0);
+
+      // Global face assembly:
+      //   S_f(global owned dofs) = sum_r S_f(local/ghost dofs on rank r).
+      trilinos_->bdryVec_list[k]->doExport(ghostBdryVec, exporter, Tpetra::ADD);
+      trilinos_->bdryCapVec_list[k]->doExport(ghostBdryCapVec, exporter, Tpetra::ADD);
     }
   }
 }
@@ -1150,6 +1361,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
   std::vector<Array<double>> v_list;
   std::vector<Array<double>> vcap_list;
   bool isCoupledBC = false;
+  trilinos_->resistanceFaces.clear();
 
   for (int faIn = 0; faIn < lhs.nFaces; faIn++) {
     // Extract face
@@ -1160,12 +1372,22 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
     auto& v = v_list.back();
     vcap_list.push_back(Array<double>(dof,tnNo));
     auto& vcap = vcap_list.back();
+
+    Trilinos::ResistanceFaceData face_data;
+    face_data.face_id = faIn;
+    face_data.resistance = face.coupledFlag ? res(faIn) : 0.0;
+    trilinos_->resistanceFaces.push_back(face_data);
     
     if (face.coupledFlag) {
       isCoupledBC = true;
       int faDof = std::min(face.dof,dof);
 
-      // Compute the coupled Neumann BC vector and store it in v (main face contribution)
+      // Build the unassembled outlet vector on this rank:
+      //   v_f = sqrt(abs(R_f)) * S_f,
+      // where S_f contains the integrated outlet shape-function normal
+      // contributions, int_Gamma N_A n_i dGamma.  The sqrt(abs(R_f)) scaling
+      // lets the matrix-free operator represent R_f S_f S_f^T as
+      // sign(R_f) v_f v_f^T.
       for (int a = 0; a < face.nNo; a++) {
         int Ac = face.glob(a);
         for (int i = 0; i < faDof; i++) {
@@ -1173,7 +1395,10 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
         }
       }
       
-      // Add cap contribution (if cap exists for this face)
+      // Cap surfaces contribute to the scalar flow projection
+      // (S_f + C_f)^T x, but not to the update vector that receives pressure
+      // coupling.  Store C_f separately so TrilinosResistanceOp::apply() can
+      // add it only to the dot product.
       if (face.cap_val.size() != 0 && face.cap_glob.size() != 0) {
         int cap_nNo = face.cap_val.ncols();
         for (int a = 0; a < cap_nNo; a++) {
