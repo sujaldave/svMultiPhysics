@@ -15,7 +15,8 @@ https://doi.org/10.1007/s00366-024-02031-w */
 #include <vector>
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Dense"
-#include "eigen3/unsupported/Eigen/CXX11/Tensor"
+// Commenting this out since GPU build doesn't support older Eigen Library version
+// #include "eigen3/unsupported/Eigen/CXX11/Tensor"
 
 using namespace mat_fun;
 

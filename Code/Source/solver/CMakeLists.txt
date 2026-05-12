@@ -87,6 +87,18 @@ endif()
 if(USE_TRILINOS)
   ADD_DEFINITIONS(-DWITH_TRILINOS)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  # GPU compatibility: CUDA-enabled Trilinos/Tacho builds may leave CUDA TPLs
+  # out of Trilinos_TPL_LIBRARIES, so link the imported CUDA targets when they
+  # are available.  This stays optional for CPU-only Trilinos installations.
+  find_package(CUDAToolkit QUIET)
+  set(SV_TRILINOS_CUDA_LIBRARIES)
+  if(CUDAToolkit_FOUND)
+    foreach(_sv_cuda_target CUDA::cusolver CUDA::cublas CUDA::cudart CUDA::curand)
+      if(TARGET ${_sv_cuda_target})
+        list(APPEND SV_TRILINOS_CUDA_LIBRARIES ${_sv_cuda_target})
+      endif()
+    endforeach()
+  endif()
 endif()
 
 # Build with the PETSc linear algebra package.
@@ -261,6 +273,10 @@ if(USE_TRILINOS)
   include_directories(${Trilinos_INCLUDE_DIRS})
   link_directories(${Trilinos_LIBRARY_DIRS})
   link_directories(${Trilinos_TPL_LIBRARY_DIRS})
+  ## GPU compatibility: link CUDA libraries 
+  if(CUDAToolkit_FOUND)
+    include_directories(${CUDAToolkit_INCLUDE_DIRS})
+  endif()
 endif()
 
 simvascular_add_executable(${SV_MULTIPHYSICS_EXE}
@@ -290,7 +306,8 @@ if(SV_MPI_EXTRA_LIBRARY)
 endif()
 
 if(USE_TRILINOS)
-  target_link_libraries(${SV_MULTIPHYSICS_EXE} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
+  # GPU compatibility: added SV_TRILINOS_CUDA_LIBRARIES
+  target_link_libraries(${SV_MULTIPHYSICS_EXE} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} ${SV_TRILINOS_CUDA_LIBRARIES})
 endif()
 
 if(USE_PETSC)
@@ -357,7 +374,8 @@ if(ENABLE_UNIT_TEST)
   add_executable(run_all_unit_tests ${CSRCS})
   
   if(USE_TRILINOS)
-    target_link_libraries(run_all_unit_tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
+    # GPU compatibility: added SV_TRILINOS_CUDA_LIBRARIES
+    target_link_libraries(run_all_unit_tests ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} ${SV_TRILINOS_CUDA_LIBRARIES})
   endif()
 
   if(USE_PETSC)

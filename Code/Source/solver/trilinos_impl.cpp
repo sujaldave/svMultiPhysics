@@ -917,8 +917,14 @@ void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
   mueluParams.set("aggregation: min agg size", 2);
   mueluParams.set("aggregation: max agg size", 8);
   mueluParams.set("aggregation: ordering", "natural");
-  mueluParams.set("aggregation: drop scheme", "classical");
-  mueluParams.set("aggregation: strength-of-connection: measure", "smoothed aggregation");
+  #if !defined(KOKKOS_ENABLE_CUDA)
+    mueluParams.set("aggregation: drop scheme", "classical");
+    mueluParams.set("aggregation: strength-of-connection: measure", "smoothed aggregation");
+  #else
+    // GPU compatibility: these MueLu aggregation options have triggered CUDA
+    // build/runtime issues in Trilinos GPU builds, so keep the CUDA path on
+    // MueLu's safer defaults.
+  #endif
   mueluParams.set("aggregation: number of random vectors", 5);
   mueluParams.set("aggregation: number of times to pre or post smooth", 3);
 
@@ -975,15 +981,32 @@ void checkDiagonalIsZero(const Teuchos::RCP<Trilinos> &trilinos_)
   Tpetra_Vector diagonal(rowMap);
   trilinos_->K->getLocalDiagCopy(diagonal);
   bool isZeroDiag = false;
-  auto diagData = diagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
-  for (size_t i = 0; i < diagData.extent(0); ++i)
+  // Not Compatible with CUDA builds: 
+  //  getLocalViewHost creates potential build/runtime issues in Trilinos CUDA builds. 
+  // auto diagData = diagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
+  // for (size_t i = 0; i < diagData.extent(0); ++i)
+  // {
+  //   if (diagData(i, 0) == 0.0)
+  //   {
+  //     diagData(i, 0) = 1.0;
+  //     isZeroDiag = true;
+  //   }
+  // }
+  // New scope to ensure diagData dies before replaceDiagonalCrsMatrix()
   {
-    if (diagData(i, 0) == 0.0)
+    // GPU compatibility: release the host view before calling back into Tpetra
+    // to avoid DualView "modified on both host/device" lifetime conflicts.
+    auto diagData = diagonal.getLocalViewHost(Tpetra::Access::ReadWrite);
+    for (size_t i = 0; i < diagData.extent(0); ++i)
     {
-      diagData(i, 0) = 1.0;
-      isZeroDiag = true;
+      if (diagData(i, 0) == 0.0)
+      {
+        diagData(i, 0) = 1.0;
+        isZeroDiag = true;
+      }
     }
-  }
+  } // diagData dies here; host view released
+
   Tpetra::replaceDiagonalCrsMatrix(*trilinos_->K, diagonal);
 
 } // void checkDiagonalIsZero()
@@ -1002,6 +1025,7 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
   // Start from the Dirichlet mask W_D supplied by svMultiPhysics.  Entries on
   // constrained rows/columns are zeroed in the same spirit as FSILS
   // precond_diag(), while unconstrained entries remain one.
+  { // New scope to ensure any local variables die before later Tpetra operations
   for (int i = 0; i < localNodes; ++i) {
     for (int j = 0; j < dof; ++j) {
       GO gid = localToGlobalSorted[i] * dof + j;
@@ -1015,6 +1039,7 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
       }
     }
   }
+} // host writes to 'diagonal' (local replaceLocalValue) are now done
 
   // Extract diag(K) and compute the Jacobi factor:
   //   W_J(i) = 1 / sqrt(abs(K_ii)).
@@ -1022,18 +1047,38 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
   Tpetra_Vector Kdiag(trilinos_->K->getRowMap());
   trilinos_->K->getLocalDiagCopy(Kdiag);
 
-  auto KdiagView = Kdiag.getLocalViewDevice(Tpetra::Access::ReadWrite);
-  using execution_space = typename Node::execution_space;
-  Kokkos::parallel_for("svmp_trilinos_jacobi_scaling",
-      Kokkos::RangePolicy<execution_space>(0, KdiagView.extent(0)),
-      KOKKOS_LAMBDA(const int i) {
-        double diag = KdiagView(i, 0);
-        if (diag == 0.0) {
-          diag = 1.0;
-        }
-        KdiagView(i, 0) = 1.0 / sqrt(fabs(diag));
-      });
-  Kokkos::fence();
+  // Not compatible with GPU builds
+  // auto KdiagView = Kdiag.getLocalViewDevice(Tpetra::Access::ReadWrite);
+  // using execution_space = typename Node::execution_space;
+  // Kokkos::parallel_for("svmp_trilinos_jacobi_scaling",
+  //     Kokkos::RangePolicy<execution_space>(0, KdiagView.extent(0)),
+  //     KOKKOS_LAMBDA(const int i) {
+  //       double diag = KdiagView(i, 0);
+  //       if (diag == 0.0) {
+  //         diag = 1.0;
+  //       }
+  //       KdiagView(i, 0) = 1.0 / sqrt(fabs(diag));
+  //     });
+  // Kokkos::fence();
+
+  { // New scope to ensure KdiagView dies before any later Tpetra operations
+
+    // GPU compatibility: keep the diagonal transform on the active Kokkos
+    // execution space, but end the device view lifetime before later Tpetra
+    // vector/matrix operations touch Kdiag.
+    auto KdiagView = Kdiag.getLocalViewDevice(Tpetra::Access::ReadWrite);
+    using execution_space = typename Node::execution_space;
+    Kokkos::parallel_for("svmp_trilinos_jacobi_scaling",
+        Kokkos::RangePolicy<execution_space>(0, KdiagView.extent(0)),
+        KOKKOS_LAMBDA(const int i) {
+          double diag = KdiagView(i, 0);
+          if (diag == 0.0) {
+            diag = 1.0;
+          }
+          KdiagView(i, 0) = 1.0 / sqrt(fabs(diag));
+        });
+    Kokkos::fence();
+  } // Kdiagview dies here; device view released
 
   // Final symmetric scaling vector:
   //   W = W_D * W_J.

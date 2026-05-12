@@ -13,7 +13,8 @@
 
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Dense"
-#include "eigen3/unsupported/Eigen/CXX11/Tensor"
+// Commenting this out since GPU build doesn't support older Eigen Library version
+// #include "eigen3/unsupported/Eigen/CXX11/Tensor"
 
 namespace mat_models {
 

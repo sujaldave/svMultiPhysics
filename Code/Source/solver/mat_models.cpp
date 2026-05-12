@@ -20,8 +20,11 @@ template<size_t nsd>
 using Matrix = Eigen::Matrix<double, nsd, nsd>;
 
 template<size_t nsd>
-using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+// Commenting this out since GPU build doesn't support older Eigen Library version
+// using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
 
+// GPU compatibility: avoid Eigen::TensorFixedSize dynamic initialization
+using Tensor = mat_fun::Tensor<nsd>;
 
 
 /// @brief Compute active component of deformation gradient tensor for

@@ -5,7 +5,9 @@
 #define MAT_FUN_H 
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Dense"
-#include "eigen3/unsupported/Eigen/CXX11/Tensor"
+// Commenting this out since GPU build doesn't support older Eigen Library version
+// #include "eigen3/unsupported/Eigen/CXX11/Tensor"
+#include <array>
 #include <stdexcept>
 
 #include "Array.h"
@@ -25,7 +27,82 @@ namespace mat_fun {
     using Matrix = Eigen::Matrix<double, nsd, nsd>;
 
     template<size_t nsd>
-    using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+    // Commenting this out since GPU build doesn't support older Eigen Library version
+    // using Tensor = Eigen::TensorFixedSize<double, Eigen::Sizes<nsd, nsd, nsd, nsd>>;
+
+    // GPU compatibility: avoid Eigen::TensorFixedSize dynamic initialization
+    // and Eigen tensor contraction machinery in CUDA-enabled Trilinos builds.
+    class Tensor {
+    public:
+        Tensor() {
+            setZero();
+        }
+
+        void setZero() {
+            data_.fill(0.0);
+        }
+
+        double& operator()(size_t i, size_t j, size_t k, size_t l) {
+            return data_[index(i, j, k, l)];
+        }
+
+        double operator()(size_t i, size_t j, size_t k, size_t l) const {
+            return data_[index(i, j, k, l)];
+        }
+
+        Tensor& operator+=(const Tensor& other) {
+            for (size_t i = 0; i < data_.size(); ++i) {
+                data_[i] += other.data_[i];
+            }
+            return *this;
+        }
+
+        Tensor& operator-=(const Tensor& other) {
+            for (size_t i = 0; i < data_.size(); ++i) {
+                data_[i] -= other.data_[i];
+            }
+            return *this;
+        }
+
+        Tensor operator+(const Tensor& other) const {
+            Tensor result(*this);
+            result += other;
+            return result;
+        }
+
+        Tensor operator-(const Tensor& other) const {
+            Tensor result(*this);
+            result -= other;
+            return result;
+        }
+
+        Tensor operator-() const {
+            Tensor result;
+            for (size_t i = 0; i < data_.size(); ++i) {
+                result.data_[i] = -data_[i];
+            }
+            return result;
+        }
+
+        Tensor operator*(double scalar) const {
+            Tensor result;
+            for (size_t i = 0; i < data_.size(); ++i) {
+                result.data_[i] = data_[i] * scalar;
+            }
+            return result;
+        }
+
+        friend Tensor operator*(double scalar, const Tensor& tensor) {
+            return tensor * scalar;
+        }
+
+    private:
+        static size_t index(size_t i, size_t j, size_t k, size_t l) {
+            return ((i * nsd + j) * nsd + k) * nsd + l;
+        }
+
+        std::array<double, nsd * nsd * nsd * nsd> data_;
+    };
 
     // Function to convert Array<double> to Eigen::Matrix
     template <typename MatrixType>
@@ -107,14 +184,67 @@ namespace mat_fun {
     double_dot_product(const Tensor<nsd>& A, const std::array<int, 2>& dimsA, 
                         const Tensor<nsd>& B, const std::array<int, 2>& dimsB) {
         
+        // Commenting this out since GPU build doesn't support older Eigen Library version
         // Define the contraction dimensions
-        Eigen::array<Eigen::IndexPair<int>, 2> contractionDims = {
-            Eigen::IndexPair<int>(dimsA[0], dimsB[0]), // Contract A's dimsA[0] with B's dimsB[0]
-            Eigen::IndexPair<int>(dimsA[1], dimsB[1])  // Contract A's dimsA[1] with B's dimsB[1]
-        };
+        // Eigen::array<Eigen::IndexPair<int>, 2> contractionDims = {
+        //     Eigen::IndexPair<int>(dimsA[0], dimsB[0]), // Contract A's dimsA[0] with B's dimsB[0]
+        //     Eigen::IndexPair<int>(dimsA[1], dimsB[1])  // Contract A's dimsA[1] with B's dimsB[1]
+        // };
 
+        Tensor<nsd> C;
+
+        std::array<int, 2> freeA;
+        std::array<int, 2> freeB;
+        int a_count = 0;
+        int b_count = 0;
+
+        // Commenting this out since GPU build doesn't support older Eigen Library version
         // Return the double dot product
-        return A.contract(B, contractionDims);
+        // return A.contract(B, contractionDims);
+
+        // GPU compatibility: 
+        for (int d = 0; d < 4; ++d) {
+            if (d != dimsA[0] && d != dimsA[1]) {
+                freeA[a_count++] = d;
+            }
+            if (d != dimsB[0] && d != dimsB[1]) {
+                freeB[b_count++] = d;
+            }
+        }
+
+        // Match Eigen contraction ordering: uncontracted A dimensions followed
+        // by uncontracted B dimensions.
+        for (int i = 0; i < nsd; ++i) {
+            for (int j = 0; j < nsd; ++j) {
+                for (int k = 0; k < nsd; ++k) {
+                    for (int l = 0; l < nsd; ++l) {
+                        double sum = 0.0;
+                        for (int m = 0; m < nsd; ++m) {
+                            for (int n = 0; n < nsd; ++n) {
+                                std::array<int, 4> a_idx = {0, 0, 0, 0};
+                                std::array<int, 4> b_idx = {0, 0, 0, 0};
+
+                                a_idx[freeA[0]] = i;
+                                a_idx[freeA[1]] = j;
+                                b_idx[freeB[0]] = k;
+                                b_idx[freeB[1]] = l;
+
+                                a_idx[dimsA[0]] = m;
+                                b_idx[dimsB[0]] = m;
+                                a_idx[dimsA[1]] = n;
+                                b_idx[dimsB[1]] = n;
+
+                                sum += A(a_idx[0], a_idx[1], a_idx[2], a_idx[3]) *
+                                       B(b_idx[0], b_idx[1], b_idx[2], b_idx[3]);
+                            }
+                        }
+                        C(i,j,k,l) = sum;
+                    }
+                }
+            }
+        }
+
+        return C;
 
         // For some reason, in this case the Eigen::Tensor contract function is
         // faster than a for loop implementation.
