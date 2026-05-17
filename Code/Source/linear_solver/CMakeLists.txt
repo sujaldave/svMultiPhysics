@@ -49,7 +49,9 @@ set(CSRCS
 
 add_library(${lib} ${SV_LIBRARY_TYPE} ${CSRCS})
 
-target_link_libraries(${lib} ${MPI_LIBRARY} ${MPI_Fortran_LIBRARIES})
+# Needed for GPU builds
+target_link_libraries(${lib} MPI::MPI_CXX ${MPI_Fortran_LIBRARIES})
+#target_link_libraries(${lib} ${MPI_LIBRARY} ${MPI_Fortran_LIBRARIES})
 #target_link_libraries(${lib} ${MPI_LIBRARY} ${MPI_Fortran_LIBRARIES} ${VTK_LIBRARIES})
 
 # extra MPI libraries only if there are not set to NOT_FOUND or other null 
