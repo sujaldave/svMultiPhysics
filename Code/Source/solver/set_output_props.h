@@ -38,6 +38,11 @@ std::map<consts::OutputNameType, OutputProps> output_props_map =
   {OutputNameType::out_fibAlign,     std::make_tuple(OutputNameType::outGrp_fA,     0, 1,             "Fiber_alignment") },
   {OutputNameType::out_fibDir,       std::make_tuple(OutputNameType::outGrp_fN,     0, nsd,           "Fiber_direction") },
   {OutputNameType::out_fibStrn,      std::make_tuple(OutputNameType::outGrp_fS,     0, 1,             "Fiber_shortening") },
+  {OutputNameType::out_fibStretch,   std::make_tuple(OutputNameType::outGrp_fibStretch,    0, 1,      "Fiber_stretch") },
+  {OutputNameType::out_fibStretchRate, std::make_tuple(OutputNameType::outGrp_fibStretchRate, 0, 1,   "Fiber_stretch_rate") },
+  {OutputNameType::out_activeTensionFibers, std::make_tuple(OutputNameType::outGrp_activeTensionFibers, 0, 1, "Active_tension_fibers") },
+  {OutputNameType::out_activeTensionSheets, std::make_tuple(OutputNameType::outGrp_activeTensionSheets, 0, 1, "Active_tension_sheets") },
+  {OutputNameType::out_activeTensionNormal, std::make_tuple(OutputNameType::outGrp_activeTensionNormal, 0, 1, "Active_tension_normal") },
 
   {OutputNameType::out_heatFlux,     std::make_tuple(OutputNameType::outGrp_hFlx,   0, nsd,           "Heat_flux") },
   {OutputNameType::out_integ,        std::make_tuple(OutputNameType::outGrp_I,      0,   1, nsd == 2 ?  "Area" : "Volume") },
@@ -51,9 +56,8 @@ std::map<consts::OutputNameType, OutputProps> output_props_map =
   {OutputNameType::out_traction,     std::make_tuple(OutputNameType::outGrp_trac,   0, nsd,           "Traction") },
   {OutputNameType::out_velocity,     std::make_tuple(OutputNameType::outGrp_Y,      0, nsd,           "Velocity") },
   {OutputNameType::out_viscosity,    std::make_tuple(OutputNameType::outGrp_Visc,   0, 1,             "Viscosity") },
-  {OutputNameType::out_voltage,      std::make_tuple(OutputNameType::outGrp_Y,      0, 1,             "Action_potential") },
+  {OutputNameType::out_voltage,      std::make_tuple(OutputNameType::outGrp_Y,      0, 1,             "Membrane_potential") },
   {OutputNameType::out_vortex,       std::make_tuple(OutputNameType::outGrp_vortex, 0, 1,             "Vortex") },
   {OutputNameType::out_vorticity,    std::make_tuple(OutputNameType::outGrp_vort,   0, maxNSD,        "Vorticity") },
   {OutputNameType::out_WSS,          std::make_tuple(OutputNameType::outGrp_WSS,    0, maxNSD,        "WSS") }
 };
-

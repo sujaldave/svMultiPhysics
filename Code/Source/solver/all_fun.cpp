@@ -391,7 +391,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int iM, const Array<dou
         if (msh.lShl) {
           Vector<double> nV(nsd);
           nn::gnns(nsd, eNoN, Nxi, xl, nV, tmps, tmps);
-          Jac  = sqrt(utils::norm(nV));
+          Jac  = utils::norm(nV);
         } else { 
           nn::gnn(eNoN, nsd, insd, Nxi, xl, Nx, Jac, tmp);
         }
@@ -572,7 +572,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             sl(a) = s(l,Ac);
           } else { 
             auto rows = s.col(Ac, {l,u});
-            sl(a) = sqrt(utils::norm(rows));
+            sl(a) = utils::norm(rows);
           }
           ibl = ibl + com_mod.iblank(Ac);
         }
@@ -590,7 +590,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             if (msh.lShl) {
               Vector<double> nV(nsd);
               nn::gnns(nsd, eNoN, Nxi, xl, nV, tmps, tmps);
-              Jac  = sqrt(utils::norm(nV));
+              Jac  = utils::norm(nV);
             } else { 
               nn::gnn(eNoN, nsd, insd, Nxi, xl, Nx, Jac, tmp);
             }
@@ -646,7 +646,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             sl(a) = s(l,Ac);
           } else { 
             auto rows = s.col(Ac, {l,u});
-            sl(a) = sqrt(utils::norm(rows));
+            sl(a) = utils::norm(rows);
           }
         }
 
@@ -815,7 +815,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, co
       }
 
       // Calculating the Jacobian (encodes area of face element)
-      double Jac = sqrt(utils::norm(n));
+      double Jac = utils::norm(n);
 
       // Calculating the function value at Gauss point
       double sHat = 0.0;
@@ -1704,5 +1704,28 @@ void split_jobs(int tid, int m, int n, Array<double>& A, Vector<double>& b)
   #endif
 }
 
+void igbc(const ComMod &com_mod, const MBType &gm, Array<double> &Y,
+          Array<double> &dY) {
+  double t = fmod(com_mod.time, gm.period);
+  int i = 0;
 
+  for (int ii = 0; ii < gm.nTP - 1; ii++) {
+    if (gm.t(ii + 1) >= t) {
+      Y = 0.0;
+      dY = 0.0;
+      i = ii;
+      break;
+    }
+  }
+
+  double delT = gm.t(i + 1) - gm.t(i);
+  double tmp = (t - gm.t(i)) / delT;
+
+  for (int a = 0; a < gm.d.ncols(); a++) {
+    for (int j = 0; j < gm.dof; j++) {
+      Y(j, a) = tmp * gm.d(j, a, i + 1) + gm.d(j, a, i) * (1.0 - tmp);
+      dY(j, a) = (gm.d(j, a, i + 1) - gm.d(j, a, i)) / delT;
+    }
+  }
+}
 };

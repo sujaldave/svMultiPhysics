@@ -1005,6 +1005,16 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
   if (com_mod.urisFlag) {
     nOut = nOut + com_mod.nUris;
     outDof = outDof + com_mod.nUris;
+    for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+      if (com_mod.uris[iUris].scaffold_flag) {
+        nOut = nOut + 1;
+        outDof = outDof + 1;
+      }
+      if (com_mod.uris[iUris].include_uris_velocity) {
+        nOut = nOut + 1;
+        outDof = outDof + nsd;
+      }
+    }
   }
 
   std::vector<std::string> outNames(nOut); 
@@ -1129,6 +1139,13 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
               }
             }
           break;
+
+          case OutputNameType::outGrp_ionicState:
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = cep_mod.Xion(eq.output[iOut].o, Ac);
+            }
+            break;
 
           case OutputNameType::outGrp_WSS:
           case OutputNameType::outGrp_trac:
@@ -1286,13 +1303,54 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
           break;
 
           case OutputNameType::outGrp_divV:
-            tmpV.resize(l,msh.nNo); 
+            tmpV.resize(l,msh.nNo);
             post::div_post(simulation, msh, tmpV, solutions, iEq);
             for (int a = 0; a < msh.nNo; a++) {
               d[iM].x(is,a) = tmpV(0,a);
             }
             tmpV.resize(consts::maxNSD,msh.nNo);
           break;
+
+          case OutputNameType::outGrp_fibStretch: {
+            Vector<double> res(msh.nNo);
+            if (msh.nFn != 0) {
+              post::fib_stretch(simulation->com_mod, iEq, msh, solutions.current.get_displacement(), res);
+            }
+            for (int a = 0; a < msh.nNo; a++) {
+              d[iM].x(is,a) = res(a);
+            }
+          } break;
+
+          case OutputNameType::outGrp_fibStretchRate: {
+            Vector<double> res(msh.nNo);
+            if (msh.nFn != 0) {
+              post::fib_stretch_rate(simulation->com_mod, iEq, msh, solutions, res);
+            }
+            for (int a = 0; a < msh.nNo; a++) {
+              d[iM].x(is,a) = res(a);
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionFibers: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_f[Ac];
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionSheets: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_s[Ac];
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionNormal: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_n[Ac];
+            }
+          } break;
 
           default:
             throw std::runtime_error("Undefined output");
@@ -1320,20 +1378,53 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
     } 
 
     if (com_mod.urisFlag) {
+      // SDF for each URIS
       for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
         cOut = cOut + 1;
-        // std::cout << "uris cOut:" << cOut << std::endl;
         int is = outS[cOut];
         int ie = is;
         outS[cOut+1] = ie + 1;
         outNames[cOut] = "URIS_SDF_" + com_mod.uris[iUris].name;
-        
+
         for (int a = 0; a < msh.nNo; a++) {
           int Ac = msh.gN(a);
           d[iM].x(is,a) = static_cast<double>(com_mod.uris[iUris].sdf(Ac));
         }
-      } 
-    } 
+      }
+      // SDF for scaffold
+      for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+        if (com_mod.uris[iUris].scaffold_flag) {
+          cOut = cOut + 1;
+          int is = outS[cOut];
+          int ie = is;
+          outS[cOut+1] = ie + 1;
+          outNames[cOut] = "URIS_SCAF_UDF_" + com_mod.uris[iUris].name;
+
+          for (int a = 0; a < msh.nNo; a++) {
+            int Ac = msh.gN(a);
+            d[iM].x(is,a) = static_cast<double>(com_mod.uris[iUris].scaffold_udf(Ac));
+          }
+        }
+      }
+      // Valve velocity for each URIS
+      for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+        if (com_mod.uris[iUris].include_uris_velocity) {
+          cOut = cOut + 1;
+          int is = outS[cOut];
+          int ie = is + nsd - 1;
+          outS[cOut+1] = ie + 1;
+          outNames[cOut] = "URIS_VEL_" + com_mod.uris[iUris].name;
+
+          for (int a = 0; a < msh.nNo; a++) {
+            int Ac = msh.gN(a);
+            for (int b = is; b <= ie; b++) {
+              d[iM].x(b,a) = static_cast<double>(com_mod.uris[iUris].valve_velocity_fluid(b-is, Ac));
+            }
+          }
+        }
+      }
+
+    }
 
   } // iM for loop 
 
@@ -1526,4 +1617,3 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
 }
 
 };
-

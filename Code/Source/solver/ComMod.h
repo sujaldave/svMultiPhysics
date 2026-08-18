@@ -7,20 +7,22 @@
 // All of the data structures used for the mesh, boundarsy conditions and solver parameters, etc. 
 // are defined here.
 
-#ifndef COMMOD_H 
-#define COMMOD_H 
+#ifndef COMMOD_H
+#define COMMOD_H
 
 #include "Array.h"
 #include "Array3.h"
-#include "SolutionStates.h"
 #include "CepMod.h"
 #include "ChnlMod.h"
 #include "CmMod.h"
+#include "CoupledBoundaryCondition.h"
+#include "FourierInterpolation.h"
 #include "Parameters.h"
 #include "RobinBoundaryCondition.h"
-#include "CoupledBoundaryCondition.h"
+#include "SolutionStates.h"
 #include "Timer.h"
 #include "Vector.h"
+#include "active_stress.h"
 
 #include "DebugMsg.h"
 
@@ -42,42 +44,6 @@
 #include <sstream>
 
 class LinearAlgebra;
-
-/// @brief Fourier coefficients that are used to specify unsteady BCs
-//
-class fcType
-{
-  public:
-
-    bool defined() { return n != 0; };
-
-    // If this is a ramp function
-    bool lrmp = false;
-
-    // Number of Fourier coefficient
-    int n = 0;
-
-    // No. of dimensions (scalar or vector)
-    int d = 0;
-   
-    // Initial value
-    Vector<double> qi;
-
-    // Time derivative of linear part
-    Vector<double> qs;
-
-    // Period
-    double T = 0.0;
-
-    // Initial time
-    double ti = 0.0;
-
-    // Imaginary part of coefficint
-    Array<double> i;
-
-    // Real part of coefficint
-    Array<double> r;
-};
 
 /// @brief Moving boundary data structure (used for general BC)
 //
@@ -194,7 +160,7 @@ class bcType
     //
     // This is declare ALLOCATABLE in MOD.f. 
     //
-    fcType gt;
+    FourierInterpolation gt;
 
     // Neu: RCR
     rcrType RCR;
@@ -204,6 +170,7 @@ class bcType
 
     // Coupled BC class
     CoupledBoundaryCondition coupled_bc;
+
 };
 
 /// @brief Class storing data for B-Splines.
@@ -306,35 +273,10 @@ class bfType
     Array<double> bx;
 
     // Time dependant (unsteady imposed value)
-    fcType bt;
+    FourierInterpolation bt;
 
     // General (unsteady and spatially dependent combination)
     MBType bm;
-};
-
-// Fiber stress type
-class fibStrsType
-{
-  public:
-
-    // Type of fiber stress
-    int fType = 0;
-
-    // Constant steady value
-    double g = 0.0;
-
-    // Directional stress distribution parameters
-    // Fraction of active stress in fiber direction (default: 1.0)
-    double eta_f = 1.0;
-    
-    // Fraction of active stress in sheet direction (default: 0.0)
-    double eta_s = 0.0;
-    
-    // Fraction of active stress in sheet-normal direction (default: 0.0)
-    double eta_n = 0.0;
-
-    // Unsteady time-dependent values
-    fcType gt;
 };
 
 /// @brief Structural domain type
@@ -379,9 +321,6 @@ class stModelType
     double b1 = 0.0;
     double b2 = 0.0;
     double mu0 = 0.0;
-
-    // Fiber reinforcement stress
-    fibStrsType Tf;
 
     // CANN Model/UAnisoHyper_inv
     ArtificialNeuralNetMaterial paramTable;
@@ -453,6 +392,12 @@ class dmnType
 
     // Electrophysiology model
     cepModelType cep;
+
+    /// Active stress model name.
+    std::string active_stress_model_name = "";
+
+    /// Active stress model.
+    std::shared_ptr<ActiveStress> active_stress;
 
     // Structure material model
     stModelType stM;
@@ -771,15 +716,21 @@ class cplFaceType
 
     // RCR type BC
     rcrType RCR;
+
+    // svOneD: path to the per-face 1D solver input file.
+    std::string oned_input_file;
+
+    // Whether this face uses RCR (Windkessel) boundary condition.
+    bool isRCR = false;
 };
 
 //----------------------------
-// svZeroDSolverInterfaceType
+// svZeroDSolverInterfaceData
 //----------------------------
 // This class stores information used to interface to
 // the svZeroDSolver.
 //
-class svZeroDSolverInterfaceType
+class svZeroDSolverInterfaceData
 {
   public:
 
@@ -807,6 +758,32 @@ class svZeroDSolverInterfaceType
     void set_data(const svZeroDSolverInterfaceParameters& params);
 };
 
+/// \brief Stores information used to interface with svOneDSolver.
+///
+/// This class stores the global svOneDSolver interface settings read from the
+/// solver XML file. Per-face 1D input files are stored separately in
+/// cplFaceType::oned_input_file.
+class svOneDSolverInterfaceData
+{
+  public:
+    /// \brief Path to the svOneDSolver interface shared library.
+    ///
+    /// This may be provided either with the platform-specific extension
+    /// (.so/.dylib) or without it.
+    std::string solver_library;
+
+    /// \brief True if the svOneDSolver interface settings were read from XML.
+    ///
+    /// This is set to true after the svOneDSolver_interface XML element has
+    /// been parsed successfully.
+    bool has_data = false;
+
+    /// \brief Read svOneDSolver interface settings from parsed parameters.
+    ///
+    /// \param params Parsed svOneDSolver interface parameters.
+    void set_data(const svOneDSolverInterfaceParameters& params);
+};
+
 /// @brief For coupled 0D-3D problems
 //
 class cplBCType
@@ -819,10 +796,13 @@ class cplBCType
     /// @brief Whether to use genBC
     bool useGenBC = false;
 
-    //  Whether to use svZeroD
+    /// @brief Whether to use svZeroD
     bool useSvZeroD = false;
 
-    //  Whether to initialize RCR from flow data
+    /// @brief Whether to use svOneD (svOneDSolver)
+    bool useSvOneD = false;
+
+    /// @brief Whether to initialize RCR from flow data
     bool initRCR = false;
 
     /// @brief Number of coupled faces
@@ -851,7 +831,11 @@ class cplBCType
     std::string commuName;
     //std::string commuName = ".CPLBC_0D_3D.tmp";
 
-    svZeroDSolverInterfaceType svzerod_solver_interface;
+    /// @brief Data structure used for coupling with svZeroD code
+    svZeroDSolverInterfaceData svzerod_solver_interface;
+
+    /// @brief Data structure used for coupling with svOneD code
+    svOneDSolverInterfaceData svOneD_solver_interface;
 
     /// @brief The name of history file containing "X"
     std::string saveName;
@@ -1448,78 +1432,143 @@ class risFaceType
     std::vector<bool> status;
 };
 
-/// @brief Unfitted Resistive Immersed surface data type
-//
+/// @brief Unfitted Resistive Immersed Surface (URIS) data type.
+///
+/// Stores the immersed valve surface geometry, motion state, distance fields,
+/// resistance parameters, and background-mesh interpolation data used by the
+/// URIS formulation.
+///
+/// ### Scaffolding
+///
+/// A scaffold is an optional auxiliary surface mesh associated with a URIS
+/// valve. It represents supporting valve structure that contributes
+/// additional resistance near the scaffold surface without being treated as a
+/// moving valve leaflet surface. When enabled, the scaffold mesh is loaded from
+/// `Scaffold_file_path`, scaled with the URIS mesh scale factor, and stored as a
+/// separate mesh. The solver computes an unsigned distance function (UDF) from
+/// background fluid mesh nodes to the scaffold and uses the closed-valve
+/// thickness parameter to apply the scaffold resistance contribution.
+///
+/// Scaffold is disabled by default. Set `Scaffold_file_path` in the
+/// `Add_URIS_mesh` input section to a VTU scaffold mesh file to enable it.
 class urisType 
 {
   public:
 
-    // Name of the URIS instance.
+    /// @brief Name of the URIS instance.
     std::string name;
 
-    // Whether any file has been saved.
+    /// @brief Whether any file has been saved.
     bool savedOnce = false;
 
-    // Total number of IB nodes.
+    /// @brief Total number of immersed boundary nodes.
     int tnNo = 0;
 
-    // Number of IB meshes.
+    /// @brief Number of immersed boundary meshes.
     int nFa = 0;
 
-    // Position coordinates (2D array: rows x columns).
+    /// @brief Valve surface position coordinates.
     Array<double> x;
 
-    // Displacement (new) (2D array).
+    /// @brief Valve position coordinates at the previous time step.
+    Array<double> x_prev;
+
+    /// @brief Valve velocity on the valve surface nodes.
+    Array<double> valve_velocity;
+
+    /// @brief Valve displacement.
     Array<double> Yd;
 
-    // Default signed distance value away from the valve.
-    double sdf_default = 1000.0;
+    /// @brief Default signed distance value away from the valve.
+    double sdf_default;
 
-    // Default distance value of the valve boundary (valve thickness).
-    double sdf_deps = 0.25;
+    /// @brief Half-valve thickness when the valve is open.
+    double sdf_deps;
 
-    // Default distance value of the valve boundary when the valve is closed.
-    double sdf_deps_close = 0.25;
+    /// @brief Half-thickness used when the valve is closed.
+    ///
+    /// Set larger than sdf_deps if the fully closed position alone is not able
+    /// to prevent backflow.
+    double sdf_deps_close;
 
-    // Displacements of the valve when it opens (3D array).
+    /// @brief Resistance value of the valve.
+    double resistance;
+
+    /// @brief Whether to invert the valve surface normal vector.
+    ///
+    /// Valve normal vectors are assumed to point downstream, so that the
+    /// downstream region has positive signed distance and the upstream region
+    /// has negative signed distance. If the input surface does not satisfy
+    /// this assumption, this flag should be set to true to flip the normals.
+    bool invert_normal;
+
+    /// @brief Whether to include the valve velocity in the RIS implementation.
+    bool include_uris_velocity = false;
+
+    /// @brief Opening positions of the valve surfaces.
     Array3<double> DxOpen;
 
-    // Displacements of the valve when it closes (3D array).
+    /// @brief Closing positions of the valve surfaces.
     Array3<double> DxClose;
 
-    // Normal vector pointing in the positive flow direction (1D array).
+    /// @brief Normal vector pointing in the positive flow direction.
     Vector<double> nrm;
 
-    // Close flag.
-    bool clsFlg = true;
+    /// @brief Close flag.
+    bool clsFlg;
 
-    // Iteration count.
+    /// @brief Iteration count.
     int cnt = 1000000;
 
-    // URIS: signed distance function of each node to the uris (1D array).
+    /// @brief Flag indicating whether the signed distance function is computed.
+    bool sdf_computed = false;
+
+    /// @brief Signed distance function indexed by background fluid mesh node.
     Vector<double> sdf;
 
-    // Mesh scale factor.
-    double scF = 1.0;
+    /// @brief Valve velocity interpolated on background fluid mesh nodes.
+    Array<double> valve_velocity_fluid;
 
-    // Mean pressure upstream.
+    /// @brief Mesh scale factor.
+    double scF;
+
+    /// @brief Mean pressure upstream.
     double meanPU = 0.0;
 
-    // Mean pressure downstream.
+    /// @brief Mean pressure downstream.
     double meanPD = 0.0;
 
-    // Relaxation factor to compute weighted averages of pressure values.
+    /// @brief Relaxation factor to compute weighted averages of pressure values.
     double relax_factor = 0.5;
 
-    // Array to store the fluid mesh elements that the uris node is in (2D array).
+    /// @brief Background fluid mesh element containing each immersed surface node.
+    ///
+    /// `elemId(0, nd)` is the mesh index `jM`, and `elemId(1, nd)` is the
+    /// element index `iEln` for the fluid element containing immersed surface
+    /// node `nd`. Set to -1 if no containing element was found on this rank.
     Array<int> elemId;
 
-    // Array to count how many times a uris node is found in the fluid mesh of a processor (1D array).
-    Vector<int> elemCounter;
+    /// @brief Per-node ownership flag set by uris_find_tetra.
+    ///
+    /// A value of 1 means this rank owns the node and is used for interpolating
+    /// its displacement. A value of 0 means another rank owns it, so this rank
+    /// skips it to avoid double-counting in the MPI_SUM gather.
+    Vector<int> localNode;
 
-    // Derived type variables
-    // IB meshes
+    /// @brief Immersed boundary meshes.
     std::vector<mshType> msh;
+
+    /// @brief Whether a scaffold mesh is enabled for this URIS instance.
+    bool scaffold_flag = false;
+
+    /// @brief Scaffold mesh data.
+    mshType scaffold_msh;
+
+    /// @brief Unsigned distance function (UDF) for the scaffold mesh.
+    Vector<double> scaffold_udf;
+
+    /// @brief Flag indicating whether the scaffold mesh UDF is computed.
+    bool scaffold_udf_computed = false;
 
 };
 
@@ -1607,12 +1656,6 @@ class ComMod {
 
     /// @brief Number of URIS surfaces (uninitialized, to be set later)
     int nUris;
-
-    /// @brief URIS resistance
-    double urisRes;
-
-    /// @brief URIS resistance when the valve is closed
-    double urisResClose;
 
     /// @brief Fluid-related node mask for URIS SDF. Built once when
     /// consistent with tnNo; rebuilt automatically if tnNo changes.
@@ -1848,4 +1891,3 @@ class ComMod {
 };
 
 #endif
-

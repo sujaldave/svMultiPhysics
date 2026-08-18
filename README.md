@@ -1,7 +1,6 @@
 # svMultiPhysics
 
-[![Build Status (Ubuntu)](https://github.com/SimVascular/svMultiPhysics/actions/workflows/test_ubuntu.yml/badge.svg)](https://github.com/SimVascular/svMultiPhysics/actions)
-[![Build Status (macOS)](https://github.com/SimVascular/svMultiPhysics/actions/workflows/test_macos.yml/badge.svg)](https://github.com/SimVascular/svMultiPhysics/actions)
+[![Tests](https://github.com/SimVascular/svMultiPhysics/actions/workflows/tests.yml/badge.svg)](https://github.com/SimVascular/svMultiPhysics/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/github/SimVascular/svMultiPhysics/graph/badge.svg?token=I848DNIHSP)](https://codecov.io/github/SimVascular/svMultiPhysics)
 ![Latest Release](https://img.shields.io/github/v/release/SimVascular/svMultiPhysics?label=latest)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20linux-blue)
@@ -59,7 +58,7 @@ The following software packages are required to be installed in order to build s
 - [CMake](https://cmake.org/) - Used to the build the binary executable **svmultiphysics**
 - C++17 compiler - C++ compiler, linker and libraries 
 - [Visualization Toolkit (VTK)](https://vtk.org/) - Used for reading and writing VTK-format VTP and VTU files 
-- [Open MPI](https://www.open-mpi.org/) - Used for parallel processing
+- An MPI implementation - Used for parallel processing. svMultiPhysics has been successfully tested with [Open MPI](https://www.open-mpi.org/) and [Intel MPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/mpi-library.html)
 - [BLAS](https://www.netlib.org/blas/) - Used for performing basic vector and matrix operations (optional but may be needed for external linear algebra packages)
 - [LAPACK](https://www.netlib.org/lapack/) - Used for solving systems of simultaneous linear equations (optional but may be needed for external linear algebra packages)
 

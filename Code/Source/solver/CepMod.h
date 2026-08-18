@@ -8,19 +8,16 @@
 // model equation. It also interfaces with individual modules for
 // the cellular activation model.
 
+#ifndef CEP_MOD_H
+#define CEP_MOD_H
 
-#ifndef CEP_MOD_H 
-#define CEP_MOD_H 
-
-#include "CepModAp.h"
-#include "CepModBo.h"
-#include "CepModFn.h"
-#include "CepModTtp.h"
 #include "consts.h"
+#include "ionic_model.h"
 
 #include "Array.h"
 #include "Vector.h"
 #include <map>
+#include <memory>
 
 /// @brief Type of cardiac electrophysiology models.
 enum class ElectrophysiologyModelType {
@@ -31,6 +28,7 @@ enum class ElectrophysiologyModelType {
   TTP = 104
 };
 
+extern const std::map<ElectrophysiologyModelType, std::string> cep_model_type_to_name;
 extern const std::map<std::string,ElectrophysiologyModelType> cep_model_name_to_type;
 
 /// @brief Print ElectrophysiologyModelType as a string.
@@ -46,61 +44,76 @@ static std::ostream &operator << ( std::ostream& strm, ElectrophysiologyModelTyp
   return strm << names.at(type);
 }
 
-/// @brief Time integration scheme.
-enum class TimeIntegratioType {
-  NA = 200, 
-  FE = 201,
-  RK4 = 202, 
-  CN2 = 203
-};
-
-extern const std::map<std::string,TimeIntegratioType> cep_time_int_to_type;
-
-static std::ostream &operator << ( std::ostream& strm, TimeIntegratioType type)
-{
-  const std::map<TimeIntegratioType, std::string> names = { 
-    {TimeIntegratioType::NA, "NA"}, 
-    {TimeIntegratioType::FE, "FE"}, 
-    {TimeIntegratioType::RK4, "RK4"}, 
-    {TimeIntegratioType::CN2, "CN2"}, 
-  };
-  return strm << names.at(type);
-}
-
-/// @brief Time integration scheme and related parameters
-class odeType {
-  public:
-    odeType() {};
-
-    /// @brief Time integration method type
-    TimeIntegratioType tIntType = TimeIntegratioType::NA;
-    //int tIntType = tIntType_NA;
-
-    /// @brief Max. iterations for Newton-Raphson method
-    int maxItr = 5;
-
-    /// @brief Absolute tolerance
-    double absTol = 1.E-8;
-
-    /// @brief Relative tolerance
-    double relTol = 1.E-4;
-};
+class ComMod;
+class CmMod;
+class cmType;
+class StimulusParameters;
 
 /// @brief External stimulus type
 class stimType
 {
   public:
-    /// @brief start time
-    double Ts = 0.0;
+    /// @brief Spatial bounds for a CEP stimulus region.
+    class SpatialBounds
+    {
+      public:
+        /// @brief Set box bounds.
+        void set_box(const Vector<double>& min, const Vector<double>& max);
 
-    /// @brief duration of stimulus
-    double Td = 0.0;
+        /// @brief Set sphere bounds.
+        void set_sphere(const Vector<double>& center, const double radius);
 
-    /// @brief cycle length
-    double CL = 0.0;
+        /// @brief Return true if the point lies inside all active spatial bounds.
+        bool contains(const Vector<double>& x) const;
 
-    /// @brief stimulus amplitude
-    double A = 0.0;
+        /// @brief Broadcast spatial bounds to all MPI ranks.
+        void distribute(const CmMod& cm_mod, const cmType& cm);
+
+      private:
+        /// @brief True if a box region has been set.
+        bool has_box = false;
+        /// @brief True if a sphere region has been set.
+        bool has_sphere = false;
+
+        /// @brief Minimum corner of the box region.
+        Vector<double> box_min;
+        /// @brief Maximum corner of the box region.
+        Vector<double> box_max;
+        /// @brief Center of the sphere region.
+        Vector<double> sphere_center;
+        /// @brief Radius of the sphere region.
+        double sphere_radius = 0.0;
+
+        /// @brief Return true if x lies inside the box. Assumes has_box is true.
+        bool inside_box(const Vector<double>& x) const;
+        /// @brief Return true if x lies inside the sphere. Assumes has_sphere is true.
+        bool inside_sphere(const Vector<double>& x) const;
+    };
+
+    /// @brief Return the applied stimulus value at a point and time.
+    double operator()(const double time, const Vector<double>& x) const;
+
+    /// @brief Set stimulus parameters from parsed XML parameters.
+    void read_parameters(const StimulusParameters& params, const int nsd, const double default_cycle_length);
+
+    /// @brief Broadcast stimulus parameters to all ranks.
+    void distribute(const CmMod& cm_mod, const cmType& cm);
+
+  private:
+    /// @brief Time at which the stimulus begins within each cycle.
+    double start_time = 0.0;
+    /// @brief Duration of the stimulus pulse within each cycle.
+    double duration = 0.0;
+    /// @brief Length of one stimulus cycle.
+    double cycle_length = 0.0;
+    /// @brief Amplitude of the applied stimulus.
+    double amplitude = 0.0;
+
+    /// @brief Spatial region to which the stimulus is applied.
+    SpatialBounds spatial_bounds;
+
+    /// @brief Return true if the stimulus is active at the given time.
+    bool is_active(const double time) const;
 };
 
 /// @brief ECG leads type
@@ -160,23 +173,17 @@ class cepModelType
     /// @brief  Anisotropic conductivity
     Vector<double> Dani;
 
-    /// @brief  External stimulus
-    stimType Istim;
+    /// @brief  External stimuli applied within this domain.
+    std::vector<stimType> Istim;
+
+    /// @brief Summed applied stimulus at a point and time (0.0 if none active).
+    double stimulus_value(const double time, const Vector<double>& x) const;
 
     /// @brief  Time integration options
     odeType odes;
 
-    /// @brief Interface for Aliev-Panfilov cellular activation model
-    CepModAp ap;
-
-    /// @brief Interface for Bueno-Orovio cellular activation model
-    CepModBo bo;
-
-    /// @brief Interface for Fitzhugh-Nagumo cellular activation model
-    CepModFn fn;
-
-    /// @brief Interface for Tusscher-Panfilov cellular activation model
-    CepModTtp ttp;
+    /// @brief Ionic model instance.
+    std::shared_ptr<IonicModel> ionic_model;
 };
 
 /// @brief Cardiac electromechanics model type
@@ -187,18 +194,27 @@ class cemModelType
     bool cpld = false;
     //bool cpld = .FALSE.
 
-    /// @brief  Whether active stress formulation is employed
-    bool aStress = false;
-    //bool aStress = .FALSE.
-
     /// @brief  Whether active strain formulation is employed
     bool aStrain = false;
     //bool aStrain = .FALSE.
 
-    /// @brief  Local variable integrated in time
-    ///    := activation force for active stress model
-    ///    := fiber stretch for active strain model
-    Vector<double> Ya;
+    /// @brief Activation along fibers.
+    ///
+    /// Corresponds to active tension along fibers if using active stress, and
+    /// to fiber stretch if using active strain.
+    Vector<double> Ya_f;
+
+    /// @brief Activation along sheets.
+    ///
+    /// Only used if using active stress, in which case it represents the active
+    /// tension along sheets.
+    Vector<double> Ya_s;
+
+    /// @brief Activation along sheet normals.
+    ///
+    /// Only used if using active stress, in which case it represents the active
+    /// tension along sheet normals.
+    Vector<double> Ya_n;
 };
 
 class CepMod 
@@ -214,20 +230,11 @@ class CepMod
     /// @brief Unknowns stored at all nodes
     Array<double> Xion;
 
+    /// @brief Calcium vector at all nodes.
+    Vector<double> calcium;
+
     /// @brief Cardiac electromechanics type
     cemModelType cem;
-
-    /// @brief Interface for Aliev-Panfilov cellular activation model.
-    CepModAp ap;
-
-    /// @brief Interface for ABueno-Orovio cellular activation model.
-    CepModBo bo;
-
-    /// @brief Interface for Fitzhugh-Nagumo cellular activation model.
-    CepModFn fn;
-
-    /// @brief Interface for Tusscher-Panfilov cellular activation model.
-    CepModTtp ttp;
 
     /// @brief ECG leads
     ecgLeadsType ecgleads;

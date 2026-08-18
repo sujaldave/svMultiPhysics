@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #ifndef PARAMETERS_H 
-#define PARAMETERS_H 
+#define PARAMETERS_H
 
 #include <any>
 #include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -15,6 +16,8 @@
 #include <tuple>
 #include <variant>
 #include <vector>
+
+#include "Vector.h"
 
 #include "Core/Exception.h"
 #include "tinyxml2.h"
@@ -137,7 +140,7 @@ class Parameter
       if (!(str_stream >> value_)) {
         std::istringstream str_stream(str);
         if (!(str_stream >> std::boolalpha >> value_)) {
-          svmp::raise<svmp::ParseException>(SVMP_HERE, "Incorrect value '" + str + "' for '" + name_ + "'.");
+          svmp::raise<svmp::ParseException>("Incorrect value '" + str + "' for '" + name_ + "'.");
         }
       }
 
@@ -228,6 +231,17 @@ class VectorParameter
       std::regex sep("\\(|\\)|\\,");
       auto str = std::regex_replace(str_value, sep, " ");
 
+      // If this is the first time this method is called, we clear any previous
+      // content of the vector of values. This means that, when the XML tag
+      // associated to this parameter is encoutered for the first time, the
+      // values given when declaring the parameter (see other overload of the
+      // set function) will be discarded. However, if the same XML tag is
+      // encountered again, the new values are appended, without discarding the
+      // previously encoutered ones.
+      if (!value_set_) {
+        value_.clear();
+      }
+
       if constexpr (std::is_same<T, std::string>::value) {
         std::stringstream ssin(str);
         std::string value;
@@ -241,6 +255,8 @@ class VectorParameter
           value_.push_back(value);
         }
       }
+
+      value_set_ = true;
     }
 
     bool check_required_set()
@@ -326,7 +342,7 @@ class ParameterLists
     void set_parameter_value_CANN(const std::string& name, const std::string& value) 
     {
       if (params_map.count(name) == 0) {
-        svmp::raise<svmp::ParseException>(SVMP_HERE, "Unknown " + xml_element_name + " XML element '" + name + "'.");
+        svmp::raise<svmp::ParseException>("Unknown " + xml_element_name + " XML element '" + name + "'.");
       }
 
       auto& param_variant = params_map[name];
@@ -337,7 +353,7 @@ class ParameterLists
           (*vec_param)->value_.clear();  // Clear the vector before setting
           (*vec_param)->set(value);  // Set the new value
         } else {
-          svmp::raise<svmp::ParseException>(SVMP_HERE, "Activation_functions is not a VectorParameter<int>.");
+          svmp::raise<svmp::ParseException>("Activation_functions is not a VectorParameter<int>.");
         }
       }
       // Check for Weights
@@ -346,7 +362,7 @@ class ParameterLists
           (*vec_param)->value_.clear();  // Clear the vector before setting
           (*vec_param)->set(value);  // Set the new value
         } else {
-          svmp::raise<svmp::ParseException>(SVMP_HERE, "Weights is not a VectorParameter<double>.");
+          svmp::raise<svmp::ParseException>("Weights is not a VectorParameter<double>.");
         }
       }
       // Default: everything else
@@ -363,7 +379,7 @@ class ParameterLists
     void set_parameter_value(const std::string& name, const std::string& value) 
     {
       if (params_map.count(name) == 0) {
-        svmp::raise<svmp::ParseException>(SVMP_HERE, "Unknown " + xml_element_name + " XML element '" + name + "'.");
+        svmp::raise<svmp::ParseException>("Unknown " + xml_element_name + " XML element '" + name + "'.");
       }
 
       std::visit([value](auto&& p) { p->set(value); }, params_map[name]);
@@ -378,14 +394,13 @@ class ParameterLists
         if (std::visit([](auto&& p) {
           return !p->check_required_set();
         }, param)) { 
-          svmp::raise<svmp::ParseException>(SVMP_HERE, xml_element_name + " XML element '" + key + "' has not been set.");
+          svmp::raise<svmp::ParseException>(xml_element_name + " XML element '" + key + "' has not been set.");
         }
       }
     }
 
     /// @brief Get the defined parameters as a map of strings.
-    std::map<std::string,std::string> get_parameter_list()
-    {
+    std::map<std::string, std::string> get_parameter_list() const {
       std::map<std::string,std::string> params;
 
       for (auto& [ key, param ] : params_map) {
@@ -664,6 +679,47 @@ class svZeroDSolverInterfaceParameters : public ParameterLists
     bool value_set = false;
 };
 
+//----------------------------------
+// svOneDSolverInterfaceParameters
+//----------------------------------
+/// @brief Parameters for coupling to the svOneDSolver (1D blood-flow solver).
+///
+/// XML element: \code {.xml}
+/// <svOneDSolver_interface>
+///   <Coupling_type> Implicit </Coupling_type>
+///   <Shared_library> /path/to/libsvoned_interface </Shared_library>
+/// </svOneDSolver_interface>
+/// \endcode
+///
+/// Notes
+/// -----
+///   Coupling_type: "Explicit" | "Implicit" | "Semi-implicit"
+///     Controls how the 3D Newton iteration couples to the 1D solver
+///     (same semantics as the 0D coupling_type).
+///   Shared_library: Path to the 1D interface shared library.  The
+///     extension (.so or .dylib) may be omitted; it will be appended
+///     automatically based on the platform.
+///
+///   Each coupled face specifies its own input file via
+///   <Coupling_interface> <svOneDSolver_input_file> ... </svOneDSolver_input_file>
+///   </Coupling_interface> inside the corresponding <Add_BC> element.
+//
+class svOneDSolverInterfaceParameters : public ParameterLists
+{
+  public:
+    svOneDSolverInterfaceParameters();
+
+    static const std::string xml_element_name_;
+
+    bool defined() const { return value_set; };
+    void set_values(tinyxml2::XMLElement* xml_elem);
+
+    Parameter<std::string> coupling_type;
+    Parameter<std::string> shared_library;
+
+    bool value_set = false;
+};
+
 /// @brief Body force over a mesh using the "Add_BF" command.
 ///
 /// \code {.xml}
@@ -730,10 +786,12 @@ class BoundaryConditionRCRParameters : public ParameterLists
 /// @brief svZeroDSolver coupling options under Add_BC (with Time_dependence Coupled).
 ///
 /// \code {.xml}
-/// <Coupling_interface>
-///   <svZeroDSolver_block> LV_IN </svZeroDSolver_block>
-///   <Chamber_cap_surface> mesh/mesh-surfaces/endo_cap.vtp </Chamber_cap_surface>
-/// </Coupling_interface>
+//  <Coupling_interface>
+//    <svOneDSolver_input_file> OneDfilename.in </svOneDSolver_input_file>
+//		<Ramp_steps> 100 </Ramp_steps>
+//   	<Ramp_ref_pressure> 0.0 </Ramp_ref_pressure>
+//		<Relax_factor> 0.3 </Relax_factor>
+//  </Coupling_interface>
 /// \endcode
 class CouplingInterfaceParameters : public ParameterLists
 {
@@ -747,6 +805,24 @@ class CouplingInterfaceParameters : public ParameterLists
 
     Parameter<std::string> svzerod_solver_block;
     Parameter<std::string> chamber_cap_surface;
+
+    // Path to the svOneDSolver .in input file for this face (1D coupling).
+    Parameter<std::string> svoned_input_file;
+
+    // Ramp for 1D coupling initialization (both DIR and NEU coupling).
+    // Over the first Coupling_ramp_steps committed time steps the value passed
+    // to the 1D solver is linearly ramped:
+    //   DIR: pressure P ramped from Coupling_ramp_ref_pressure to actual 3D P.
+    //   NEU: output pressure P is ramped before being applied to the 3D domain.
+    // Set Coupling_ramp_steps = 0 (default) to disable.
+    Parameter<int>    coupling_ramp_steps;
+    Parameter<double> coupling_ramp_ref_pressure;
+
+    // Under-relaxation factor for the value passed to the 1D solver (both DIR and NEU coupling).
+    //   DIR: P_sent = omega * P_target + (1 - omega) * P_prev_sent
+    //   NEU: Q_sent = omega * Q_target + (1 - omega) * Q_prev_sent
+    // Range: (0, 1].  Default 1.0 = no relaxation.
+    Parameter<double> coupling_relax_factor;
 
     bool value_set = false;
 };
@@ -1063,6 +1139,58 @@ class LinearSolverParameters : public ParameterLists
     LinearAlgebraParameters linear_algebra;
 };
 
+/// @brief Stores <Box> parameters for CEP stimulus spatial bounds.
+class StimulusBoxParameters : public ParameterLists
+{
+  public:
+    StimulusBoxParameters();
+
+    /// @brief XML element name for CEP stimulus box spatial bounds.
+    static const std::string xml_element_name_;
+
+    bool defined() const { return value_set; };
+    void set_values(tinyxml2::XMLElement* xml_elem);
+
+    VectorParameter<double> minimum;
+    VectorParameter<double> maximum;
+
+    bool value_set = false;
+};
+
+/// @brief Stores <Sphere> parameters for CEP stimulus spatial bounds.
+class StimulusSphereParameters : public ParameterLists
+{
+  public:
+    StimulusSphereParameters();
+
+    /// @brief XML element name for CEP stimulus sphere spatial bounds.
+    static const std::string xml_element_name_;
+
+    bool defined() const { return value_set; };
+    void set_values(tinyxml2::XMLElement* xml_elem);
+
+    VectorParameter<double> center;
+    Parameter<double> radius;
+
+    bool value_set = false;
+};
+
+/// @brief Stores <Spatial_bounds> parameters for CEP stimulus geometry restrictions.
+class StimulusSpatialBoundsParameters
+{
+  public:
+    /// @brief XML element name for CEP stimulus spatial bounds.
+    static const std::string xml_element_name_;
+
+    bool defined() const { return value_set; };
+    void set_values(tinyxml2::XMLElement* xml_elem);
+
+    StimulusBoxParameters box;
+    StimulusSphereParameters sphere;
+
+    bool value_set = false;
+};
+
 /// @brief The StimulusParameters class stores parameters for 
 /// 'Stimulus' XML element used to parameters for 
 /// pacemaker cells.
@@ -1073,13 +1201,24 @@ class LinearSolverParameters : public ParameterLists
 ///   <Start_time> 0.0 </Start_time>
 ///   <Duration> 1.0 </Duration>
 ///   <Cycle_length> 10000.0 </Cycle_length>
+///   <Spatial_bounds>
+///     <Box>
+///       <Minimum> 0.0 0.0 0.0 </Minimum>
+///       <Maximum> 1.0 1.0 1.0 </Maximum>
+///     </Box>
+///     <Sphere>
+///       <Center> 0.5 0.5 0.5 </Center>
+///       <Radius> 0.25 </Radius>
+///     </Sphere>
+///   </Spatial_bounds>
 /// </Stimulus>
 /// \endcode
 class StimulusParameters : public ParameterLists
-{ 
+{
   public:
     StimulusParameters();
 
+    /// @brief XML element name for CEP stimulus parameters.
     static const std::string xml_element_name_;
     
     bool defined() const { return value_set; };
@@ -1092,6 +1231,8 @@ class StimulusParameters : public ParameterLists
     Parameter<double> cycle_length;
     Parameter<double> duration;
     Parameter<double> start_time;
+
+    StimulusSpatialBoundsParameters spatial_bounds;
     
     bool value_set = false;
 };
@@ -1132,8 +1273,8 @@ class DirectionalDistributionParameters : public ParameterLists
     static const std::string xml_element_name_;
 
     bool defined() const { return value_set; };
-    void print_parameters();
-    void set_values(tinyxml2::XMLElement* xml_elem);
+    void print_parameters() const;
+    void set_values(const tinyxml2::XMLElement *xml_elem);
     void validate() const;  // Validate directional fractions
 
     Parameter<double> fiber_direction;
@@ -1143,117 +1284,264 @@ class DirectionalDistributionParameters : public ParameterLists
     bool value_set = false;
 };
 
-/// @brief The FiberReinforcementStressParameters class stores fiber
-/// reinforcement stress parameters for the 'Fiber_reinforcement_stress` 
-/// XML element.
+/// @brief Generic ionic model initial conditions parameters.
+class IonicInitialStateParameters : public ParameterLists {
+public:
+  /// Constructor.
+  IonicInitialStateParameters(
+      const std::string &xml_element_name_,
+      const std::vector<std::pair<std::string, double>> &states);
+
+  /// Return whether the parameters represented by this object were defined.
+  bool defined() const { return value_set; }
+
+  /// Print the value of parameters.
+  void print_parameters() const;
+
+  /// Set the value of parameters in this object from an XML element.
+  void set_values(const tinyxml2::XMLElement *xml_elem);
+
+  /// Get the value of a parameter by label.
+  double operator[](const std::string &label) const {
+    return parameters.at(label).value();
+  }
+
+  /// Name of the XML element for this object.
+  const std::string xml_element_name;
+
+  /// Flag indicating whether these XML section represented by this object is
+  /// required. It is set to true if the number of states provided to the
+  /// constructor is greater than zero.
+  const bool required;
+
+protected:
+  /// Parameter instances underlying this object.
+  std::map<std::string, Parameter<double>> parameters;
+
+  /// Flag indicating whether the values of the parameters stored in this
+  /// object have been set.
+  bool value_set = false;
+};
+
+/// @brief Parameters for a generic ionic model.
 ///
-/// \code {.xml}
-/// <Fiber_reinforcement_stress type="Unsteady" >
-///   <Temporal_values_file_path> fib_stress.dat </Temporal_values_file_path>
-///   <Ramp_function> true </Ramp_function>
-///   <Directional_distribution>
-///     <Fiber_direction> 0.7 </Fiber_direction>
-///     <Sheet_direction> 0.2 </Sheet_direction>
-///     <Sheet_normal_direction> 0.1 </Sheet_normal_direction>
-///   </Directional_distribution>
-/// </Fiber_reinforcement_stress>
-/// \endcode
-class FiberReinforcementStressParameters : public ParameterLists
-{
-  public:
-    FiberReinforcementStressParameters();
+/// Bundles initial conditions for the model's ionic concentrations and gating
+/// variables, represented by two instances of IonicInitialStateParameters.
+class IonicModelParameters : public ParameterLists {
+public:
+  /// Constructor.
+  IonicModelParameters(
+      const std::string &xml_element_name_,
+      const std::vector<std::pair<std::string, double>> &initial_X,
+      const std::vector<std::pair<std::string, double>> &initial_Xg);
 
-    static const std::string xml_element_name_;
+  /// Return whether the parameters represented by this object were defined.
+  bool defined() const { return value_set; }
 
-    bool defined() const { return value_set; };
-    void print_parameters();
-    void set_values(tinyxml2::XMLElement* xml_elem);
+  /// Print the value of parameters.
+  void print_parameters() const;
 
-    Parameter<std::string> type;
+  /// Set the values of parameters in this object from an XML element.
+  void set_values(const tinyxml2::XMLElement *xml_elem);
 
-    Parameter<bool> ramp_function;
-    Parameter<std::string> temporal_values_file_path;
-    Parameter<double> value;
+  /// Get the parameters for the state variables.
+  const IonicInitialStateParameters &get_initial_X() const {
+    return initial_X_parameters;
+  }
 
-    // Directional stress distribution parameters
-    DirectionalDistributionParameters directional_distribution;
+  /// Get the parameters for the gating variables.
+  const IonicInitialStateParameters &get_initial_Xg() const {
+    return initial_Xg_parameters;
+  }
 
-    bool value_set = false;
+  /// Name of the XML element for this object.
+  const std::string xml_element_name;
+
+  /// Get the value of a scalar parameter by label.
+  double get_scalar(const std::string &label) const {
+    return parameters.at(label).value();
+  }
+
+  /// Get the value of a vector parameter by label.
+  Vector<double> get_vector(const std::string &label) const {
+    auto param_value = vector_parameters.at(label).value();
+
+    Vector<double> param_vec(param_value.size());
+    for (size_t i = 0; i < param_value.size(); ++i)
+      param_vec[i] = param_value[i];
+
+    return param_vec;
+  }
+
+protected:
+  /// Add a new parameter to this object.
+  void add_parameter(const std::string &label, double default_value,
+                     bool required) {
+    set_parameter(label, default_value, required, parameters[label]);
+  }
+
+  /// Add a new vector parameter to this object.
+  void add_parameter(const std::string &label,
+                     std::initializer_list<double> default_value,
+                     bool required) {
+    set_parameter(label, default_value, required, vector_parameters[label]);
+  }
+
+  /// Parameters for the state variables.
+  IonicInitialStateParameters initial_X_parameters;
+
+  /// Parameters for the gating variables.
+  IonicInitialStateParameters initial_Xg_parameters;
+
+  /// Other parameters (i.e. other than initial conditions) are stored in a map
+  /// as key-parameter pairs. Derived classes should add parameters to this map
+  /// in their constructors by calling add_parameter.
+  std::map<std::string, Parameter<double>> parameters;
+
+  /// Vector parameters are stored in a map as key-parameter pairs.
+  std::map<std::string, VectorParameter<double>> vector_parameters;
+
+  /// Flag indicating whether the values of the parameters stored in this
+  /// object have been set.
+  bool value_set = false;
 };
 
-/// @brief Stores parameters for the 'Gating_variables' XML element
-/// under TTP_initial_conditions.
-class TTPGatingVariablesParameters : public ParameterLists
-{
-  public:
-    TTPGatingVariablesParameters();
+/// @brief Parameters for a generic active stress model.
+///
+/// This class is meant to be inherited from to implement parameters for
+/// specific active stress models. Derived classes will mostly have to call
+/// add_parameter in their constructor to define the model-specific parameters.
+///
+/// In the XML file, this class, and the classes derived from it, correspond to
+/// the element <Model_name> within the <Active_stress> element, where
+/// Model_name is the name of a concrete active stress model.
+class ActiveStressModelParameters : public ParameterLists {
+public:
+  /// Constructor.
+  ActiveStressModelParameters(const std::string &xml_element_name_);
 
-    static const std::string xml_element_name_;
+  /// Return whether the parameters represented by this object were defined.
+  bool defined() const { return value_set; }
 
-    bool defined() const { return value_set; };
-    void print_parameters();
-    void set_values(tinyxml2::XMLElement* xml_elem);
+  /// Print the value of parameters.
+  void print_parameters() const;
 
-    Parameter<double> x_r1_rectifier;
-    Parameter<double> x_r2_rectifier;
-    Parameter<double> x_s_rectifier;
+  /// Set the values of parameters in this object from an XML element.
+  void set_values(const tinyxml2::XMLElement *xml_elem);
 
-    Parameter<double> m_fast_Na;
-    Parameter<double> h_fast_Na;
-    Parameter<double> j_fast_Na;
+  /// Name of the XML element for this object.
+  const std::string xml_element_name;
 
-    Parameter<double> d_slow_in;
-    Parameter<double> f_slow_in;
-    Parameter<double> f2_slow_in;
-    Parameter<double> fcass_slow_in;
+  /// Get the value of a parameter by label.
+  double get_scalar(const std::string &label) const {
+    return double_parameters.at(label).value();
+  }
 
-    Parameter<double> s_out;
-    Parameter<double> r_out;
+  /// Get the value of a string parameter by label.
+  std::string get_string(const std::string &label) const {
+    return string_parameters.at(label).value();
+  }
 
-    bool value_set = false;
+  /// Get the value of a bool parameter by label.
+  bool get_bool(const std::string &label) const {
+    return bool_parameters.at(label).value();
+  }
+
+protected:
+  /// Add a new parameter to this object.
+  void add_parameter(const std::string &label, double default_value,
+                     bool required) {
+    set_parameter(label, default_value, required, double_parameters[label]);
+  }
+
+  /// Add a new parameter to this object.
+  void add_parameter(const std::string &label, const std::string &default_value,
+                     bool required) {
+    set_parameter(label, default_value, required, string_parameters[label]);
+  }
+
+  /// Add a new parameter to this object.
+  void add_parameter(const std::string &label, bool default_value,
+                     bool required) {
+    set_parameter(label, default_value, required, bool_parameters[label]);
+  }
+
+  /// Parameters are stored in a map as key-parameter pairs. Derived classes
+  /// should add parameters to this map in their constructors by calling
+  /// add_parameter.
+  /// @{
+
+  /// Double-valued parameters.
+  std::map<std::string, Parameter<double>> double_parameters;
+
+  /// String-valued parameters.
+  std::map<std::string, Parameter<std::string>> string_parameters;
+
+  /// Bool-valued parameters.
+  std::map<std::string, Parameter<bool>> bool_parameters;
+
+  /// Flag indicating whether the values of the parameters stored in this
+  /// object have been set.
+  bool value_set = false;
 };
 
-/// @brief Stores parameters for the 'Initial_states' XML element
-/// under TTP_initial_conditions.
-class TTPInitialStatesParameters : public ParameterLists
-{
-  public:
-    TTPInitialStatesParameters();
+/// @brief Parameters for active stress models.
+///
+/// This class stores all the parameters related to active stress, including
+/// e.g. the name of the specific selected model. The parameters specific to an
+/// individual model are managed by the class @ref ActiveStressModelParameters,
+/// of which this class owns an instance for every registered model.
+///
+/// In the XML file, this class corresponds to the <Active_stress> element.
+class ActiveStressParameters : public ParameterLists {
+public:
+  /// Constructor.
+  ActiveStressParameters();
 
-    static const std::string xml_element_name_;
+  /// Return whether the parameters represented by this object were defined.
+  bool defined() const { return value_set; }
 
-    bool defined() const { return value_set; };
-    void print_parameters();
-    void set_values(tinyxml2::XMLElement* xml_elem);
+  /// Print the value of parameters.
+  void print_parameters() const;
 
-    Parameter<double> V;
-    Parameter<double> K_i;
-    Parameter<double> Na_i;
-    Parameter<double> Ca_i;
-    Parameter<double> Ca_ss;
-    Parameter<double> Ca_sr;
-    Parameter<double> R_bar;
+  /// Set the values of parameters in this object from an XML element.
+  void set_values(const tinyxml2::XMLElement *xml_elem);
 
-    bool value_set = false;
-};
+  /// Get the name of the selected model. Throws an exception if it has not been
+  /// set.
+  std::string get_model_name() const;
 
-/// @brief Stores parameters for the 'TTP_initial_conditions' XML element
-/// under Domain.
-class TTPInitialConditionsParameters : public ParameterLists
-{
-  public:
-    TTPInitialConditionsParameters();
+  /// Get the active tension coefficient along fibers.
+  double get_eta_f() const;
 
-    static const std::string xml_element_name_;
+  /// Get the active tension coefficient along sheets.
+  double get_eta_s() const;
 
-    bool defined() const { return value_set; };
-    void print_parameters();
-    void set_values(tinyxml2::XMLElement* xml_elem);
+  /// Get the active tension coefficient along sheet normals.
+  double get_eta_n() const;
 
-    TTPInitialStatesParameters initial_states;
-    TTPGatingVariablesParameters gating_variables;
+  /// Get the parameters for a given active stress model.
+  const ActiveStressModelParameters &
+  get_parameters(const std::string &model_name) const;
 
-    bool value_set = false;
+  /// Name of the XML element for this object.
+  static const std::string xml_element_name;
+
+protected:
+  /// Parameter for the model name.
+  Parameter<std::string> model_name;
+
+  /// Parameters for the directional distribution of active tension.
+  DirectionalDistributionParameters directional_distribution;
+
+  /// Active stress model parameters. Keys are the model names, as registered
+  /// in the @ref ActiveStressModelFactory.
+  std::map<std::string, std::unique_ptr<ActiveStressModelParameters>>
+      active_stress_models;
+
+  /// Flag indicating whether the values of the parameters stored in this
+  /// object have been set.
+  bool value_set = false;
 };
 
 /// @brief The DomainParameters class stores parameters for the XML
@@ -1281,11 +1569,17 @@ class DomainParameters : public ParameterLists
 
     // Parameters for sub-elements under the Domain element.
     ConstitutiveModelParameters constitutive_model;
-    FiberReinforcementStressParameters fiber_reinforcement_stress;
-    StimulusParameters stimulus;
+    /// @todo This uses `unique_ptr` unlike most similar containers because
+    /// `ParameterLists::params_map` stores pointers to members of each object.
+    /// Revisit this when the `Parameters` classes are refactored.
+    std::vector<std::unique_ptr<StimulusParameters>> stimuli;
     FluidViscosityParameters fluid_viscosity;
     SolidViscosityParameters solid_viscosity;
-    TTPInitialConditionsParameters ttp_initial_conditions;
+    ActiveStressParameters active_stress;
+
+    /// Ionic model parameters. Keys are the model names, as registered in the
+    /// @ref IonicModelFactory.
+    std::map<std::string, std::unique_ptr<IonicModelParameters>> ionic_models;
 
     // Attributes.
     Parameter<std::string> id;
@@ -1318,15 +1612,6 @@ class DomainParameters : public ParameterLists
     Parameter<int> maximum_iterations;
     Parameter<double> momentum_stabilization_coefficient;
     Parameter<std::string> myocardial_zone;
-
-    Parameter<double> G_Na;
-    Parameter<double> G_CaL;
-    Parameter<double> G_Kr;
-    Parameter<double> G_Ks;
-    Parameter<double> G_to;
-
-    Parameter<double> tau_fi;
-    Parameter<double> tau_si;
 
     Parameter<std::string> ode_solver;
     Parameter<double> penalty_parameter;
@@ -1472,6 +1757,8 @@ class EquationParameters : public ParameterLists
     CoupleGenBCParameters couple_to_genBC;
 
     svZeroDSolverInterfaceParameters svzerodsolver_interface_parameters;
+
+    svOneDSolverInterfaceParameters svonedsolver_interface_parameters;
 
     DomainParameters* default_domain = nullptr;
 
@@ -1728,10 +2015,11 @@ class URISMeshParameters : public ParameterLists
     Parameter<double> thickness; // Thickness of the valve
     Parameter<double> close_thickness; // Thickness of the valve when it is closed
     Parameter<double> resistance; // Resistance of the valve
-    Parameter<double> resistance_close; // Resistance of the valve when it is closed
     Parameter<bool> valve_starts_as_closed; // Whether the valve starts as closed
+    Parameter<bool> invert_normal; // Whether to invert the valve surface normal vector
     Parameter<std::string> positive_flow_normal_file_path; // File path for the positive flow normal
-
+    Parameter<std::string> scaffold_file_path; // File path for the valve scaffold mesh
+    Parameter<bool> include_uris_velocity; // Whether to include the RIS velocity
 };
 
 

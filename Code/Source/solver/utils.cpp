@@ -14,6 +14,8 @@
 #include <fstream>
 #include <sys/resource.h>
 
+#include "FE/Common/FEException.h"
+
 /* MacOS
 #include <mach/task.h>
 #include <mach/mach_init.h>
@@ -35,12 +37,8 @@ int CountBits(int n)
 
 double cput()
 {
-  auto now = std::chrono::system_clock::now();
-  auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
-
-  auto value = now_ms.time_since_epoch();
-  auto duration = value.count() / 1000.0;
-  return static_cast<double>(duration);
+  const auto now = std::chrono::system_clock::now();
+  return std::chrono::duration<double>(now.time_since_epoch()).count();
 }
 
 Vector<double> 
@@ -204,69 +202,42 @@ double mem_usage(const bool print_usage, const std::string& prefix)
   return resident_set;
 }
 
-/// @brief This function will compute second NORM of a vector.
+/// @brief This function will compute the squared Euclidean norm of a vector.
 ///
 /// Replicates 'PURE FUNCTION NORMS(U, V)' defined in UTIL.f.
 //
-double norm(const Vector<double>& U)
+double norm_squared(const Vector<double>& U)
 {
-  double norm = 0.0;
+  double norm_squared = 0.0;
   for (int i = 0; i < U.size(); i++) {
-    norm += U(i)*U(i);
+    norm_squared += U(i)*U(i);
   }
-  return norm;
+  return norm_squared;
 }
 
-double norm(const Vector<double>& U, const Vector<double>& V)
-{
-  double norm = 0.0;
-  for (int i = 0; i < U.size(); i++) {
-    norm += U(i)*V(i);
-  }
-  return norm;
-}
-
-double norm(const Array<double>& U)
+double norm_squared(const Array<double>& U)
 {
   int m = U.nrows();
   int n = U.ncols();
-  double norm = 0.0;
+  double norm_squared = 0.0;
 
-  switch (m) { 
-    case 1:
-      for (int i = 0; i < n; i++) {
-        norm = norm + U(0,i)*U(0,i);
-      }
-    break;
+  // Array::operator(const int) allows linear access into the 2D array elements,
+  // so that we can compute the norm by using a single for loop.
+  for (int i = 0; i < U.size(); ++i) {
+    norm_squared += U(i) * U(i);
+  }
 
-    case 2:
-      for (int i = 0; i < n; i++) {
-        norm = norm + U(0,i)*U(0,i) + U(1,i)*U(1,i);
-      }
-    break;
+  return norm_squared;
+}
 
-    case 3:
-      for (int i = 0; i < n; i++) {
-        norm = norm + U(0,i)*U(0,i) + U(1,i)*U(1,i) + U(2,i)*U(2,i);
-      }
-    break;
+double norm(const Vector<double> &U)
+{
+  return std::sqrt(norm_squared(U));
+}
 
-    case 4:
-      for (int i = 0; i < n; i++) {
-        norm = norm + U(0,i)*U(0,i) + U(1,i)*U(1,i) + U(2,i)*U(2,i); + U(3,i)*U(3,i);
-      }
-    break;
-
-    default: 
-      for (int i = 0; i < n; i++) {
-        for (int j = 0; i < m; i++) {
-          norm = norm + U(j,i)*U(j,i);
-        }
-      }
-    break;
-    }
-
-  return norm;
+double norm(const Array<double> &U)
+{
+  return std::sqrt(norm_squared(U));
 }
 
 void print_mem(const std::string& type, const std::string& prefix, const double memory_in_use, const double memory_returned)

@@ -126,7 +126,9 @@ void init_from_bin(Simulation* simulation, const std::string& fName, std::array<
         } else if (cepEq) {
           bin_file.read((char*)Ad.data(), Ad.msize());
           bin_file.read((char*)Xion.data(), Xion.msize());
-          bin_file.read((char*)cem.Ya.data(), cem.Ya.msize());
+          bin_file.read((char*)cem.Ya_f.data(), cem.Ya_f.msize());
+          bin_file.read((char*)cem.Ya_s.data(), cem.Ya_s.msize());
+          bin_file.read((char*)cem.Ya_n.data(), cem.Ya_n.msize());
 
         } else if (risFlag) {
           bin_file.read((char*)Ad.data(), Ad.msize());
@@ -147,7 +149,9 @@ void init_from_bin(Simulation* simulation, const std::string& fName, std::array<
 
         } else if (cepEq) {
           bin_file.read((char*)Xion.data(), Xion.msize());
-          bin_file.read((char*)cem.Ya.data(), cem.Ya.msize());
+          bin_file.read((char*)cem.Ya_f.data(), cem.Ya_f.msize());
+          bin_file.read((char*)cem.Ya_s.data(), cem.Ya_s.msize());
+          bin_file.read((char*)cem.Ya_n.data(), cem.Ya_n.msize());
 
         } else if (risFlag) {
           init_ris_data(com_mod, bin_file); 
@@ -679,10 +683,26 @@ void initialize(Simulation* simulation, Vector<double>& timeP)
   if (cep_mod.cepEq) {
     cep_mod.Xion.resize(cep_mod.nXion,tnNo);
     cep_ion::cep_init(simulation);
+  }
 
-    // Electro-Mechanics
-    if (cep_mod.cem.cpld) {
-      cep_mod.cem.Ya.resize(tnNo);
+  // Electromechanics.
+  // @todo[michelebucelli] There's probably a better solution than initializing
+  //   these vectors all the time. E.g. we could put the calcium evaluation
+  //   behind a getter, that returns zero if the vector has not been
+  //   initialized.
+  {
+    cep_mod.calcium.resize(tnNo);
+    cep_mod.cem.Ya_f.resize(tnNo);
+    cep_mod.cem.Ya_s.resize(tnNo);
+    cep_mod.cem.Ya_n.resize(tnNo);
+  }
+
+  // Setup the initial conditions for the active stress models.
+  for (auto &eq : com_mod.eq) {
+    for (auto &dmn : eq.dmn) {
+      if (dmn.active_stress != nullptr) {
+        dmn.active_stress->init(tnNo);
+      }
     }
   }
 
@@ -881,6 +901,24 @@ void initialize(Simulation* simulation, Vector<double>& timeP)
 
   std::fill(com_mod.rmsh.flag.begin(), com_mod.rmsh.flag.end(), false);
   com_mod.resetSim = false;
+
+  if (com_mod.urisFlag) {
+    for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+      auto& uris_obj = com_mod.uris[iUris];
+      uris_obj.sdf.resize(com_mod.tnNo);
+      uris_obj.sdf = uris_obj.sdf_default;
+      uris_obj.sdf_computed = false;
+      if (uris_obj.scaffold_flag && !uris_obj.scaffold_udf.allocated()) {
+        uris_obj.scaffold_udf.resize(com_mod.tnNo);
+        uris_obj.scaffold_udf = uris_obj.sdf_default;
+        uris_obj.scaffold_udf_computed = false;
+      }
+      if (uris_obj.include_uris_velocity && !uris_obj.valve_velocity_fluid.allocated()) {
+        uris_obj.valve_velocity_fluid.resize(nsd, com_mod.tnNo);
+        uris_obj.valve_velocity_fluid = 0.0;
+      }
+    }
+  }
 
   // Create Integrator now that initial_solutions (Ao, Do, Yo) are fully initialized
   // The Integrator takes ownership via move semantics
