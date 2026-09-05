@@ -3,6 +3,11 @@
 
 #include "TrilinosResistanceOperator.h"
 
+/**
+ * @file TrilinosResistanceOperator.cpp
+ * @brief Implements the matrix-free Trilinos resistance transformation.
+ */
+
 #ifdef WITH_TRILINOS
 
 #include <algorithm>
