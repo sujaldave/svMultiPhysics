@@ -20,6 +20,9 @@
 #include <time.h>
 #include <numeric>
 
+#include "Array.h"
+#include "Vector.h"
+
 // Theuchos includes
 #include "Teuchos_RCP.hpp"
 #include "Teuchos_DefaultComm.hpp"
