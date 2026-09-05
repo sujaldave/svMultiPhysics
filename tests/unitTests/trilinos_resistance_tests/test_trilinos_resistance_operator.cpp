@@ -13,31 +13,21 @@
 
 namespace {
 
-class KokkosTestScope
+class TpetraTestScope
 {
   public:
-    KokkosTestScope()
-    {
-      if (!Kokkos::is_initialized()) {
-        Kokkos::initialize();
-        owns_kokkos_ = true;
-      }
-    }
-
-    ~KokkosTestScope()
-    {
-      if (owns_kokkos_ && Kokkos::is_initialized()) {
-        Kokkos::finalize();
-      }
-    }
+    TpetraTestScope() :
+      scope_(&argc_, &argv_) {}
 
   private:
-    bool owns_kokkos_ = false;
+    int argc_ = 0;
+    char** argv_ = nullptr;
+    Tpetra::ScopeGuard scope_;
 };
 
 Teuchos::RCP<const Tpetra_Map> make_serial_map(Tpetra::global_size_t size)
 {
-  static KokkosTestScope kokkos_scope;
+  static TpetraTestScope tpetra_scope;
   auto comm = Teuchos::rcp(new Teuchos::SerialComm<int>());
   return Teuchos::rcp(new Tpetra_Map(size, 0, comm));
 }

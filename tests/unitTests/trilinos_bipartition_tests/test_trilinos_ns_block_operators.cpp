@@ -6,6 +6,7 @@
 #ifdef WITH_TRILINOS
 
 #include "TrilinosNSBlockOperators.h"
+#include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 
 #include "Teuchos_DefaultSerialComm.hpp"
@@ -15,32 +16,22 @@
 
 namespace {
 
-class KokkosBlockTestScope
+class TpetraBlockTestScope
 {
   public:
-    KokkosBlockTestScope()
-    {
-      if (!Kokkos::is_initialized()) {
-        Kokkos::initialize();
-        owns_kokkos_ = true;
-      }
-    }
-
-    ~KokkosBlockTestScope()
-    {
-      if (owns_kokkos_ && Kokkos::is_initialized()) {
-        Kokkos::finalize();
-      }
-    }
+    TpetraBlockTestScope() :
+      scope_(&argc_, &argv_) {}
 
   private:
-    bool owns_kokkos_ = false;
+    int argc_ = 0;
+    char** argv_ = nullptr;
+    Tpetra::ScopeGuard scope_;
 };
 
 Teuchos::RCP<const Tpetra_Map> make_serial_map(
     Tpetra::global_size_t size)
 {
-  static KokkosBlockTestScope kokkos_scope;
+  static TpetraBlockTestScope tpetra_scope;
   auto comm = Teuchos::rcp(new Teuchos::SerialComm<int>());
   return Teuchos::rcp(new Tpetra_Map(size, 0, comm));
 }
@@ -78,6 +69,21 @@ Teuchos::RCP<Tpetra_CrsMatrix> make_three_by_three_ns_matrix(
       entries[row][0], entries[row][1], entries[row][2]
     };
     matrix->insertGlobalValues(row, columns(), values());
+  }
+  matrix->fillComplete(map, map);
+  return matrix;
+}
+
+Teuchos::RCP<Tpetra_CrsMatrix> make_diagonal_matrix(
+    const Teuchos::RCP<const Tpetra_Map>& map,
+    const std::vector<double>& diagonal)
+{
+  auto matrix = Teuchos::rcp(new Tpetra_CrsMatrix(map, 1));
+  for (size_t row = 0; row < diagonal.size(); ++row) {
+    Teuchos::Array<GO> column(1, static_cast<GO>(row));
+    Teuchos::Array<Scalar_d> value(1, diagonal[row]);
+    matrix->insertGlobalValues(
+        static_cast<GO>(row), column(), value());
   }
   matrix->fillComplete(map, map);
   return matrix;
@@ -234,6 +240,112 @@ TEST(TrilinosNSBlockOperators, ExtractsAndScattersWithoutHostAssembly)
   EXPECT_DOUBLE_EQ(vector_value(*scattered, 0), 4.0);
   EXPECT_DOUBLE_EQ(vector_value(*scattered, 1), 5.0);
   EXPECT_DOUBLE_EQ(vector_value(*scattered, 2), 6.0);
+}
+
+TEST(TrilinosPreconditionerFactory, RepresentsDiagonalScalingAsIdentity)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto handle = factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_DIAGONAL,
+      factory::SolverRole::momentum_gmres,
+      Teuchos::null);
+
+  EXPECT_EQ(handle->type(),
+      consts::PreconditionerType::PREC_TRILINOS_DIAGONAL);
+  EXPECT_EQ(handle->left_operator(), Teuchos::null);
+  EXPECT_EQ(handle->setup_matrix(), Teuchos::null);
+}
+
+TEST(TrilinosPreconditionerFactory, BuildsAllIfpack2Policies)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(4);
+  const auto matrix =
+    make_diagonal_matrix(map, {2.0, 3.0, 4.0, 5.0});
+  const std::vector<consts::PreconditionerType> types = {
+    consts::PreconditionerType::PREC_TRILINOS_BLOCK_JACOBI,
+    consts::PreconditionerType::PREC_TRILINOS_ILU,
+    consts::PreconditionerType::PREC_TRILINOS_ILUT,
+    consts::PreconditionerType::PREC_TRILINOS_RILUK0,
+    consts::PreconditionerType::PREC_TRILINOS_RILUK1
+  };
+
+  for (const auto type : types) {
+    const auto handle = factory::create_preconditioner(
+        type, factory::SolverRole::momentum_gmres, matrix);
+    EXPECT_NE(handle->left_operator(), Teuchos::null)
+      << consts::preconditioner_type_to_name.at(type);
+  }
+}
+
+TEST(TrilinosPreconditionerFactory, KeepsDiagonalRepairPrivate)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(2);
+  const auto matrix = make_diagonal_matrix(map, {0.0, 2.0});
+
+  const auto handle = factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_BLOCK_JACOBI,
+      factory::SolverRole::pressure_cg, matrix);
+
+  EXPECT_NE(handle->setup_matrix().getRawPtr(), matrix.getRawPtr());
+  EXPECT_DOUBLE_EQ(matrix_value(*matrix, 0, 0), 0.0);
+  EXPECT_DOUBLE_EQ(matrix_value(*handle->setup_matrix(), 0, 0), 1.0);
+}
+
+TEST(TrilinosPreconditionerFactory, RestrictsResistanceToMomentum)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(2);
+  const auto matrix = make_diagonal_matrix(map, {1.0, 1.0});
+  const auto resistance =
+    Teuchos::rcp_implicit_cast<Tpetra_Operator>(matrix);
+
+  const auto momentum_handle = factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_RESISTANCE,
+      factory::SolverRole::momentum_gmres,
+      matrix,
+      resistance);
+  EXPECT_EQ(momentum_handle->left_operator().getRawPtr(),
+      resistance.getRawPtr());
+  EXPECT_EQ(momentum_handle->resistance_operator().getRawPtr(),
+      resistance.getRawPtr());
+
+  EXPECT_THROW(factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_RESISTANCE,
+      factory::SolverRole::pressure_cg,
+      matrix,
+      resistance), std::runtime_error);
+
+  const auto other_map = make_serial_map(3);
+  const auto other_resistance = Teuchos::rcp_implicit_cast<Tpetra_Operator>(
+      make_diagonal_matrix(other_map, {1.0, 1.0, 1.0}));
+  EXPECT_THROW(factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_RESISTANCE,
+      factory::SolverRole::momentum_gmres,
+      matrix,
+      other_resistance), std::runtime_error);
+}
+
+TEST(TrilinosPreconditionerFactory, AttachesExistingHandleToBelos)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(2);
+  const auto matrix = make_diagonal_matrix(map, {2.0, 3.0});
+  const auto handle = factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_BLOCK_JACOBI,
+      factory::SolverRole::momentum_gmres,
+      matrix);
+  const auto solution = make_vector(map, {});
+  const auto rhs = make_vector(map, {{0, 1.0}, {1, 1.0}});
+  auto problem = Teuchos::rcp(new Belos_LinearProblem(
+      Teuchos::rcp_implicit_cast<Tpetra_Operator>(matrix),
+      solution, rhs));
+
+  factory::attach_preconditioner(handle, problem);
+
+  EXPECT_EQ(problem->getLeftPrec().getRawPtr(),
+      handle->left_operator().getRawPtr());
 }
 
 #endif
