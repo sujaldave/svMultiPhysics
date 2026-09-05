@@ -2132,7 +2132,24 @@ void read_ls(Simulation* simulation, EquationParameters* eq_params, consts::Solv
 
   lEq.linear_algebra_type = LinearAlgebra::name_to_type.at(linear_algebra.type());
   auto prec_type = consts::preconditioner_name_to_type.at(linear_algebra.preconditioner());
-  lEq.linear_algebra_preconditioner = consts::preconditioner_name_to_type.at(linear_algebra.preconditioner());
+  auto gmres_prec_type = consts::preconditioner_name_to_type.at(linear_algebra.gmres_preconditioner());
+  auto cg_prec_type = consts::preconditioner_name_to_type.at(linear_algebra.cg_preconditioner());
+
+  lEq.linear_algebra_gmres_preconditioner = gmres_prec_type;
+  lEq.linear_algebra_cg_preconditioner = cg_prec_type;
+  if (solver_type == SolverType::lSolver_NS &&
+      lEq.linear_algebra_type == consts::LinearAlgebraType::trilinos &&
+      cg_prec_type == consts::PreconditionerType::PREC_TRILINOS_RESISTANCE) {
+    throw std::runtime_error("[svMultiPhysics] ERROR: "
+        "<CG_Preconditioner>trilinos-resistance</CG_Preconditioner> is invalid "
+        "for NS + Trilinos because the resistance transform acts on the "
+        "velocity space. Select a pressure-space CG preconditioner.");
+  }
+  if (!linear_algebra.preconditioner.defined() &&
+      lEq.linear_algebra_type == consts::LinearAlgebraType::trilinos) {
+    prec_type = gmres_prec_type;
+  }
+  lEq.linear_algebra_preconditioner = prec_type;
   lEq.linear_algebra_assembly_type = LinearAlgebra::name_to_type.at(linear_algebra.assembly()); 
 
   // Check that equation physics is compatible with the LinearAlgebra type. 
@@ -3315,4 +3332,3 @@ void set_equation_properties(Simulation* simulation, EquationParameters* eq_para
 }
 
 };
-

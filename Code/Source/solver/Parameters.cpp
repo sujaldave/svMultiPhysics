@@ -3141,6 +3141,11 @@ LinearAlgebraParameters::LinearAlgebraParameters()
   auto prec_type = consts::preconditioner_type_to_name.at(consts::PreconditionerType::PREC_NONE);
   set_parameter("Preconditioner", prec_type, !required, preconditioner);
 
+  auto trilinos_diag = consts::preconditioner_type_to_name.at(
+      consts::PreconditionerType::PREC_TRILINOS_DIAGONAL);
+  set_parameter("GMRES_Preconditioner", trilinos_diag, !required, gmres_preconditioner);
+  set_parameter("CG_Preconditioner", trilinos_diag, !required, cg_preconditioner);
+
   auto assemble_type = LinearAlgebra::type_to_name.at(consts::LinearAlgebraType::none);
   set_parameter("Assembly", assemble_type, !required, assembly);
 }
@@ -3199,6 +3204,22 @@ void LinearAlgebraParameters::set_values(tinyxml2::XMLElement* xml_elem)
         "' given in the XML <Linear_algebra> <Preconditioner> element.\nValid types are: " + valid_types);
   }     
 
+  if (consts::preconditioner_name_to_type.count(gmres_preconditioner.value()) == 0) {
+    std::string valid_types = "";
+    std::for_each(consts::preconditioner_name_to_type.begin(), consts::preconditioner_name_to_type.end(),
+        [&valid_types](std::pair<const std::string, const consts::PreconditionerType> p) {valid_types += p.first+" ";});
+    svmp::raise<svmp::ParseException>(SVMP_HERE, "Unknown TYPE '" + gmres_preconditioner() +
+        "' given in the XML <Linear_algebra> <GMRES_Preconditioner> element.\nValid types are: " + valid_types);
+  }
+
+  if (consts::preconditioner_name_to_type.count(cg_preconditioner.value()) == 0) {
+    std::string valid_types = "";
+    std::for_each(consts::preconditioner_name_to_type.begin(), consts::preconditioner_name_to_type.end(),
+        [&valid_types](std::pair<const std::string, const consts::PreconditionerType> p) {valid_types += p.first+" ";});
+    svmp::raise<svmp::ParseException>(SVMP_HERE, "Unknown TYPE '" + cg_preconditioner() +
+        "' given in the XML <Linear_algebra> <CG_Preconditioner> element.\nValid types are: " + valid_types);
+  }
+
   check_input_parameters();
 
   values_set_ = true;
@@ -3213,6 +3234,12 @@ void LinearAlgebraParameters::check_input_parameters()
   auto prec_cond_type = require_map_value(consts::preconditioner_name_to_type,
       preconditioner.value(), SVMP_HERE, "Unknown TYPE '" + preconditioner() +
       "' given in the XML <Linear_algebra> <Preconditioner> element.");
+  auto gmres_prec_cond_type = require_map_value(consts::preconditioner_name_to_type,
+      gmres_preconditioner.value(), SVMP_HERE, "Unknown TYPE '" + gmres_preconditioner() +
+      "' given in the XML <Linear_algebra> <GMRES_Preconditioner> element.");
+  auto cg_prec_cond_type = require_map_value(consts::preconditioner_name_to_type,
+      cg_preconditioner.value(), SVMP_HERE, "Unknown TYPE '" + cg_preconditioner() +
+      "' given in the XML <Linear_algebra> <CG_Preconditioner> element.");
   auto assembly_type = require_map_value(LinearAlgebra::name_to_type, assembly.value(),
       SVMP_HERE, "Unknown TYPE '" + assembly() +
       "' given in the XML <Linear_algebra> <Assembly> element.");
@@ -3224,7 +3251,15 @@ void LinearAlgebraParameters::check_input_parameters()
       svmp::raise<svmp::ParseException>(SVMP_HERE,
           "Linear_algebra type '" + type() + "' cannot be used as a solver backend.");
     }
-    linear_algebra->check_options(prec_cond_type, assembly_type);
+    auto validation_prec_type = prec_cond_type;
+    if (linear_algebra_type == consts::LinearAlgebraType::trilinos && !preconditioner.defined()) {
+      validation_prec_type = gmres_prec_cond_type;
+    }
+    linear_algebra->check_options(validation_prec_type, assembly_type);
+    if (linear_algebra_type == consts::LinearAlgebraType::trilinos) {
+      linear_algebra->check_options(gmres_prec_cond_type, assembly_type);
+      linear_algebra->check_options(cg_prec_cond_type, assembly_type);
+    }
     delete linear_algebra;
   } catch (const svmp::ParseException&) {
     delete linear_algebra;

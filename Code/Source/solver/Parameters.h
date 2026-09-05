@@ -1031,6 +1031,8 @@ class LinearAlgebraParameters : public ParameterLists
     Parameter<std::string> assembly;
     Parameter<std::string> configuration_file;
     Parameter<std::string> preconditioner;
+    Parameter<std::string> gmres_preconditioner;
+    Parameter<std::string> cg_preconditioner;
 };
 
 /// @brief The LinearSolverParameters class stores parameters for

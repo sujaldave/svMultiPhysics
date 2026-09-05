@@ -1512,6 +1512,8 @@ void dist_eq(ComMod& com_mod, const CmMod& cm_mod, const cmType& cm, const std::
 
   cm.bcast_enum(cm_mod, &lEq.linear_algebra_type);
   cm.bcast_enum(cm_mod, &lEq.linear_algebra_preconditioner);
+  cm.bcast_enum(cm_mod, &lEq.linear_algebra_gmres_preconditioner);
+  cm.bcast_enum(cm_mod, &lEq.linear_algebra_cg_preconditioner);
   cm.bcast_enum(cm_mod, &lEq.linear_algebra_assembly_type);
 
   cm.bcast(cm_mod, &lEq.ls.relTol);

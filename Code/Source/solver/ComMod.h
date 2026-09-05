@@ -1189,6 +1189,14 @@ class eqType
     /// @brief The type of preconditioner used by the interface to a numerical linear algebra library.
     consts::PreconditionerType linear_algebra_preconditioner = consts::PreconditionerType::PREC_FSILS;
 
+    /// @brief Trilinos NS momentum GMRES preconditioner.
+    consts::PreconditionerType linear_algebra_gmres_preconditioner =
+      consts::PreconditionerType::PREC_TRILINOS_DIAGONAL;
+
+    /// @brief Trilinos NS pressure Schur CG preconditioner.
+    consts::PreconditionerType linear_algebra_cg_preconditioner =
+      consts::PreconditionerType::PREC_TRILINOS_DIAGONAL;
+
     /// @brief Interface to a numerical linear algebra library.
     LinearAlgebra* linear_algebra = nullptr;
 
@@ -1848,4 +1856,3 @@ class ComMod {
 };
 
 #endif
-
