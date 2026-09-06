@@ -55,6 +55,8 @@ void add_eq_linear_algebra(ComMod& com_mod, eqType& lEq)
 void finalize_linear_algebra(eqType& lEq)
 {
   lEq.linear_algebra->finalize();
+  delete lEq.linear_algebra;
+  lEq.linear_algebra = nullptr;
 }
 
 /// @brief Read in a solver XML file and all mesh and BC data.  

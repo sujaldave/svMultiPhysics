@@ -37,6 +37,10 @@ rejects `trilinos-resistance`, which is a velocity-space operator.
 
 ## Components
 
+- `trilinos_backend::TopologyCache` owns equation-local maps, static graphs,
+  communication plans, and local CRS assembly offsets.
+- `trilinos_backend::LocalAssemblyBuffer` accumulates native element tensors
+  in overlapping local CRS storage and flushes them once per Jacobian.
 - `TrilinosBipartitionNSSolver` owns one Jacobian solve and the RI loop.
 - `TrilinosNSBlockSystem` owns velocity/pressure maps and `A`, `B`, `C`, `L`.
 - `MomentumOperator` applies `A` plus coupled-outlet Jacobian terms.
@@ -71,6 +75,26 @@ Native Tpetra assembly and the existing FSILS assembly fallback both feed this
 same block solver. The fallback preserves the established nodal CSR traversal
 and lifts its assembled values and residual into the full Tpetra system before
 block extraction.
+
+For native assembly, element matrices are produced in host memory. The
+equation-local assembly buffer uses cached scalar offsets to add each dense
+element block directly to a host view of an overlapping `Tpetra::CrsMatrix`.
+It does not allocate column/value arrays or call global-index insertion inside
+the element loop. At solve entry, `getLocalMatrixDevice()` performs one bulk
+host-to-device synchronization, and a cached `Tpetra::Export` sums overlapping
+ghost rows into the uniquely owned matrix. The RHS follows the same overlap
+layout and is exported separately.
+
+The overlap is required for finite element assembly: an element on one rank
+can contribute to a node owned by another rank. Directly writing only the
+owned matrix would lose that contribution. The existing FSILS assembly
+fallback intentionally retains its global-index insertion path.
+
+The solver's `rowPtr` connectivity uses unsorted application-local node
+indices, while Tpetra local rows follow map order. Topology construction maps
+each row GID back to its application-local index before assigning row capacity
+or caching scalar offsets. This distinction is essential when MPI partitions
+contain ghost nodes and the two orders differ.
 
 ## RI Solver Flow
 
@@ -134,14 +158,20 @@ Trilinos object. The implementation adds no mutable file-scope state. The
 FSILS assembly fallback reads the same equation-local topology metadata as the
 native Trilinos path and does not change the block-system interface.
 
+Kokkos itself is process-wide and may be shared by multiple equation-level
+backends in FSI and mesh-motion simulations. Finalization first releases each
+backend's Tpetra state, then uses a synchronized process-local user count so
+only the last Trilinos equation shuts down Kokkos. No Tpetra object is allowed
+to survive that shutdown.
+
 ### Static Topology Reuse
 
 Each equation-level Trilinos object owns a `trilinos_backend::TopologyCache`.
-The cache retains the owned and ghost maps, solution importer, fill-complete
-`Tpetra::CrsGraph`, and derived assembly mappings across Newton iterations and
-time steps. `alloc()` creates a fresh `Tpetra::CrsMatrix` from that static graph
-and fresh right-hand-side, solution, and boundary vectors, so no Jacobian
-values or residual data survive between solves.
+The cache retains the owned and ghost maps, solution importer, overlap-to-owned
+exporter, owned and overlapping fill-complete `Tpetra::CrsGraph` objects, and
+derived assembly offsets across Newton iterations and time steps. `alloc()`
+creates fresh matrices and vectors from those static graphs and maps, so no
+Jacobian values or residual data survive between solves.
 
 The cache signature includes communicator size and rank, global/local/ghost
 node counts, DOF count, index base, local-to-global maps, CSR row pointers, and
@@ -152,5 +182,4 @@ sharing incompatible distributions.
 
 The topology cache is independent of block extraction. The current BIPN path
 still extracts `A`, `B`, `C`, and `L` for each Jacobian because their values
-change. Caching those block graphs or assembling values directly into them is
-a separate optimization.
+change. Caching those block graphs is a separate optimization.

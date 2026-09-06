@@ -15,7 +15,7 @@
 class TrilinosLinearAlgebra::TrilinosImpl {
   public:
     TrilinosImpl(){};
-    void alloc(ComMod& com_mod, eqType& lEq){};
+    void alloc(ComMod& com_mod, eqType& lEq, bool native_assembly){};
     void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN,
         const Array3<double>& lK, const Array<double>& lR){};
     void initialize(ComMod& com_mod) {};
@@ -54,6 +54,8 @@ TrilinosLinearAlgebra::~TrilinosLinearAlgebra()
   if (fsils_solver != nullptr) { 
     delete fsils_solver;
   }
+  delete impl;
+  impl = nullptr;
 }
 
 /// @brief Allocate data arrays.
@@ -65,7 +67,7 @@ void TrilinosLinearAlgebra::alloc(ComMod& com_mod, eqType& lEq)
     initialize_fsils(com_mod, lEq);
   }
 
-  impl->alloc(com_mod, lEq);
+  impl->alloc(com_mod, lEq, !use_fsils_assembly);
 }
 
 /// @brief Assemble local element arrays.
@@ -182,4 +184,3 @@ void TrilinosLinearAlgebra::solve(ComMod& com_mod, eqType& lEq, const Vector<int
     impl->solve(com_mod, lEq, incL, res);
   }
 }
-

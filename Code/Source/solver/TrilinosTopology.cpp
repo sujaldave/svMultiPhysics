@@ -113,6 +113,10 @@ bool TopologyCache::ensure(
       "column_indices");
 
   std::vector<int> nonzeros_per_row(num_ghost_and_local_nodes);
+  if (rows.front() != index_base) {
+    throw std::runtime_error(
+        "[TrilinosTopology] ERROR: row-pointer base does not match index base.");
+  }
   int counted_nonzeros = 0;
   for (int row = 0; row < num_ghost_and_local_nodes; ++row) {
     const int row_nonzeros = rows[row + 1] - rows[row];
@@ -189,8 +193,26 @@ bool TopologyCache::ensure(
         static_cast<std::size_t>(nonzeros_per_row[position->second]) * dof);
   }
 
+  std::vector<std::size_t> assembly_nonzeros_per_dof_row;
+  assembly_nonzeros_per_dof_row.reserve(ghost_map->getLocalNumElements());
+  for (LO local_row = 0;
+       local_row < static_cast<LO>(ghost_map->getLocalNumElements());
+       ++local_row) {
+    const GO dof_gid = ghost_map->getGlobalElement(local_row);
+    const GO node_gid = dof_gid / dof;
+    const auto position = unsorted_index.find(node_gid);
+    if (position == unsorted_index.end()) {
+      throw std::runtime_error(
+          "[TrilinosTopology] ERROR: overlap node is absent from unsorted map.");
+    }
+    assembly_nonzeros_per_dof_row.push_back(
+        static_cast<std::size_t>(nonzeros_per_row[position->second]) * dof);
+  }
+
   auto graph = Teuchos::rcp(
       new Tpetra_CrsGraph(map, nonzeros_per_dof_row));
+  auto assembly_graph = Teuchos::rcp(
+      new Tpetra_CrsGraph(ghost_map, assembly_nonzeros_per_dof_row));
   std::size_t nonzero_offset = 0;
   for (int row_node = 0;
        row_node < num_ghost_and_local_nodes;
@@ -211,6 +233,7 @@ bool TopologyCache::ensure(
         }
       }
       graph->insertGlobalIndices(row_gid, row_columns);
+      assembly_graph->insertGlobalIndices(row_gid, row_columns);
     }
     nonzero_offset += row_nonzeros;
   }
@@ -220,7 +243,97 @@ bool TopologyCache::ensure(
         "[TrilinosTopology] ERROR: graph fillComplete failed.");
   }
 
+  // The overlap graph keeps every local and ghost row so host element
+  // contributions can be accumulated without nonlocal insertion. Its domain
+  // and range remain the uniquely owned map used by the final linear system.
+  assembly_graph->fillComplete(map, map);
+  if (!assembly_graph->isFillComplete()) {
+    throw std::runtime_error(
+        "[TrilinosTopology] ERROR: assembly graph fillComplete failed.");
+  }
+
   auto importer = Teuchos::rcp(new Tpetra_Import(map, ghost_map));
+  auto assembly_exporter = Teuchos::rcp(
+      new Tpetra_Export(ghost_map, map));
+
+  std::vector<LO> assembly_vector_lids(
+      static_cast<std::size_t>(num_ghost_and_local_nodes) * dof);
+  for (int node = 0; node < num_ghost_and_local_nodes; ++node) {
+    for (int component = 0; component < dof; ++component) {
+      const GO gid = unsorted[node] * dof + component;
+      const LO lid = ghost_map->getLocalElement(gid);
+      if (lid == Teuchos::OrdinalTraits<LO>::invalid()) {
+        throw std::runtime_error(
+            "[TrilinosTopology] ERROR: assembly vector GID is absent from "
+            "the overlap map.");
+      }
+      assembly_vector_lids[node * dof + component] = lid;
+    }
+  }
+
+  const auto local_assembly_graph = assembly_graph->getLocalGraphHost();
+  const auto assembly_column_map = assembly_graph->getColMap();
+  std::vector<std::size_t> assembly_entry_offsets(
+      static_cast<std::size_t>(nnz) * dof * dof);
+  std::vector<std::unordered_map<int, std::size_t>>
+      assembly_nodal_entry_lookup(num_ghost_and_local_nodes);
+  nonzero_offset = 0;
+  for (int row_node = 0;
+       row_node < num_ghost_and_local_nodes;
+       ++row_node) {
+    const int row_nonzeros = nonzeros_per_row[row_node];
+    assembly_nodal_entry_lookup[row_node].reserve(row_nonzeros);
+    for (int entry = 0; entry < row_nonzeros; ++entry) {
+      const int local_column =
+          columns[nonzero_offset + entry] - index_base;
+      const auto inserted = assembly_nodal_entry_lookup[row_node].emplace(
+          local_column, nonzero_offset + entry);
+      if (!inserted.second) {
+        throw std::runtime_error(
+            "[TrilinosTopology] ERROR: duplicate nodal column in assembly "
+            "graph.");
+      }
+    }
+    for (int row_component = 0; row_component < dof; ++row_component) {
+      const GO row_gid = unsorted[row_node] * dof + row_component;
+      const LO row_lid = ghost_map->getLocalElement(row_gid);
+      const std::size_t row_begin = local_assembly_graph.row_map(row_lid);
+      const std::size_t row_end = local_assembly_graph.row_map(row_lid + 1);
+
+      for (int entry = 0; entry < row_nonzeros; ++entry) {
+        const GO column_node_gid = global_columns[nonzero_offset + entry];
+        for (int column_component = 0;
+             column_component < dof;
+             ++column_component) {
+          const GO column_gid =
+              column_node_gid * dof + column_component;
+          const LO column_lid =
+              assembly_column_map->getLocalElement(column_gid);
+          std::size_t scalar_offset = row_end;
+          for (std::size_t candidate = row_begin;
+               candidate < row_end;
+               ++candidate) {
+            if (local_assembly_graph.entries(candidate) == column_lid) {
+              scalar_offset = candidate;
+              break;
+            }
+          }
+          if (scalar_offset == row_end) {
+            throw std::runtime_error(
+                "[TrilinosTopology] ERROR: nodal entry is absent from the "
+                "local assembly graph.");
+          }
+
+          const std::size_t block_offset =
+              (nonzero_offset + entry) * dof * dof;
+          assembly_entry_offsets[
+              block_offset + row_component * dof + column_component] =
+              scalar_offset;
+        }
+      }
+    }
+    nonzero_offset += row_nonzeros;
+  }
 
   communicator_size_ = communicator->getSize();
   communicator_rank_ = communicator->getRank();
@@ -241,7 +354,13 @@ bool TopologyCache::ensure(
   map_ = map;
   ghost_map_ = ghost_map;
   graph_ = graph;
+  assembly_graph_ = assembly_graph;
   importer_ = importer;
+  assembly_exporter_ = assembly_exporter;
+  assembly_entry_offsets_ = std::move(assembly_entry_offsets);
+  assembly_vector_lids_ = std::move(assembly_vector_lids);
+  assembly_nodal_entry_lookup_ =
+      std::move(assembly_nodal_entry_lookup);
   initialized_ = true;
   ++generation_;
   return true;
@@ -292,6 +411,29 @@ bool TopologyCache::initialized() const
   return initialized_;
 }
 
+void TopologyCache::clear()
+{
+  importer_ = Teuchos::null;
+  assembly_exporter_ = Teuchos::null;
+  graph_ = Teuchos::null;
+  assembly_graph_ = Teuchos::null;
+  map_ = Teuchos::null;
+  ghost_map_ = Teuchos::null;
+  signature_local_to_global_sorted_.clear();
+  signature_local_to_global_unsorted_.clear();
+  signature_row_pointer_.clear();
+  signature_column_indices_.clear();
+  local_to_global_sorted_.clear();
+  local_to_global_unsorted_.clear();
+  global_column_indices_.clear();
+  nonzeros_per_row_.clear();
+  assembly_entry_offsets_.clear();
+  assembly_vector_lids_.clear();
+  assembly_nodal_entry_lookup_.clear();
+  initialized_ = false;
+  generation_ = 0;
+}
+
 std::size_t TopologyCache::generation() const
 {
   return generation_;
@@ -327,9 +469,55 @@ const Teuchos::RCP<Tpetra_CrsGraph>& TopologyCache::graph() const
   return graph_;
 }
 
+const Teuchos::RCP<Tpetra_CrsGraph>& TopologyCache::assembly_graph() const
+{
+  return assembly_graph_;
+}
+
 const Teuchos::RCP<Tpetra_Import>& TopologyCache::importer() const
 {
   return importer_;
+}
+
+const Teuchos::RCP<Tpetra_Export>& TopologyCache::assembly_exporter() const
+{
+  return assembly_exporter_;
+}
+
+const std::size_t* TopologyCache::assembly_block_offsets(
+    int local_row_node,
+    int local_column_node) const
+{
+  if (local_row_node < 0 ||
+      local_row_node >= num_ghost_and_local_nodes_ ||
+      local_column_node < 0 ||
+      local_column_node >= num_ghost_and_local_nodes_) {
+    throw std::runtime_error(
+        "[TrilinosTopology] ERROR: assembly node index is out of range.");
+  }
+
+  const auto entry =
+      assembly_nodal_entry_lookup_[local_row_node].find(local_column_node);
+  if (entry != assembly_nodal_entry_lookup_[local_row_node].end()) {
+    return assembly_entry_offsets_.data() +
+        entry->second * dof_ * dof_;
+  }
+
+  throw std::runtime_error(
+      "[TrilinosTopology] ERROR: element node pair is absent from the "
+      "assembly graph.");
+}
+
+LO TopologyCache::assembly_vector_lid(
+    int local_node,
+    int component) const
+{
+  if (local_node < 0 || local_node >= num_ghost_and_local_nodes_ ||
+      component < 0 || component >= dof_) {
+    throw std::runtime_error(
+        "[TrilinosTopology] ERROR: assembly vector index is out of range.");
+  }
+  return assembly_vector_lids_[local_node * dof_ + component];
 }
 
 const std::vector<int>& TopologyCache::local_to_global_sorted() const

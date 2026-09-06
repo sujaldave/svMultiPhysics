@@ -19,7 +19,24 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #define NOOUTPUT
+
+namespace {
+
+std::mutex& trilinos_runtime_mutex()
+{
+  static std::mutex mutex;
+  return mutex;
+}
+
+std::size_t& trilinos_runtime_users()
+{
+  static std::size_t users = 0;
+  return users;
+}
+
+} // namespace
 
 // ----------------------------------------------------------------------------
 /**
@@ -185,62 +202,19 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
  */
 void trilinos_doassem_(const Teuchos::RCP<Trilinos> &trilinos_, int &numNodesPerElement, const int *eqN, const double *lK, double *lR)
 {
-  const auto& topology = trilinos_->topology;
-  const int dof = topology.dof();
-  const auto& localToGlobalUnsorted =
-      topology.local_to_global_unsorted();
   #ifdef debug_trilinos_doassem
   std::cout << "[trilinos_doassem_] ========== trilinos_doassem_ ===========" << std::endl;
-  std::cout << "[trilinos_doassem_] dof: " << dof << std::endl;
+  std::cout << "[trilinos_doassem_] dof: " << trilinos_->topology.dof() << std::endl;
   std::cout << "[trilinos_doassem_] numNodesPerElement: " << numNodesPerElement << std::endl;
   #endif
 
-  //converts eqN in local proc values to global values
-  std::vector<int> localToGlobal(numNodesPerElement);
-
-  for (int i = 0; i < numNodesPerElement; ++i)
-    localToGlobal[i] = localToGlobalUnsorted[eqN[i]];
-
-  //loop over local nodes on the element
-  for (int a = 0; a < numNodesPerElement; ++a)
-  {
-    // Sum into contributions from element node-global assemble 
-    // we assemble owned and ghost nodes (to be assembled across 
-    // processors later)
-    GO globalRow = localToGlobal[a] * dof; // first dof of node a
-    
-    // Sum into each DoF for vector F
-    for (int d = 0; d < dof; ++d)
-    {
-      trilinos_->ghostF->sumIntoGlobalValue(globalRow + d, 0, lR[a * dof + d]);
-    }
-    
-    // For the matrix K update:
-    // For each node b connected to node a, insert the block values
-    for (int b = 0; b < numNodesPerElement; ++b)
-    {
-      // The global column base for node b (all its dofs)
-      GO colBase = localToGlobal[b] * dof;
-
-      // We need to build row indices and values for each DoF row of node a
-      for (int i = 0; i < dof; ++i)
-      {
-        GO globalRowK = globalRow + i;
-
-        std::vector<GO> cols(dof);
-        std::vector<Scalar_d> vals(dof);
-
-        for (int j = 0; j < dof; ++j)
-        {
-          cols[j] = colBase + j;
-          // 'a' and 'b' have to be inverted since lK.data() order them in a transpose way
-          vals[j] = lK[b * dof * dof * numNodesPerElement + a * dof * dof + i * dof + j];
-        }
-        // sumIntoGlobalValues performs local to processor assembly 
-        trilinos_->K->sumIntoGlobalValues(globalRowK, dof, vals.data(), cols.data());
-      }
-    }
-  }
+  trilinos_->local_assembly.add_element(
+      trilinos_->topology,
+      *trilinos_->ghostF,
+      numNodesPerElement,
+      eqN,
+      lK,
+      lR);
 } // trilinos_doassem_
 
 // ----------------------------------------------------------------------------
@@ -360,11 +334,13 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   #endif
   bool flagFassem = isFassem;
 
-  // Already filled from graph so does not need to call fillcomplete
-  // routine will sum in contributions from elements on shared nodes amongst
-  // processors
-  //
-  trilinos_->K->fillComplete();
+  // Native assembly stages local and ghost rows in one overlap matrix. Flush
+  // it once so Tpetra performs a bulk device synchronization and MPI export.
+  trilinos_->local_assembly.flush(
+      trilinos_->topology, *trilinos_->K, *trilinos_->ghostF);
+  if (!trilinos_->K->isFillComplete()) {
+    trilinos_->K->fillComplete();
+  }
 
   if (flagFassem) {
     Tpetra::Export exporter(trilinos_->ghostF->getMap(), trilinos_->F->getMap());
@@ -1028,7 +1004,7 @@ void printSolutionToFile(const Teuchos::RCP<Trilinos> &trilinos_)
 class TrilinosLinearAlgebra::TrilinosImpl {
   public:
     TrilinosImpl():trilinos_(Teuchos::rcp(new Trilinos())) {}
-    void alloc(ComMod& com_mod, eqType& lEq);
+    void alloc(ComMod& com_mod, eqType& lEq, bool native_assembly);
     void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN,
         const Array3<double>& lK, const Array<double>& lR);
     void initialize(ComMod& com_mod);
@@ -1051,10 +1027,14 @@ class TrilinosLinearAlgebra::TrilinosImpl {
   
   private:
     Teuchos::RCP<Trilinos> trilinos_;
+    bool runtime_registered_ = false;
 };
 
 /// @brief Allocate Trilinos arrays.
-void TrilinosLinearAlgebra::TrilinosImpl::alloc(ComMod& com_mod, eqType& lEq) 
+void TrilinosLinearAlgebra::TrilinosImpl::alloc(
+    ComMod& com_mod,
+    eqType& lEq,
+    bool native_assembly)
 {
   int dof = com_mod.dof;
   int tnNo = com_mod.tnNo;
@@ -1080,6 +1060,10 @@ void TrilinosLinearAlgebra::TrilinosImpl::alloc(ComMod& com_mod, eqType& lEq)
 
   trilinos_lhs_create(trilinos_, gtnNo, lhs.mynNo, tnNo, lhs.nnz, ltg_, com_mod.ltg, com_mod.rowPtr, 
       com_mod.colPtr, dof, cpp_index, task_id, com_mod.lhs.nFaces);
+
+  if (native_assembly) {
+    trilinos_->local_assembly.reset(trilinos_->topology);
+  }
 }
 
 /// @brief Assemble local element arrays.
@@ -1213,8 +1197,13 @@ void TrilinosLinearAlgebra::TrilinosImpl::initialize(ComMod& com_mod)
   std::cout << "[TrilinosImpl.initialize] com_mod.tnNo: " << com_mod.tnNo << std::endl;
   #endif
 
-  if (!Kokkos::is_initialized()) {
-    Kokkos::initialize();
+  if (!runtime_registered_) {
+    std::lock_guard<std::mutex> lock(trilinos_runtime_mutex());
+    if (!Kokkos::is_initialized()) {
+      Kokkos::initialize();
+    }
+    ++trilinos_runtime_users();
+    runtime_registered_ = true;
   }
 
   ltg_.resize(com_mod.tnNo);
@@ -1226,8 +1215,36 @@ void TrilinosLinearAlgebra::TrilinosImpl::initialize(ComMod& com_mod)
 
 void TrilinosLinearAlgebra::TrilinosImpl::finalize()
 {
-  if (Kokkos::is_initialized())
-  {
+  if (!runtime_registered_) {
+    return;
+  }
+
+  // Every Tpetra object must be released before the final equation shuts down
+  // the process-wide Kokkos runtime.
+  trilinos_->MueluPrec = Teuchos::null;
+  trilinos_->ifpackPrec = Teuchos::null;
+  trilinos_->resistancePrec = Teuchos::null;
+  trilinos_->K = Teuchos::null;
+  trilinos_->F = Teuchos::null;
+  trilinos_->ghostF = Teuchos::null;
+  trilinos_->X = Teuchos::null;
+  trilinos_->ghostX = Teuchos::null;
+  trilinos_->bdryVec_list.clear();
+  trilinos_->bdryCapVec_list.clear();
+  trilinos_->resistanceFaces.clear();
+  trilinos_->local_assembly.clear();
+  trilinos_->topology.clear();
+  trilinos_->comm = Teuchos::null;
+
+  std::lock_guard<std::mutex> lock(trilinos_runtime_mutex());
+  auto& users = trilinos_runtime_users();
+  if (users == 0) {
+    throw std::runtime_error(
+        "[TrilinosLinearAlgebra] ERROR: invalid runtime user count.");
+  }
+  --users;
+  runtime_registered_ = false;
+  if (users == 0 && Kokkos::is_initialized()) {
     Kokkos::finalize();
   }
 }

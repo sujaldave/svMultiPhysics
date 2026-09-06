@@ -422,7 +422,11 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   linear_solver.GM.dB = 0.0;
   linear_solver.CG.dB = 0.0;
 
-  trilinos_->K->fillComplete();
+  trilinos_->local_assembly.flush(
+      trilinos_->topology, *trilinos_->K, *trilinos_->ghostF);
+  if (!trilinos_->K->isFillComplete()) {
+    trilinos_->K->fillComplete();
+  }
   Tpetra::Export<LO, GO, Node> rhs_exporter(
       trilinos_->ghostF->getMap(), trilinos_->F->getMap());
   trilinos_->F->doExport(

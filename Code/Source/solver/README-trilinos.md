@@ -30,6 +30,8 @@ This approach keeps the main input format clean while still providing expert--le
 **Files:**
 - `trilinos_impl.h` — type definitions, function declarations, and key data structures
 - `trilinos_impl.cpp` — implementation of assembly, matrix construction, and solve routines
+- `TrilinosTopology.cpp` — equation-local maps, graphs, communication plans, and CRS offsets
+- `TrilinosAssembly.cpp` — native element accumulation and overlap-to-owned export
 
 ---
 
@@ -42,6 +44,7 @@ Central container holding all Tpetra/Trilinos objects for a linear system solve:
 ```cpp
 struct Trilinos {
   trilinos_backend::TopologyCache topology;     // Maps, importer, and static graph
+  trilinos_backend::LocalAssemblyBuffer local_assembly; // Per-Jacobian values
   Teuchos::RCP<Tpetra_MultiVector> F;           // RHS vector (owned DOFs)
   Teuchos::RCP<Tpetra_MultiVector> ghostF;      // RHS vector (owned + ghost DOFs)
   Teuchos::RCP<Tpetra_CrsMatrix> K;             // Global stiffness matrix
@@ -60,6 +63,11 @@ struct Trilinos {
 - `topology.ghost_map()`: includes owned and neighboring ghost DOFs.
 - `topology.graph()` and `topology.importer()` persist with those maps until
   the equation's structural signature changes.
+- `topology.assembly_graph()` retains overlapping rows for contributions to
+  nodes owned by neighboring ranks; `topology.assembly_exporter()` reduces
+  those rows to the owned matrix.
+- `local_assembly` owns only current-Jacobian values and is reset before the
+  element loop.
 - Vectors (`F`, `X`) use the owned map; ghost vectors (`ghostF`, `ghostX`) use
   the ghost map.
 
@@ -132,15 +140,20 @@ void TrilinosMatVec::apply(const Tpetra_MultiVector& x, Tpetra_MultiVector& y, .
    - Expand node GIDs to DOF GIDs: `dofGID = nodeGID * dof + d`
    - Build `Map` (owned DOFs) and `ghostMap` (owned + ghost DOFs)
 
-2. **Build sparse graph (`K_graph`):**
+2. **Build sparse graphs:**
    - Compute `nnzPerDofRow`: for each DOF row (using Map ordering), determine number of nonzeros by mapping node GID → unsorted index → `rowPtr` to get node neighbor count, then multiply by `dof`.
-   - Construct `Tpetra_CrsGraph` with pre-allocated `nnzPerDofRow` on the
-     first allocation or after a topology change.
+   - Perform the same GID-to-unsorted lookup for overlap-row capacities. The
+     overlap map is sorted, while `rowPtr` follows the application-local node
+     order, so indexing one directly with the other is invalid in parallel.
+   - Construct an owned `Tpetra_CrsGraph` and an overlapping graph with
+     pre-allocated row sizes on the first allocation or after a topology
+     change.
    - Insert global column indices via `insertGlobalIndices(rowGID, rowCols)` for each DOF row.
    - Call `fillComplete()` to finalize graph (communication, optimization).
 
 3. **Create matrix and vectors:**
    - Matrix `K` built from finalized graph.
+   - Native assembly matrix built from the overlapping graph.
    - Vectors `F`, `ghostF`, `X`, `ghostX` created from respective maps.
    - `Importer` created for ghost node communication (`Map` → `ghostMap`).
 
@@ -163,14 +176,23 @@ Two assembly modes are supported:
 - `lR`: element force vector (size `dof × numNodesPerElement`)
 
 **Steps:**
-1. Map element nodes to global node IDs via `localToGlobalUnsorted`.
+1. Use the cached nodal-pair lookup to find each block's scalar offsets in the
+   overlapping local CRS array.
 2. For each element node pair `(a, b)`:
-   - Compute global row/col DOF indices: `rowGID = nodeGID_a * dof + i`, `colGID = nodeGID_b * dof + j`.
-   - Extract block `lK[a,b]` (size `dof × dof`).
-   - Call `K->sumIntoGlobalValues(rowGID, dof, vals, cols)` to accumulate into global matrix.
-3. Sum force vector entries into `ghostF` via `sumIntoGlobalValue(...)`.
+   - Extract block `lK[a,b]` (size `dof x dof`).
+   - Add values directly through `getLocalMatrixHost()`; no per-entry global
+     lookup or temporary column/value vector is required.
+3. Add force entries directly to the host view of `ghostF` using cached local
+   vector indices.
+4. At solve entry, request `getLocalMatrixDevice()` once to synchronize the
+   assembled CRS values in bulk, then export overlapping rows into owned `K`
+   with `Tpetra::ADD`.
 
-**Note:** assembly uses `ghostF` (includes ghost nodes); final communication done later.
+**Note:** element kernels currently produce host arrays. Launching a CUDA
+kernel and copying one small tensor per element would add excessive overhead.
+The staged CRS layout instead performs one bulk host-to-device transfer per
+Jacobian and is ready for direct device writes when element kernels are ported
+to Kokkos.
 
 #### B. Global Assembly (FSILS-assembled)
 
@@ -201,7 +223,10 @@ Two assembly modes are supported:
 **Steps:**
 
 1. **Finalize matrix:**
-   - `K->fillComplete()` — finalizes parallel assembly (ghost communication, CRS optimization).
+   - Native assembly exports the overlap matrix while owned `K` is fill active,
+     then calls `K->fillComplete()`.
+   - FSILS fallback assembly calls `K->fillComplete()` after its existing
+     global-index insertion path.
 
 2. **Export RHS:**
    - `F->doExport(*ghostF, exporter, Tpetra::ADD)` — sum contributions from ghost nodes to owned nodes (if using element assembly).
@@ -236,6 +261,13 @@ Two assembly modes are supported:
 8. **Cleanup:**
    - Zero out `F`, `ghostF`, `X`, boundary vectors.
    - Nullify preconditioners and matrix.
+
+At application shutdown, every equation releases its matrices, vectors,
+preconditioners, cached topology, and assembly buffer. Kokkos is process-wide,
+so a synchronized user count permits the final Trilinos equation to finalize
+Kokkos only after all earlier equation backends have released their Tpetra
+objects. This is required for simulations such as FSI that own more than one
+linear-algebra backend.
 
 ---
 
@@ -301,6 +333,9 @@ where $v_i$ are boundary vectors (normal vectors scaled by resistance coefficien
 - Cache each equation's maps, importer, and fill-complete static graph. Newton
   iterations allocate only fresh matrix values and vectors unless the complete
   distribution/connectivity signature changes.
+- Cache local scalar CRS offsets for every nodal block. Native element assembly
+  therefore performs direct array additions instead of repeated global-ID
+  searches and Tpetra insertion calls.
 - For each DOF `d` of node `n`:
   - Find node's neighbor count: `rowPtr[unsortedIdx+1] - rowPtr[unsortedIdx]`.
   - Allocate `neighborCount * dof` entries (because each node-node connection expands to `dof × dof` block).

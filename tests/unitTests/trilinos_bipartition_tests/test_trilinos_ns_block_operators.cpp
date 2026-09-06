@@ -445,6 +445,27 @@ TEST(TrilinosTopologyCache, RebuildsWhenTheDofLayoutChanges)
   EXPECT_NE(topology.graph().getRawPtr(), first_graph);
 }
 
+TEST(TrilinosTopologyCache, AllocatesOverlapRowsInTpetraMapOrder)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0, 1, 2};
+  Vector<int> unsorted = {2, 0, 1};
+  Vector<int> row_pointer = {0, 1, 3, 6};
+  Vector<int> columns = {0, 0, 1, 0, 1, 2};
+  trilinos_backend::TopologyCache topology;
+
+  EXPECT_TRUE(topology.ensure(
+      communicator, 3, 3, 3, 6,
+      sorted, unsorted, row_pointer, columns, 1, 0));
+  ASSERT_NE(topology.assembly_graph(), Teuchos::null);
+
+  const auto graph = topology.assembly_graph()->getLocalGraphHost();
+  EXPECT_EQ(graph.row_map(1) - graph.row_map(0), 2);
+  EXPECT_EQ(graph.row_map(2) - graph.row_map(1), 3);
+  EXPECT_EQ(graph.row_map(3) - graph.row_map(2), 1);
+}
+
 TEST(TrilinosTopologyCache, RejectsInvalidConnectivity)
 {
   static TpetraBlockTestScope tpetra_scope;
@@ -461,6 +482,140 @@ TEST(TrilinosTopologyCache, RejectsInvalidConnectivity)
       std::runtime_error);
   EXPECT_FALSE(topology.initialized());
   EXPECT_EQ(topology.generation(), 0);
+}
+
+TEST(TrilinosLocalAssembly, AccumulatesElementValuesByLocalCrsOffset)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0, 1};
+  Vector<int> unsorted = {0, 1};
+  Vector<int> row_pointer = {0, 2, 4};
+  Vector<int> columns = {0, 1, 0, 1};
+  trilinos_backend::TopologyCache topology;
+  ASSERT_TRUE(topology.ensure(
+      communicator, 2, 2, 2, 4,
+      sorted, unsorted, row_pointer, columns, 2, 0));
+
+  trilinos_backend::LocalAssemblyBuffer assembly;
+  assembly.reset(topology);
+  Tpetra_MultiVector ghost_rhs(topology.ghost_map(), 1);
+  ghost_rhs.putScalar(0.0);
+  auto owned_matrix = Teuchos::rcp(
+      new Tpetra_CrsMatrix(topology.graph()));
+
+  const int equation_nodes[2] = {0, 1};
+  double element_matrix[16] = {};
+  double element_rhs[4] = {1.0, 2.0, 3.0, 4.0};
+  for (int row_node = 0; row_node < 2; ++row_node) {
+    for (int column_node = 0; column_node < 2; ++column_node) {
+      for (int row_component = 0; row_component < 2; ++row_component) {
+        for (int column_component = 0;
+             column_component < 2;
+             ++column_component) {
+          const std::size_t element_offset =
+              column_node * 2 * 2 * 2 + row_node * 2 * 2 +
+              row_component * 2 + column_component;
+          element_matrix[element_offset] =
+              1000.0 * row_node + 100.0 * column_node +
+              10.0 * row_component + column_component + 1.0;
+        }
+      }
+    }
+  }
+
+  assembly.add_element(
+      topology,
+      ghost_rhs,
+      2,
+      equation_nodes,
+      element_matrix,
+      element_rhs);
+  assembly.add_element(
+      topology,
+      ghost_rhs,
+      2,
+      equation_nodes,
+      element_matrix,
+      element_rhs);
+  EXPECT_TRUE(assembly.pending());
+  EXPECT_TRUE(assembly.flush(topology, *owned_matrix, ghost_rhs));
+  EXPECT_FALSE(assembly.pending());
+  EXPECT_FALSE(assembly.flush(topology, *owned_matrix, ghost_rhs));
+
+  for (int row_node = 0; row_node < 2; ++row_node) {
+    for (int column_node = 0; column_node < 2; ++column_node) {
+      for (int row_component = 0; row_component < 2; ++row_component) {
+        for (int column_component = 0;
+             column_component < 2;
+             ++column_component) {
+          const GO row = row_node * 2 + row_component;
+          const GO column = column_node * 2 + column_component;
+          const double expected = 2.0 * (
+              1000.0 * row_node + 100.0 * column_node +
+              10.0 * row_component + column_component + 1.0);
+          EXPECT_DOUBLE_EQ(
+              matrix_value(*owned_matrix, row, column), expected);
+        }
+      }
+    }
+  }
+
+  const auto rhs = ghost_rhs.getLocalViewHost(Tpetra::Access::ReadOnly);
+  EXPECT_DOUBLE_EQ(rhs(topology.assembly_vector_lid(0, 0), 0), 2.0);
+  EXPECT_DOUBLE_EQ(rhs(topology.assembly_vector_lid(0, 1), 0), 4.0);
+  EXPECT_DOUBLE_EQ(rhs(topology.assembly_vector_lid(1, 0), 0), 6.0);
+  EXPECT_DOUBLE_EQ(rhs(topology.assembly_vector_lid(1, 1), 0), 8.0);
+}
+
+TEST(TrilinosLocalAssembly, ResetDiscardsPreviousJacobianValues)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0};
+  Vector<int> unsorted = {0};
+  Vector<int> row_pointer = {0, 1};
+  Vector<int> columns = {0};
+  trilinos_backend::TopologyCache topology;
+  ASSERT_TRUE(topology.ensure(
+      communicator, 1, 1, 1, 1,
+      sorted, unsorted, row_pointer, columns, 1, 0));
+
+  trilinos_backend::LocalAssemblyBuffer assembly;
+  Tpetra_MultiVector ghost_rhs(topology.ghost_map(), 1);
+  ghost_rhs.putScalar(0.0);
+  const int equation_node = 0;
+  const double first_matrix = 7.0;
+  const double first_rhs = 11.0;
+  assembly.reset(topology);
+  assembly.add_element(
+      topology,
+      ghost_rhs,
+      1,
+      &equation_node,
+      &first_matrix,
+      &first_rhs);
+  ASSERT_TRUE(assembly.pending());
+
+  assembly.reset(topology);
+  EXPECT_FALSE(assembly.pending());
+  ghost_rhs.putScalar(0.0);
+  const double second_matrix = 3.0;
+  const double second_rhs = 5.0;
+  assembly.add_element(
+      topology,
+      ghost_rhs,
+      1,
+      &equation_node,
+      &second_matrix,
+      &second_rhs);
+  auto owned_matrix = Teuchos::rcp(
+      new Tpetra_CrsMatrix(topology.graph()));
+  ASSERT_TRUE(assembly.flush(topology, *owned_matrix, ghost_rhs));
+
+  EXPECT_DOUBLE_EQ(matrix_value(*owned_matrix, 0, 0), second_matrix);
+  const auto rhs = ghost_rhs.getLocalViewHost(Tpetra::Access::ReadOnly);
+  EXPECT_DOUBLE_EQ(rhs(0, 0), second_rhs);
 }
 
 #endif

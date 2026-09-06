@@ -19,6 +19,7 @@
 #include "mpi.h"
 #include <time.h>
 #include <numeric>
+#include <unordered_map>
 
 #include "Array.h"
 #include "Vector.h"
@@ -84,6 +85,7 @@ using Tpetra_BlockCrsMatrix = Tpetra::BlockCrsMatrix<Scalar_d, LO, GO, Node>;
 using Tpetra_MultiVector    = Tpetra::MultiVector<Scalar_d, LO, GO, Node>; 
 using Tpetra_Vector         = Tpetra::Vector<Scalar_d, LO, GO, Node>;
 using Tpetra_Import         = Tpetra::Import<LO, GO, Node>;
+using Tpetra_Export         = Tpetra::Export<LO, GO, Node>;
 using Tpetra_CrsGraph       = Tpetra::CrsGraph<LO, GO, Node>;
 using Tpetra_Operator       = Tpetra::Operator<Scalar_d, LO, GO, Node>;
 
@@ -109,7 +111,7 @@ namespace trilinos_backend {
 
 /**
  * @class TopologyCache
- * @brief Owns equation-local Tpetra maps, importer, and static sparse graph.
+ * @brief Owns equation-local Tpetra maps, communication plans, and graphs.
  *
  * An equation's node distribution and connectivity normally remain unchanged
  * across Newton iterations and time steps. ensure() compares the complete
@@ -140,6 +142,9 @@ class TopologyCache
     /// @brief Return whether ensure() has built a valid topology.
     bool initialized() const;
 
+    /// @brief Release all Tpetra topology objects before Kokkos finalization.
+    void clear();
+
     /// @brief Return the number of structural graph generations built.
     std::size_t generation() const;
 
@@ -161,8 +166,31 @@ class TopologyCache
     /// @brief Return the fill-complete static scalar sparsity graph.
     const Teuchos::RCP<Tpetra_CrsGraph>& graph() const;
 
+    /// @brief Return the overlapping graph used for element assembly.
+    const Teuchos::RCP<Tpetra_CrsGraph>& assembly_graph() const;
+
     /// @brief Return the owned-to-ghost solution importer.
     const Teuchos::RCP<Tpetra_Import>& importer() const;
+
+    /// @brief Return the overlap-to-owned matrix exporter.
+    const Teuchos::RCP<Tpetra_Export>& assembly_exporter() const;
+
+    /**
+     * @brief Return local CRS offsets for one nodal matrix block.
+     * @throws std::runtime_error If the node pair is absent from the graph.
+     *
+     * The returned array contains @c dof()*dof() offsets in row-major
+     * component order and remains valid until the topology is rebuilt.
+     */
+    const std::size_t* assembly_block_offsets(
+        int local_row_node,
+        int local_column_node) const;
+
+    /**
+     * @brief Return the overlapping vector LID for a node component.
+     * @throws std::runtime_error If either index is outside the topology.
+     */
+    LO assembly_vector_lid(int local_node, int component) const;
 
     /// @brief Return sorted local-to-global node IDs.
     const std::vector<int>& local_to_global_sorted() const;
@@ -214,7 +242,59 @@ class TopologyCache
     Teuchos::RCP<const Tpetra_Map> map_;
     Teuchos::RCP<const Tpetra_Map> ghost_map_;
     Teuchos::RCP<Tpetra_CrsGraph> graph_;
+    Teuchos::RCP<Tpetra_CrsGraph> assembly_graph_;
     Teuchos::RCP<Tpetra_Import> importer_;
+    Teuchos::RCP<Tpetra_Export> assembly_exporter_;
+    std::vector<std::size_t> assembly_entry_offsets_;
+    std::vector<LO> assembly_vector_lids_;
+    std::vector<std::unordered_map<int, std::size_t>>
+        assembly_nodal_entry_lookup_;
+};
+
+/**
+ * @class LocalAssemblyBuffer
+ * @brief Accumulates host element tensors in an overlapping local CRS matrix.
+ *
+ * Element kernels currently produce small dense arrays in host memory. This
+ * buffer writes them directly into the final local CRS ordering and performs
+ * one bulk host-to-device synchronization before exporting shared rows to
+ * their owning MPI ranks. The class owns only per-Jacobian values; its graph
+ * and communication plan come from TopologyCache.
+ */
+class LocalAssemblyBuffer
+{
+  public:
+    /// @brief Allocate and zero values for a new Jacobian assembly.
+    void reset(const TopologyCache& topology);
+
+    /// @brief Add one dense element matrix and residual to overlapping storage.
+    void add_element(
+        const TopologyCache& topology,
+        Tpetra_MultiVector& ghost_rhs,
+        int num_element_nodes,
+        const int* equation_nodes,
+        const double* element_matrix,
+        const double* element_rhs);
+
+    /**
+     * @brief Synchronize values to device and export shared rows to owners.
+     * @return @c true when pending native assembly was flushed.
+     */
+    bool flush(
+        const TopologyCache& topology,
+        Tpetra_CrsMatrix& owned_matrix,
+        Tpetra_MultiVector& ghost_rhs);
+
+    /// @brief Return whether element contributions await a flush.
+    bool pending() const;
+
+    /// @brief Release current assembly values before Kokkos finalization.
+    void clear();
+
+  private:
+    Teuchos::RCP<Tpetra_CrsMatrix> overlap_matrix_;
+    std::size_t topology_generation_ = 0;
+    bool pending_ = false;
 };
 
 } // namespace trilinos_backend
@@ -251,6 +331,9 @@ struct Trilinos
 
   /// Equation-local maps, importer, graph, and assembly metadata.
   trilinos_backend::TopologyCache topology;
+
+  /// Per-Jacobian native Trilinos element assembly storage.
+  trilinos_backend::LocalAssemblyBuffer local_assembly;
 
   Teuchos::RCP<Tpetra_MultiVector> F;
   Teuchos::RCP<Tpetra_MultiVector> ghostF;
