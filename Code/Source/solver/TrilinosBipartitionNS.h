@@ -16,6 +16,10 @@
 
 namespace trilinos_bipartition {
 
+namespace preconditioners {
+class MueLuReuseCache;
+}
+
 /**
  * @struct BelosGmresBudget
  * @brief Belos parameters equivalent to the FSILS restarted-GMRES controls.
@@ -64,11 +68,19 @@ class TrilinosBipartitionNSSolver
      * @param trilinos Full-system Tpetra state for the current equation.
      * @param nsd Number of spatial velocity components.
      * @param dof Number of scalar degrees of freedom per node.
+     * @param time_step Current svMultiPhysics time-step index.
+     * @param momentum_muelu_cache Equation-local momentum AMG cache.
+     * @param pressure_muelu_cache Equation-local pressure AMG cache.
      */
     TrilinosBipartitionNSSolver(
         const Teuchos::RCP<Trilinos>& trilinos,
         int nsd,
-        int dof);
+        int dof,
+        int time_step,
+        const Teuchos::RCP<preconditioners::MueLuReuseCache>&
+            momentum_muelu_cache,
+        const Teuchos::RCP<preconditioners::MueLuReuseCache>&
+            pressure_muelu_cache);
 
     /**
      * @brief Solve a system assembled directly through Tpetra.
@@ -108,6 +120,11 @@ class TrilinosBipartitionNSSolver
     Teuchos::RCP<Trilinos> trilinos_; ///< Full-system state for this equation.
     int nsd_;                         ///< Number of velocity components.
     int dof_;                         ///< Degrees of freedom per node.
+    int time_step_;                   ///< Current nonlinear-solve time step.
+    Teuchos::RCP<preconditioners::MueLuReuseCache>
+        momentum_muelu_cache_;        ///< Momentum AMG hierarchy cache.
+    Teuchos::RCP<preconditioners::MueLuReuseCache>
+        pressure_muelu_cache_;        ///< Pressure AMG hierarchy cache.
 };
 
 } // namespace trilinos_bipartition

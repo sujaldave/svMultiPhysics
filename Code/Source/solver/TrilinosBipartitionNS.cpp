@@ -302,10 +302,18 @@ int make_belos_cg_max_iterations(int max_iterations)
 TrilinosBipartitionNSSolver::TrilinosBipartitionNSSolver(
     const Teuchos::RCP<Trilinos>& trilinos,
     int nsd,
-    int dof) :
+    int dof,
+    int time_step,
+    const Teuchos::RCP<preconditioners::MueLuReuseCache>&
+        momentum_muelu_cache,
+    const Teuchos::RCP<preconditioners::MueLuReuseCache>&
+        pressure_muelu_cache) :
   trilinos_(trilinos),
   nsd_(nsd),
-  dof_(dof)
+  dof_(dof),
+  time_step_(time_step),
+  momentum_muelu_cache_(momentum_muelu_cache),
+  pressure_muelu_cache_(pressure_muelu_cache)
 {
   if (trilinos_ == Teuchos::null) {
     throw std::runtime_error(
@@ -460,15 +468,27 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
 
   // These are the only two preconditioner constructions for this Jacobian.
   // Every LinearProblem below attaches one of these existing handles.
+  preconditioners::PreconditionerReuseContext momentum_reuse;
+  momentum_reuse.muelu_cache = momentum_muelu_cache_;
+  momentum_reuse.time_step = time_step_;
+  momentum_reuse.topology_generation = trilinos_->topology.generation();
   auto momentum_preconditioner = preconditioners::create_preconditioner(
       equation.linear_algebra_gmres_preconditioner,
       preconditioners::SolverRole::momentum_gmres,
       blocks.A,
-      momentum_resistance);
+      momentum_resistance,
+      momentum_reuse);
+
+  preconditioners::PreconditionerReuseContext pressure_reuse;
+  pressure_reuse.muelu_cache = pressure_muelu_cache_;
+  pressure_reuse.time_step = time_step_;
+  pressure_reuse.topology_generation = trilinos_->topology.generation();
   auto pressure_preconditioner = preconditioners::create_preconditioner(
       equation.linear_algebra_cg_preconditioner,
       preconditioners::SolverRole::pressure_cg,
-      blocks.L);
+      blocks.L,
+      Teuchos::null,
+      pressure_reuse);
 
   auto initial_momentum = extract_subvector(*trilinos_->F, blocks.velocity_map);
   auto initial_continuity = extract_subvector(*trilinos_->F, blocks.pressure_map);

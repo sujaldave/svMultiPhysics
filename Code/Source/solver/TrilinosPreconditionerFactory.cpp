@@ -140,6 +140,7 @@ Teuchos::RCP<Tpetra_Operator> create_muelu_preconditioner(
   parameters.set("cycle type", "V");
   parameters.set("fuse prolongation and update", true);
   parameters.set("problem: type", "unknown");
+  parameters.set("reuse: type", "RAP");
 
   // Filtered BIPN submaps retain full-system GIDs and are not node-contiguous.
   // Scalar coalescing is therefore the conservative choice for both blocks.
@@ -177,6 +178,85 @@ Teuchos::RCP<Tpetra_Operator> create_muelu_preconditioner(
 }
 
 } // namespace
+
+bool MueLuReuseCache::matches(
+    SolverRole role,
+    const Tpetra_CrsMatrix& matrix,
+    const PreconditionerReuseContext& reuse) const
+{
+  return initialized_ && hierarchy_ != Teuchos::null && role_ == role &&
+      time_step_ == reuse.time_step &&
+      topology_generation_ == reuse.topology_generation &&
+      domain_map_ != Teuchos::null && range_map_ != Teuchos::null &&
+      matrix.getDomainMap()->isSameAs(*domain_map_) &&
+      matrix.getRangeMap()->isSameAs(*range_map_) &&
+      matrix.getGlobalNumRows() == global_rows_ &&
+      matrix.getGlobalNumCols() == global_columns_ &&
+      matrix.getGlobalNumEntries() == global_entries_ &&
+      matrix.getLocalNumRows() == local_rows_ &&
+      matrix.getLocalNumEntries() == local_entries_;
+}
+
+void MueLuReuseCache::store_signature(
+    SolverRole role,
+    const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
+    const PreconditionerReuseContext& reuse)
+{
+  initialized_ = true;
+  role_ = role;
+  time_step_ = reuse.time_step;
+  topology_generation_ = reuse.topology_generation;
+  global_rows_ = matrix->getGlobalNumRows();
+  global_columns_ = matrix->getGlobalNumCols();
+  global_entries_ = matrix->getGlobalNumEntries();
+  local_rows_ = matrix->getLocalNumRows();
+  local_entries_ = matrix->getLocalNumEntries();
+  domain_map_ = matrix->getDomainMap();
+  range_map_ = matrix->getRangeMap();
+}
+
+void MueLuReuseCache::clear()
+{
+  initialized_ = false;
+  role_ = SolverRole::momentum_gmres;
+  time_step_ = -1;
+  topology_generation_ = 0;
+  global_rows_ = 0;
+  global_columns_ = 0;
+  global_entries_ = 0;
+  local_rows_ = 0;
+  local_entries_ = 0;
+  build_count_ = 0;
+  reuse_count_ = 0;
+  domain_map_ = Teuchos::null;
+  range_map_ = Teuchos::null;
+  hierarchy_ = Teuchos::null;
+}
+
+const Teuchos::RCP<Tpetra_Operator>& MueLuReuseCache::hierarchy() const
+{
+  return hierarchy_;
+}
+
+int MueLuReuseCache::time_step() const
+{
+  return time_step_;
+}
+
+std::size_t MueLuReuseCache::topology_generation() const
+{
+  return topology_generation_;
+}
+
+std::size_t MueLuReuseCache::build_count() const
+{
+  return build_count_;
+}
+
+std::size_t MueLuReuseCache::reuse_count() const
+{
+  return reuse_count_;
+}
 
 PreconditionerHandle::PreconditionerHandle(
     consts::PreconditionerType type,
@@ -230,7 +310,8 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
     consts::PreconditionerType type,
     SolverRole role,
     const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
-    const Teuchos::RCP<Tpetra_Operator>& resistance_operator)
+    const Teuchos::RCP<Tpetra_Operator>& resistance_operator,
+    const PreconditionerReuseContext& reuse)
 {
   validate_type(type);
   auto handle = Teuchos::rcp(
@@ -273,8 +354,41 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
     copy_with_repaired_diagonal(matrix);
 
   if (type == consts::PreconditionerType::PREC_TRILINOS_ML) {
-    handle->muelu_operator_ =
-      create_muelu_preconditioner(handle->setup_matrix_, role);
+    if (reuse.muelu_cache != Teuchos::null) {
+      if (reuse.time_step < 0 || reuse.topology_generation == 0) {
+        throw std::runtime_error(
+            "[TrilinosPreconditionerFactory] ERROR: MueLu reuse requires "
+            "a valid time step and topology generation.");
+      }
+
+      auto& cache = *reuse.muelu_cache;
+      // Refresh only within one time step and for an unchanged block layout.
+      if (cache.matches(role, *handle->setup_matrix_, reuse)) {
+        auto muelu = Teuchos::rcp_dynamic_cast<
+            MueLu::TpetraOperator<Scalar_d, LO, GO, Node>>(
+                cache.hierarchy_);
+        if (muelu != Teuchos::null) {
+          MueLu::ReuseTpetraPreconditioner(handle->setup_matrix_, *muelu);
+          ++cache.reuse_count_;
+        } else {
+          cache.hierarchy_ = Teuchos::null;
+        }
+      }
+
+      if (cache.hierarchy_ == Teuchos::null ||
+          !cache.matches(role, *handle->setup_matrix_, reuse)) {
+        // RAP applies only after the first full build in this time step.
+        cache.hierarchy_ = Teuchos::null;
+        cache.hierarchy_ =
+          create_muelu_preconditioner(handle->setup_matrix_, role);
+        cache.store_signature(role, handle->setup_matrix_, reuse);
+        ++cache.build_count_;
+      }
+      handle->muelu_operator_ = cache.hierarchy_;
+    } else {
+      handle->muelu_operator_ =
+        create_muelu_preconditioner(handle->setup_matrix_, role);
+    }
     handle->left_operator_ = handle->muelu_operator_;
     return handle;
   }

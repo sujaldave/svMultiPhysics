@@ -49,6 +49,8 @@ rejects `trilinos-resistance`, which is a velocity-space operator.
   `L + B^T Q_R B`.
 - `TrilinosPreconditionerFactory` constructs reusable Ifpack2, MueLu, or
   resistance handles and attaches them to Belos problems.
+- `MueLuReuseCache` retains one role-specific AMG hierarchy across Newton
+  iterations in the same time step.
 
 All solver-facing types except the shared resistance operator live in the
 `trilinos_bipartition` namespace. The resistance operator is also used by the
@@ -110,11 +112,35 @@ Each RI iteration performs:
    Tpetra dot products, and solve that small dense system on the host.
 6. Update the residual basis, convergence state, and final correction.
 
-One momentum and one pressure preconditioner are constructed after extracting
-the blocks. The same two handles are attached to fresh Belos linear problems
-throughout all RI iterations for that Jacobian. They are destroyed after the
-correction is scattered. Reuse across Newton iterations or time steps is a
-separate optimization and is not performed by this implementation.
+One momentum and one pressure preconditioner handle are prepared after
+extracting the blocks. The same two handles are attached to fresh Belos linear
+problems throughout all RI iterations for that Jacobian. If a block uses
+MueLu, the handle references an equation-local hierarchy cache described
+below; Ifpack2 and resistance handles remain scoped to one Jacobian.
+
+## MueLu Reuse
+
+Momentum and pressure use separate `MueLuReuseCache` objects because their
+maps, sparsity patterns, smoothers, and solver roles differ. Reuse follows a
+fixed time-step policy:
+
+1. The first Newton solve at time step `cTS` builds a complete hierarchy.
+2. Later Newton solves at the same `cTS` call
+   `MueLu::ReuseTpetraPreconditioner()` with `reuse: type = RAP`.
+3. The first solve after `cTS` changes discards the retained hierarchy and
+   performs another complete build.
+4. A topology-generation, map, dimension, or nonzero-count change also forces
+   a complete build.
+
+RAP reuse retains the expensive multigrid transfer structure and refreshes
+the hierarchy for the new Jacobian values. It is more conservative than full
+reuse, which could keep stale coarse operators, and less expensive than
+repeating aggregation and hierarchy construction at every Newton iteration.
+
+This policy requires no XML option. It applies only when either BIPN inner
+preconditioner is `trilinos-ml`; all other policies retain their existing
+lifetime. Build and refresh counts are stored independently for the two block
+caches and are available for unit-level verification.
 
 ## Resistance Semantics
 
@@ -182,4 +208,6 @@ sharing incompatible distributions.
 
 The topology cache is independent of block extraction. The current BIPN path
 still extracts `A`, `B`, `C`, and `L` for each Jacobian because their values
-change. Caching those block graphs is a separate optimization.
+change. MueLu may reuse hierarchy structure across those newly extracted
+matrices only after checking the time-step, topology, map, and matrix-shape
+signatures. Caching the block graphs themselves is a separate optimization.

@@ -349,6 +349,36 @@ TEST(TrilinosPreconditionerFactory, AttachesExistingHandleToBelos)
       handle->left_operator().getRawPtr());
 }
 
+TEST(TrilinosPreconditionerFactory, ValidatesMueLuReuseContext)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(2);
+  const auto matrix = make_diagonal_matrix(map, {2.0, 3.0});
+  const auto cache = Teuchos::rcp(new factory::MueLuReuseCache());
+  factory::PreconditionerReuseContext reuse;
+  reuse.muelu_cache = cache;
+  EXPECT_THROW(factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_ML,
+      factory::SolverRole::momentum_gmres,
+      matrix,
+      Teuchos::null,
+      reuse), std::runtime_error);
+
+  reuse.time_step = 7;
+  EXPECT_THROW(factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_ML,
+      factory::SolverRole::momentum_gmres,
+      matrix,
+      Teuchos::null,
+      reuse), std::runtime_error);
+
+  cache->clear();
+  EXPECT_EQ(cache->hierarchy(), Teuchos::null);
+  EXPECT_EQ(cache->build_count(), 0);
+  EXPECT_EQ(cache->reuse_count(), 0);
+}
+
 TEST(TrilinosBipartitionBudget, PreservesFsilsRestartCycles)
 {
   const auto budget =

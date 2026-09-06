@@ -38,6 +38,82 @@ enum class SolverRole
 };
 
 class PreconditionerHandle;
+struct PreconditionerReuseContext;
+
+/**
+ * @class MueLuReuseCache
+ * @brief Owns one equation-local AMG hierarchy across Newton iterations.
+ *
+ * A cache is dedicated to one BIPN block role. The first use in a time step
+ * builds a hierarchy; later uses in that same time step refresh it with
+ * MueLu's RAP reuse policy. A time-step or topology-generation change forces
+ * a complete rebuild.
+ */
+class MueLuReuseCache
+{
+  public:
+    /// @brief Release the hierarchy and reset all reuse metadata and counters.
+    void clear();
+
+    /// @brief Return the currently retained MueLu hierarchy.
+    const Teuchos::RCP<Tpetra_Operator>& hierarchy() const;
+
+    /// @brief Return the time step associated with the retained hierarchy.
+    int time_step() const;
+
+    /// @brief Return the topology generation associated with the hierarchy.
+    std::size_t topology_generation() const;
+
+    /// @brief Return the number of complete hierarchy builds.
+    std::size_t build_count() const;
+
+    /// @brief Return the number of RAP hierarchy refreshes.
+    std::size_t reuse_count() const;
+
+  private:
+    bool matches(
+        SolverRole role,
+        const Tpetra_CrsMatrix& matrix,
+        const PreconditionerReuseContext& reuse) const;
+
+    void store_signature(
+        SolverRole role,
+        const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
+        const PreconditionerReuseContext& reuse);
+
+    bool initialized_ = false;
+    SolverRole role_ = SolverRole::momentum_gmres;
+    int time_step_ = -1;
+    std::size_t topology_generation_ = 0;
+    std::size_t global_rows_ = 0;
+    std::size_t global_columns_ = 0;
+    std::size_t global_entries_ = 0;
+    std::size_t local_rows_ = 0;
+    std::size_t local_entries_ = 0;
+    std::size_t build_count_ = 0;
+    std::size_t reuse_count_ = 0;
+    Teuchos::RCP<const Tpetra_Map> domain_map_;
+    Teuchos::RCP<const Tpetra_Map> range_map_;
+    Teuchos::RCP<Tpetra_Operator> hierarchy_;
+
+    friend Teuchos::RCP<PreconditionerHandle> create_preconditioner(
+        consts::PreconditionerType,
+        SolverRole,
+        const Teuchos::RCP<Tpetra_CrsMatrix>&,
+        const Teuchos::RCP<Tpetra_Operator>&,
+        const PreconditionerReuseContext&);
+};
+
+/**
+ * @struct PreconditionerReuseContext
+ * @brief Identifies when a cached MueLu hierarchy may be refreshed.
+ */
+struct PreconditionerReuseContext
+{
+  Teuchos::RCP<MueLuReuseCache> muelu_cache; ///< Role-specific hierarchy cache.
+  int time_step = -1;                       ///< Current svMultiPhysics time step.
+  std::size_t topology_generation = 0;      ///< Equation topology generation.
+};
 
 /**
  * @brief Construct and compute a reusable preconditioner.
@@ -47,6 +123,8 @@ class PreconditionerHandle;
  *        Ifpack2 or MueLu setup. It may be null only for the diagonal policy.
  * @param resistance_operator Velocity-space resistance transform required by
  *        the resistance policy.
+ * @param reuse Optional equation-local MueLu cache and current solve epoch.
+ *        It is ignored by non-MueLu policies.
  * @return An owning handle whose left operator can be attached repeatedly.
  * @throws std::runtime_error For unsupported policies, incompatible matrices,
  *         a missing or map-incompatible resistance operator, or resistance
@@ -61,7 +139,8 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
     consts::PreconditionerType type,
     SolverRole role,
     const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
-    const Teuchos::RCP<Tpetra_Operator>& resistance_operator = Teuchos::null);
+    const Teuchos::RCP<Tpetra_Operator>& resistance_operator = Teuchos::null,
+    const PreconditionerReuseContext& reuse = PreconditionerReuseContext());
 
 /**
  * @class PreconditionerHandle
@@ -112,7 +191,8 @@ class PreconditionerHandle
         consts::PreconditionerType,
         SolverRole,
         const Teuchos::RCP<Tpetra_CrsMatrix>&,
-        const Teuchos::RCP<Tpetra_Operator>&);
+        const Teuchos::RCP<Tpetra_Operator>&,
+        const PreconditionerReuseContext&);
 };
 
 /**

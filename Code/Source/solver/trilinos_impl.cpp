@@ -15,6 +15,7 @@
 #include "trilinos_impl.h"
 #include "ComMod.h"
 #include "TrilinosBipartitionNS.h"
+#include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 #include <cmath>
 #include <fstream>
@@ -1003,7 +1004,12 @@ void printSolutionToFile(const Teuchos::RCP<Trilinos> &trilinos_)
 //
 class TrilinosLinearAlgebra::TrilinosImpl {
   public:
-    TrilinosImpl():trilinos_(Teuchos::rcp(new Trilinos())) {}
+    TrilinosImpl():
+      trilinos_(Teuchos::rcp(new Trilinos())),
+      momentum_muelu_cache_(Teuchos::rcp(
+          new trilinos_bipartition::preconditioners::MueLuReuseCache())),
+      pressure_muelu_cache_(Teuchos::rcp(
+          new trilinos_bipartition::preconditioners::MueLuReuseCache())) {}
     void alloc(ComMod& com_mod, eqType& lEq, bool native_assembly);
     void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN,
         const Array3<double>& lK, const Array<double>& lR);
@@ -1027,6 +1033,10 @@ class TrilinosLinearAlgebra::TrilinosImpl {
   
   private:
     Teuchos::RCP<Trilinos> trilinos_;
+    Teuchos::RCP<trilinos_bipartition::preconditioners::MueLuReuseCache>
+        momentum_muelu_cache_;
+    Teuchos::RCP<trilinos_bipartition::preconditioners::MueLuReuseCache>
+        pressure_muelu_cache_;
     bool runtime_registered_ = false;
 };
 
@@ -1232,6 +1242,10 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   trilinos_->bdryVec_list.clear();
   trilinos_->bdryCapVec_list.clear();
   trilinos_->resistanceFaces.clear();
+  momentum_muelu_cache_->clear();
+  pressure_muelu_cache_->clear();
+  momentum_muelu_cache_ = Teuchos::null;
+  pressure_muelu_cache_ = Teuchos::null;
   trilinos_->local_assembly.clear();
   trilinos_->topology.clear();
   trilinos_->comm = Teuchos::null;
@@ -1284,7 +1298,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve(ComMod& com_mod, eqType& lEq, co
 
   if (lEq.ls.LS_type == consts::SolverType::lSolver_NS) {
     trilinos_bipartition::TrilinosBipartitionNSSolver ns_solver(
-        trilinos_, com_mod.nsd, com_mod.dof);
+        trilinos_, com_mod.nsd, com_mod.dof, com_mod.cTS,
+        momentum_muelu_cache_, pressure_muelu_cache_);
     ns_solver.solve_fsils_assembled(
         lEq, Val.data(), R.data(), R_.data(), W_.data());
 
@@ -1334,7 +1349,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqTyp
 
   if (lEq.ls.LS_type == consts::SolverType::lSolver_NS) {
     trilinos_bipartition::TrilinosBipartitionNSSolver ns_solver(
-        trilinos_, com_mod.nsd, com_mod.dof);
+        trilinos_, com_mod.nsd, com_mod.dof, com_mod.cTS,
+        momentum_muelu_cache_, pressure_muelu_cache_);
     ns_solver.solve_assembled(lEq, R_.data(), W_.data());
 
     for (int a = 0; a < com_mod.tnNo; ++a) {

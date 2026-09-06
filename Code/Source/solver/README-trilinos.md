@@ -32,6 +32,8 @@ This approach keeps the main input format clean while still providing expert--le
 - `trilinos_impl.cpp` — implementation of assembly, matrix construction, and solve routines
 - `TrilinosTopology.cpp` — equation-local maps, graphs, communication plans, and CRS offsets
 - `TrilinosAssembly.cpp` — native element accumulation and overlap-to-owned export
+- `TrilinosPreconditionerFactory.cpp` — BIPN inner preconditioners and
+  equation-local MueLu hierarchy reuse
 
 ---
 
@@ -268,6 +270,22 @@ so a synchronized user count permits the final Trilinos equation to finalize
 Kokkos only after all earlier equation backends have released their Tpetra
 objects. This is required for simulations such as FSI that own more than one
 linear-algebra backend.
+
+### BIPN MueLu hierarchy lifetime
+
+The NS bi-partition path prepares a fresh preconditioner handle for each new
+Jacobian, but an ML handle may refer to a longer-lived, equation-local MueLu
+hierarchy. Momentum and pressure caches are distinct. On the first Newton
+iteration of every time step, the hierarchy is built from scratch. Subsequent
+Newton iterations in that time step refresh it with
+`MueLu::ReuseTpetraPreconditioner()` and the `RAP` reuse level. The next time
+step forces a complete rebuild.
+
+Reuse is permitted only when the solver role, time step, topology generation,
+maps, matrix dimensions, and local/global nonzero counts match. This prevents
+an FSI or multiphysics equation from reusing another block's transfer
+operators. Ifpack2 and resistance preconditioners are not affected by this
+policy and remain scoped to the current Jacobian.
 
 ---
 
