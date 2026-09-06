@@ -171,6 +171,7 @@ set(CSRCS
   TrilinosNSBlockOperators.h TrilinosNSBlockOperators.cpp
   TrilinosPreconditionerFactory.h TrilinosPreconditionerFactory.cpp
   TrilinosResistanceOperator.h TrilinosResistanceOperator.cpp
+  TrilinosTopology.cpp
   Tensor4.h Tensor4.cpp
   Vector.h Vector.cpp 
 

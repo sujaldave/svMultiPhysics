@@ -16,12 +16,6 @@
 #include <string>
 #include <vector>
 
-extern int dof;
-extern int ghostAndLocalNodes;
-extern std::vector<int> globalColInd;
-extern std::vector<int> localToGlobalUnsorted;
-extern std::vector<int> nnzPerRow;
-
 namespace trilinos_bipartition {
 namespace {
 
@@ -240,7 +234,7 @@ void copy_solution_to_host(
     double* solution)
 {
   trilinos->ghostX->doImport(
-      *trilinos->X, *trilinos->Importer, Tpetra::INSERT);
+      *trilinos->X, *trilinos->topology.importer(), Tpetra::INSERT);
   const auto local_view =
       trilinos->ghostX->getLocalViewHost(Tpetra::Access::ReadOnly);
   const size_t local_length = trilinos->ghostX->getLocalLength();
@@ -346,20 +340,27 @@ void TrilinosBipartitionNSSolver::assemble_fsils_system(
     throw std::runtime_error(
         "[TrilinosBipartitionNS] ERROR: Trilinos matrix is not allocated.");
   }
-  if (::dof != dof_) {
+  const auto& topology = trilinos_->topology;
+  if (topology.dof() != dof_) {
     throw std::runtime_error(
         "[TrilinosBipartitionNS] ERROR: FSILS and equation DOF counts differ.");
   }
+
+  const int ghost_and_local_nodes = topology.ghost_and_local_nodes();
+  const auto& nonzeros_per_row = topology.nonzeros_per_row();
+  const auto& local_to_global_unsorted =
+      topology.local_to_global_unsorted();
+  const auto& global_column_indices = topology.global_column_indices();
 
   int nonzero_offset = 0;
   int value_block = 0;
   std::vector<Scalar_d> row_values(dof_);
   std::vector<GO> column_gids(dof_);
 
-  for (int row_node = 0; row_node < ghostAndLocalNodes; ++row_node) {
-    const int row_entries = nnzPerRow[row_node];
-    const GO row_node_gid = localToGlobalUnsorted[row_node];
-    const GO* column_nodes = &globalColInd[nonzero_offset];
+  for (int row_node = 0; row_node < ghost_and_local_nodes; ++row_node) {
+    const int row_entries = nonzeros_per_row[row_node];
+    const GO row_node_gid = local_to_global_unsorted[row_node];
+    const GO* column_nodes = &global_column_indices[nonzero_offset];
 
     for (int component = 0; component < dof_; ++component) {
       trilinos_->ghostF->replaceGlobalValue(
@@ -429,7 +430,8 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       rhs_exporter,
       rhs_needs_add_export ? Tpetra::ADD : Tpetra::REPLACE);
 
-  auto diagonal = Teuchos::rcp(new Tpetra_Vector(trilinos_->Map));
+  auto diagonal = Teuchos::rcp(
+      new Tpetra_Vector(trilinos_->topology.map()));
   constructJacobiScaling(trilinos_, dirichlet_weights, *diagonal);
 
   auto blocks = build_trilinos_ns_block_system(trilinos_, nsd_, dof_);

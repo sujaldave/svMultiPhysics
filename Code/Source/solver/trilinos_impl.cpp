@@ -21,38 +21,6 @@
 #include <iomanip>
 #define NOOUTPUT
 
-/// Nodal degrees of freedom
-int dof;
-
-/// Total number of nodes including the ghost nodes
-int ghostAndLocalNodes;
-
-/// Nodes owned by processor
-int localNodes;
-
-/// Converts local proc column indices to global indices to be inserted
-std::vector<int> globalColInd;
-
-/// Converts local indices to global indices in unsorted ghost node order
-std::vector<int> localToGlobalUnsorted;
-
-/// Stores number of nonzeros per row for the topology
-std::vector<int> nnzPerRow;
-
-std::vector<int> localToGlobalSorted;
-
-/// Stores the global node number of local node a in a Dof-based row
-std::vector<GO> globalDofGIDs;
-
-std::vector<GO> globalGhostDofGIDs;
-
-/// Stores number of nonzeros per row for CSR topology including Dofs
-std::vector<size_t> nnzPerDofRow;
-
-int timecount = 0;
-
-bool coupledBC;
-
 // ----------------------------------------------------------------------------
 /**
  * Define the matrix vector multiplication operation to do at each iteration of
@@ -74,7 +42,7 @@ void TrilinosMatVec::apply(const Tpetra_MultiVector& x, Tpetra_MultiVector& y,
   trilinos_->K->apply(x, y, mode, alpha, beta); //Y = beta*Y + alpha*K*X 
 
   // Now add on the coupled Neumann boundary contribution y += v1*(v1'*x) + v2*(v2'*x) + ...
-  if (coupledBC)
+  if (trilinos_->coupled_boundary)
   {
     // Cap terms contribute to the flux scalar term only, not to pressure update rows.
     // So we compute (v_face^T x + v_cap^T x) and apply it with v_face.
@@ -140,191 +108,62 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
     indexBase = 0; 
   }
 
-  dof = Dof; //constant size dof blocks
-  ghostAndLocalNodes = numGhostAndLocalNodes;
-  localNodes = numLocalNodes;
-
   trilinos_->comm = Tpetra::getDefaultComm();
 
   #ifdef debug_trilinos_lhs_create
   std::cout <<  msg_prefix << "indexBase: " << indexBase << std::endl;
-  std::cout << msg_prefix << "dof: " << dof << std::endl;
-  std::cout << msg_prefix << "ghostAndLocalNodes: " << ghostAndLocalNodes << std::endl;
-  std::cout << msg_prefix << "localNodes: " << localNodes << std::endl;
-  std::cout << msg_prefix << "localToGlobalSorted.size(): " << localToGlobalSorted.size() << std::endl;
+  std::cout << msg_prefix << "dof: " << Dof << std::endl;
+  std::cout << msg_prefix << "ghostAndLocalNodes: " << numGhostAndLocalNodes << std::endl;
+  std::cout << msg_prefix << "localNodes: " << numLocalNodes << std::endl;
   #endif
 
-  // The variables need to be reset at every non-linear iterations
-  // Tpetra is more strict then Epetra in graph allocation and once 
-  // created does not allow any changes unless destroyed and reallocated
-  localToGlobalSorted.clear(); 
-  localToGlobalUnsorted.clear();
-  globalColInd.clear();
-
-  globalDofGIDs.clear();
-  globalGhostDofGIDs.clear();
-  
-
-  // allocate memory for vectors
-  localToGlobalSorted.reserve(numGhostAndLocalNodes);
-  localToGlobalUnsorted.reserve(numGhostAndLocalNodes);
-  globalColInd.reserve(nnz);
-
-  globalDofGIDs.reserve(numGhostAndLocalNodes * dof);
-  globalGhostDofGIDs.reserve(numGhostAndLocalNodes * dof); 
-
-  nnzPerRow.clear (); // for fsils assembly
-  nnzPerRow.reserve(numGhostAndLocalNodes);
-
-  // Define localtoglobal to be used for unqiue partition map
-  //only take ltgSorted(1:numLocalNodes) since those are owned by the processor
-  //
-  for (unsigned i = 0; i < numLocalNodes; ++i)
-  {
-    // any nodes following are ghost nodes so that subset
-    for (int d = 0; d < dof; ++d)
-    {
-      globalDofGIDs.emplace_back(ltgSorted[i] * dof + d);
-    }
-  }
-
-  for (unsigned i = 0; i < numGhostAndLocalNodes; ++i)
-  {
-    localToGlobalSorted.emplace_back(ltgSorted[i]);
-    localToGlobalUnsorted.emplace_back(ltgUnsorted[i]);
-    for (int d = 0; d < dof; ++d)
-    {
-      globalGhostDofGIDs.emplace_back(ltgSorted[i] * dof + d);
-    }
-    nnzPerRow.emplace_back(rowPtr[i+1] - rowPtr[i]);
-  }
-
-  /*
-    Creating a Map for the local nodes owned by the processor
-  */
-  // Create the Tpetra Map (DoF-wise map)
-  trilinos_->Map = Teuchos::rcp(new Tpetra_Map(
-    Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-    Teuchos::arrayView(globalDofGIDs.data(), globalDofGIDs.size()), indexBase, trilinos_->comm));
-  /*
-    Creating a Map for the local nodes owned and shared by the processor
-  */
-  // Create the ghost map — include owned + ghost GIDs
-  trilinos_->ghostMap = Teuchos::rcp(new Tpetra_Map(
-    Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-    Teuchos::arrayView(globalGhostDofGIDs.data(), globalGhostDofGIDs.size()), indexBase, trilinos_->comm));
-
-  /*
-    Graph construction  
-  */
-  // Calculate nnzPerDofRow to pass into graph constructor
-  std::unordered_map<GO, size_t> gidToUnsortedIndex;
-  gidToUnsortedIndex.reserve(ltgUnsorted.size());
-  for (size_t i = 0; i < ltgUnsorted.size(); ++i)
-    gidToUnsortedIndex[ltgUnsorted[i]] = i;
-
-  const LO numLocalDofs = trilinos_->Map->getLocalNumElements();
-  nnzPerDofRow.clear();
-  nnzPerDofRow.reserve(numLocalDofs);
-
-  for (LO lid = 0; lid < numLocalDofs; ++lid)
-  {
-    GO dofGid = trilinos_->Map->getGlobalElement(lid);
-    GO nodeGid = dofGid / dof; 
-    int d = dofGid % dof;
-
-    auto it = gidToUnsortedIndex.find(nodeGid);
-    if (it == gidToUnsortedIndex.end())
-    {
-      std::cerr << "[ERROR] nodeGid " << nodeGid << " not found in ltgUnsorted\n";
-      continue;
-    }
-
-    size_t unsortedIdx = it->second;
-    int numNodeCols = rowPtr[unsortedIdx + 1] - rowPtr[unsortedIdx];
-    nnzPerDofRow.emplace_back(numNodeCols * dof);
-  }
-
-  // Construct graph based on nnz per row
-  //
-  trilinos_->K_graph = Teuchos::rcp(new Tpetra_CrsGraph(trilinos_->Map, nnzPerDofRow));
-
-  unsigned nnzCount = 0; //cumulate count of block nnz per rows
-
-  // Use unsortedltg to map local col ind to global indices
-  //
-  if (globalColInd.size() != nnz) { // only if nnz changed
-    globalColInd.clear(); // destroy
-    for (unsigned i = 0; i < nnz; ++i) {
-      // Convert to global indexing subtract 1 for fortran vs C array indexing
-      globalColInd.emplace_back(ltgUnsorted[colInd[i] - indexBase]);
-    }
-  } 
-  
-  //loop over block rows owned by current proc using localToGlobal index pointer
-  for (size_t i = 0; i < numGhostAndLocalNodes; ++i) {
-      GO nodeGID = ltgUnsorted[i];
-      int numEntries = rowPtr[i+1] - rowPtr[i];
-
-      for (int d = 0; d < dof; ++d) {
-          GO rowGID = nodeGID * dof + d;
-          std::vector<GO> rowCols(numEntries*dof);
-
-          for (int j = 0; j < numEntries; ++j) {
-              GO colNode = globalColInd[nnzCount + j];
-              for (int col_d = 0; col_d < dof; ++col_d)
-                  rowCols[j*dof + col_d] = colNode * dof + col_d;
-          }
-
-          trilinos_->K_graph->insertGlobalIndices(rowGID, rowCols);
-      }
-      nnzCount += numEntries;
-  }
-
-  // by end of iterations nnzCount should equal nnz-otherwise there is an error
-  // Dofs are not counted in nnzCount, so we do not multiply by dof
-  if (nnzCount != nnz)
-  {
-    std::cout << "Number of Entries Entered in Graph does not equal nnz " << std::endl;
-    exit(1);
-  }
-
-  //check if trilinos methods are successful
-  trilinos_->K_graph->fillComplete();
-  if (!trilinos_->K_graph->isFillComplete())
-  {
-    std::cout << "ERROR: fillComplete() did not succeed on Graph" << std::endl;
-    exit(1);
-  }
+  // Maps, importer, and sparsity are equation topology. Reuse them across
+  // Newton iterations; only the matrix values and vectors below are fresh.
+  trilinos_->topology.ensure(
+      trilinos_->comm,
+      numGlobalNodes,
+      numLocalNodes,
+      numGhostAndLocalNodes,
+      nnz,
+      ltgSorted,
+      ltgUnsorted,
+      rowPtr,
+      colInd,
+      Dof,
+      indexBase);
 
   // --- Create block finite element matrix from graph with fillcomplete ------
   // construct matrix from filled graph
-  trilinos_->K = Teuchos::rcp(new Tpetra_CrsMatrix(trilinos_->K_graph));
+  trilinos_->K = Teuchos::rcp(
+      new Tpetra_CrsMatrix(trilinos_->topology.graph()));
 
   //construct RHS force vector F topology
-  trilinos_->F = Teuchos::rcp(new Tpetra_MultiVector(trilinos_->Map, 1));
+  trilinos_->F = Teuchos::rcp(
+      new Tpetra_MultiVector(trilinos_->topology.map(), 1));
 
   //construct RHS force vector ghostF topology
-  trilinos_->ghostF = Teuchos::rcp(new Tpetra_MultiVector(trilinos_->ghostMap, 1));
+  trilinos_->ghostF = Teuchos::rcp(
+      new Tpetra_MultiVector(trilinos_->topology.ghost_map(), 1));
 
   // Construct a boundary vector for each coupled Neumann boundary condition
   trilinos_->bdryVec_list.clear();
   trilinos_->bdryCapVec_list.clear();
   for (int i = 0; i < numCoupledNeumannBC; ++i)
   {
-    trilinos_->bdryVec_list.push_back(Teuchos::rcp(new Tpetra_MultiVector(trilinos_->Map, 1)));
-    trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(new Tpetra_MultiVector(trilinos_->Map, 1)));
+    trilinos_->bdryVec_list.push_back(Teuchos::rcp(
+        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
+    trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(
+        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
   }
 
   // Initialize solution vector which is unique and does not include the ghost
   // indices using the unique map
-  trilinos_->X = Teuchos::rcp(new Tpetra_Vector(trilinos_->Map));
+  trilinos_->X = Teuchos::rcp(
+      new Tpetra_Vector(trilinos_->topology.map()));
 
   //initialize vector which will import the ghost nodes using the ghost map
-  trilinos_->ghostX = Teuchos::rcp(new Tpetra_Vector(trilinos_->ghostMap));
-
-  //Create importer of the two maps
-  trilinos_->Importer = Teuchos::rcp(new Tpetra_Import(trilinos_->Map, trilinos_->ghostMap));
+  trilinos_->ghostX = Teuchos::rcp(
+      new Tpetra_Vector(trilinos_->topology.ghost_map()));
 
 } // trilinos_lhs_create_
 
@@ -346,14 +185,15 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
  */
 void trilinos_doassem_(const Teuchos::RCP<Trilinos> &trilinos_, int &numNodesPerElement, const int *eqN, const double *lK, double *lR)
 {
+  const auto& topology = trilinos_->topology;
+  const int dof = topology.dof();
+  const auto& localToGlobalUnsorted =
+      topology.local_to_global_unsorted();
   #ifdef debug_trilinos_doassem
   std::cout << "[trilinos_doassem_] ========== trilinos_doassem_ ===========" << std::endl;
   std::cout << "[trilinos_doassem_] dof: " << dof << std::endl;
   std::cout << "[trilinos_doassem_] numNodesPerElement: " << numNodesPerElement << std::endl;
   #endif
-
-  //dof values per global ID in the force vector
-  int numValuesPerID = dof;
 
   //converts eqN in local proc values to global values
   std::vector<int> localToGlobal(numNodesPerElement);
@@ -431,9 +271,15 @@ void trilinos_global_solve_(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
         double &solverTime, double &dB, bool &converged, int &lsType,
         double &relTol, int &maxIters, int &kspace, int &precondType)
 {
+  const auto& topology = trilinos_->topology;
+  const int dof = topology.dof();
+  const int ghostAndLocalNodes = topology.ghost_and_local_nodes();
+  const auto& nnzPerRow = topology.nonzeros_per_row();
+  const auto& localToGlobalUnsorted =
+      topology.local_to_global_unsorted();
+  const auto& globalColInd = topology.global_column_indices();
   int nnzCount = 0; //cumulate count of block nnz per rows
   int count = 0;
-  int numValuesPerID = dof; //dof values per id pointer to dof
   std::vector<Scalar_d> values(dof); // holds local matrix entries
   std::vector<GO> colGIDK(dof); // holds global column indices for K
 
@@ -533,7 +379,8 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   // Construct Jacobi scaling vector which uses dirW to take the Dirichlet BC
   // into account
   //
-  Teuchos::RCP<Tpetra_Vector> diagonal = Teuchos::rcp(new Tpetra_Vector(trilinos_->Map));
+  Teuchos::RCP<Tpetra_Vector> diagonal = Teuchos::rcp(
+      new Tpetra_Vector(trilinos_->topology.map()));
   constructJacobiScaling(trilinos_, dirW, *diagonal);
 
   // Compute norm of preconditioned multivector F
@@ -643,7 +490,8 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   trilinos_->X->elementWiseMultiply(1.0, *trilinos_->X, *diagonal, 0.0);
 
   //Fill ghost X with x communicating ghost nodes amongst processors
-  trilinos_->ghostX->doImport(*trilinos_->X, *trilinos_->Importer, Tpetra::INSERT);
+  trilinos_->ghostX->doImport(
+      *trilinos_->X, *trilinos_->topology.importer(), Tpetra::INSERT);
 
   auto localView = trilinos_->ghostX->getLocalViewHost(Tpetra::Access::ReadOnly);
   size_t localLength = trilinos_->ghostX->getLocalLength();
@@ -659,7 +507,7 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   // any preconditioner objects
   trilinos_->ghostF->putScalar(0.0);
   trilinos_->F->putScalar(0.0);
-  if (coupledBC) {
+  if (trilinos_->coupled_boundary) {
     for (auto bdryVec : trilinos_->bdryVec_list)
       bdryVec->putScalar(0.0);
     for (auto bdryCapVec : trilinos_->bdryCapVec_list)
@@ -902,6 +750,10 @@ void checkDiagonalIsZero(const Teuchos::RCP<Trilinos> &trilinos_)
  */
 void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const double *dirW, Tpetra_Vector& diagonal)
 {
+  const auto& topology = trilinos_->topology;
+  const int localNodes = topology.local_nodes();
+  const int dof = topology.dof();
+  const auto& localToGlobalSorted = topology.local_to_global_sorted();
   Teuchos::RCP<const Tpetra_Map> map = diagonal.getMap();
 
   // Start from the Dirichlet mask W_D supplied by svMultiPhysics.  Entries on
@@ -977,7 +829,7 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
   // This is the Trilinos equivalent of FSILS face.valM = face.val * W.  The
   // norms used by the resistance preconditioner must be computed after this
   // step to match FSILS face.nS.
-  if (coupledBC) {
+  if (trilinos_->coupled_boundary) {
     for (auto bdryVec : trilinos_->bdryVec_list) {
       bdryVec->elementWiseMultiply(1.0, diagonal, *bdryVec, 0.0);
     }
@@ -1027,24 +879,28 @@ void logResistancePreconditioner(const Teuchos::RCP<Trilinos> &trilinos_,
 void trilinos_bc_create_(const Teuchos::RCP<Trilinos> &trilinos_,
   const std::vector<Array<double>> &v_list, const std::vector<Array<double>> &vcap_list, bool &isCoupledBC)
 {
-  // store as global to determine which matvec multiply to use in solver
-  coupledBC = isCoupledBC;
+  trilinos_->coupled_boundary = isCoupledBC;
 
   if (isCoupledBC)
   {
+    const auto& topology = trilinos_->topology;
+    const int dof = topology.dof();
+    const int ghostAndLocalNodes = topology.ghost_and_local_nodes();
+    const auto& localToGlobalSorted = topology.local_to_global_sorted();
     // v_list/vcap_list are first built on the local+ghost node layout because
     // outlet faces may be split by MPI partitions.  Exporting ghostMap -> Map
     // with ADD globally sums shared face contributions onto the unique Tpetra
     // map.  This is what makes the later dot products and norms independent of
     // the number of MPI ranks.
-    Tpetra::Export<LO, GO, Node> exporter(trilinos_->ghostMap, trilinos_->Map);
+    Tpetra::Export<LO, GO, Node> exporter(
+        topology.ghost_map(), topology.map());
 
     for (int k = 0; k < v_list.size(); ++k) {
       const double* v = v_list[k].data();
       const double* vcap = vcap_list[k].data();
 
-      Tpetra_MultiVector ghostBdryVec(trilinos_->ghostMap, 1);
-      Tpetra_MultiVector ghostBdryCapVec(trilinos_->ghostMap, 1);
+      Tpetra_MultiVector ghostBdryVec(topology.ghost_map(), 1);
+      Tpetra_MultiVector ghostBdryCapVec(topology.ghost_map(), 1);
       ghostBdryVec.putScalar(0.0);
       ghostBdryCapVec.putScalar(0.0);
 
@@ -1075,6 +931,11 @@ void trilinos_bc_create_(const Teuchos::RCP<Trilinos> &trilinos_,
  */
 void printMatrixToFile(const Teuchos::RCP<Trilinos> &trilinos_)
 {
+  const auto& topology = trilinos_->topology;
+  const int dof = topology.dof();
+  const int ghostAndLocalNodes = topology.ghost_and_local_nodes();
+  const auto& localToGlobalUnsorted =
+      topology.local_to_global_unsorted();
   std::ofstream Kfile("K.txt");
   Kfile << std::scientific;
   Kfile.precision(17);

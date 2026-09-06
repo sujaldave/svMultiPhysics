@@ -41,17 +41,14 @@ Central container holding all Tpetra/Trilinos objects for a linear system solve:
 
 ```cpp
 struct Trilinos {
-  Teuchos::RCP<const Tpetra_Map> Map;           // DOF ownership map (owned nodes only)
-  Teuchos::RCP<const Tpetra_Map> ghostMap;      // DOF map including ghost nodes
+  trilinos_backend::TopologyCache topology;     // Maps, importer, and static graph
   Teuchos::RCP<Tpetra_MultiVector> F;           // RHS vector (owned DOFs)
   Teuchos::RCP<Tpetra_MultiVector> ghostF;      // RHS vector (owned + ghost DOFs)
   Teuchos::RCP<Tpetra_CrsMatrix> K;             // Global stiffness matrix
   Teuchos::RCP<Tpetra_Vector> X;                // Solution vector (owned DOFs)
   Teuchos::RCP<Tpetra_Vector> ghostX;           // Solution vector (owned + ghost)
-  Teuchos::RCP<Tpetra_Import> Importer;         // Import object (ghost communication)
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> bdryVec_list;  // Coupled Neumann BCs
   Teuchos::RCP<const Teuchos::Comm<int>> comm;  // MPI communicator
-  Teuchos::RCP<Tpetra_CrsGraph> K_graph;        // Sparse graph structure
 
   Teuchos::RCP<Tpetra_Operator> MueluPrec;      // MueLu (algebraic multigrid) preconditioner
   Teuchos::RCP<Ifpack2_Preconditioner> ifpackPrec;  // Ifpack2 preconditioner
@@ -59,9 +56,12 @@ struct Trilinos {
 ```
 
 **Ownership model:**
-- `Map`: defines distribution of DOFs across MPI ranks (owned DOFs only, non-overlapping).
-- `ghostMap`: extends `Map` to include ghost DOFs (nodes shared with neighboring ranks).
-- Vectors (`F`, `X`) use `Map`; ghost vectors (`ghostF`, `ghostX`) use `ghostMap`.
+- `topology.map()`: defines distribution of owned DOFs across MPI ranks.
+- `topology.ghost_map()`: includes owned and neighboring ghost DOFs.
+- `topology.graph()` and `topology.importer()` persist with those maps until
+  the equation's structural signature changes.
+- Vectors (`F`, `X`) use the owned map; ghost vectors (`ghostF`, `ghostX`) use
+  the ghost map.
 
 ---
 
@@ -134,7 +134,8 @@ void TrilinosMatVec::apply(const Tpetra_MultiVector& x, Tpetra_MultiVector& y, .
 
 2. **Build sparse graph (`K_graph`):**
    - Compute `nnzPerDofRow`: for each DOF row (using Map ordering), determine number of nonzeros by mapping node GID → unsorted index → `rowPtr` to get node neighbor count, then multiply by `dof`.
-   - Construct `Tpetra_CrsGraph` with pre-allocated `nnzPerDofRow`.
+   - Construct `Tpetra_CrsGraph` with pre-allocated `nnzPerDofRow` on the
+     first allocation or after a topology change.
    - Insert global column indices via `insertGlobalIndices(rowGID, rowCols)` for each DOF row.
    - Call `fillComplete()` to finalize graph (communication, optimization).
 
@@ -297,6 +298,9 @@ where $v_i$ are boundary vectors (normal vectors scaled by resistance coefficien
 ### Allocation Strategy
 
 - Pre-allocate `nnzPerDofRow` for each DOF row (reduces memory overhead).
+- Cache each equation's maps, importer, and fill-complete static graph. Newton
+  iterations allocate only fresh matrix values and vectors unless the complete
+  distribution/connectivity signature changes.
 - For each DOF `d` of node `n`:
   - Find node's neighbor count: `rowPtr[unsortedIdx+1] - rowPtr[unsortedIdx]`.
   - Allocate `neighborCount * dof` entries (because each node-node connection expands to `dof × dof` block).
@@ -368,7 +372,9 @@ Higher-level C++ wrapper (`TrilinosLinearAlgebra::TrilinosImpl`) provides:
 
 2. **Changing graph structure:**
    - Graph is fixed after `fillComplete()`.
-   - To modify: destroy graph (`K_graph = Teuchos::null`), rebuild in `trilinos_lhs_create(...)`.
+   - Pass the updated distribution or connectivity to `alloc()`.
+     `TopologyCache::ensure()` detects the changed signature and atomically
+     replaces the maps, importer, derived assembly metadata, and graph.
 
 3. **Debugging convergence issues:**
    - Enable Belos verbosity: comment out `#define NOOUTPUT` in `trilinos_impl.cpp`.

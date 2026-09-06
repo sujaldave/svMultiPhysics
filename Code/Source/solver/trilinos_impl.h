@@ -101,6 +101,124 @@ using Ifpack2_Preconditioner = Ifpack2::Preconditioner<Scalar_d, LO, GO, Node>;
 /* MueLu preconditioner aliases */
 using MueLu_Preconditioner = Tpetra_Operator;
 
+/**
+ * @namespace trilinos_backend
+ * @brief Internal Tpetra ownership and lifecycle support for svMultiPhysics.
+ */
+namespace trilinos_backend {
+
+/**
+ * @class TopologyCache
+ * @brief Owns equation-local Tpetra maps, importer, and static sparse graph.
+ *
+ * An equation's node distribution and connectivity normally remain unchanged
+ * across Newton iterations and time steps. ensure() compares the complete
+ * structural signature and reuses these expensive Tpetra objects on a match.
+ * Matrix values and solve vectors are intentionally not cached here.
+ */
+class TopologyCache
+{
+  public:
+    /**
+     * @brief Ensure that cached topology matches the supplied equation layout.
+     * @return @c true when the topology was rebuilt, or @c false when reused.
+     * @throws std::runtime_error If dimensions or connectivity are invalid.
+     */
+    bool ensure(
+        const Teuchos::RCP<const Teuchos::Comm<int>>& communicator,
+        int num_global_nodes,
+        int num_local_nodes,
+        int num_ghost_and_local_nodes,
+        int nnz,
+        const Vector<int>& local_to_global_sorted,
+        const Vector<int>& local_to_global_unsorted,
+        const Vector<int>& row_pointer,
+        const Vector<int>& column_indices,
+        int dof,
+        int index_base);
+
+    /// @brief Return whether ensure() has built a valid topology.
+    bool initialized() const;
+
+    /// @brief Return the number of structural graph generations built.
+    std::size_t generation() const;
+
+    /// @brief Return the nodal degree-of-freedom count in the signature.
+    int dof() const;
+
+    /// @brief Return the number of owned nodes on this rank.
+    int local_nodes() const;
+
+    /// @brief Return the number of local-plus-ghost nodes on this rank.
+    int ghost_and_local_nodes() const;
+
+    /// @brief Return the owned scalar-DOF map.
+    const Teuchos::RCP<const Tpetra_Map>& map() const;
+
+    /// @brief Return the local-plus-ghost scalar-DOF map.
+    const Teuchos::RCP<const Tpetra_Map>& ghost_map() const;
+
+    /// @brief Return the fill-complete static scalar sparsity graph.
+    const Teuchos::RCP<Tpetra_CrsGraph>& graph() const;
+
+    /// @brief Return the owned-to-ghost solution importer.
+    const Teuchos::RCP<Tpetra_Import>& importer() const;
+
+    /// @brief Return sorted local-to-global node IDs.
+    const std::vector<int>& local_to_global_sorted() const;
+
+    /// @brief Return unsorted local-to-global node IDs.
+    const std::vector<int>& local_to_global_unsorted() const;
+
+    /// @brief Return global node IDs for each nodal CSR column entry.
+    const std::vector<int>& global_column_indices() const;
+
+    /// @brief Return nodal nonzero counts in unsorted local row order.
+    const std::vector<int>& nonzeros_per_row() const;
+
+  private:
+    bool signature_matches(
+        const Teuchos::RCP<const Teuchos::Comm<int>>& communicator,
+        int num_global_nodes,
+        int num_local_nodes,
+        int num_ghost_and_local_nodes,
+        int nnz,
+        const Vector<int>& local_to_global_sorted,
+        const Vector<int>& local_to_global_unsorted,
+        const Vector<int>& row_pointer,
+        const Vector<int>& column_indices,
+        int dof,
+        int index_base) const;
+
+    bool initialized_ = false;
+    std::size_t generation_ = 0;
+    int communicator_size_ = 0;
+    int communicator_rank_ = 0;
+    int num_global_nodes_ = 0;
+    int num_local_nodes_ = 0;
+    int num_ghost_and_local_nodes_ = 0;
+    int nnz_ = 0;
+    int dof_ = 0;
+    int index_base_ = 0;
+
+    std::vector<int> signature_local_to_global_sorted_;
+    std::vector<int> signature_local_to_global_unsorted_;
+    std::vector<int> signature_row_pointer_;
+    std::vector<int> signature_column_indices_;
+
+    std::vector<int> local_to_global_sorted_;
+    std::vector<int> local_to_global_unsorted_;
+    std::vector<int> global_column_indices_;
+    std::vector<int> nonzeros_per_row_;
+
+    Teuchos::RCP<const Tpetra_Map> map_;
+    Teuchos::RCP<const Tpetra_Map> ghost_map_;
+    Teuchos::RCP<Tpetra_CrsGraph> graph_;
+    Teuchos::RCP<Tpetra_Import> importer_;
+};
+
+} // namespace trilinos_backend
+
 /**************************************************************/
 /*                      Macro Definitions                     */
 /**************************************************************/
@@ -131,14 +249,14 @@ struct Trilinos
     double alpha = 0.0;
   };
 
-  Teuchos::RCP<const Tpetra_Map> Map;
-  Teuchos::RCP<const Tpetra_Map> ghostMap;
+  /// Equation-local maps, importer, graph, and assembly metadata.
+  trilinos_backend::TopologyCache topology;
+
   Teuchos::RCP<Tpetra_MultiVector> F;
   Teuchos::RCP<Tpetra_MultiVector> ghostF;
   Teuchos::RCP<Tpetra_CrsMatrix> K;
   Teuchos::RCP<Tpetra_Vector> X;
   Teuchos::RCP<Tpetra_Vector> ghostX;
-  Teuchos::RCP<Tpetra_Import> Importer;
 
   // One pair of vectors per coupled outlet face.  After construction and
   // Jacobi scaling, bdryVec_list[f] stores sqrt(abs(R_f)) * S_f, where S_f is
@@ -147,7 +265,9 @@ struct Trilinos
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> bdryVec_list;
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> bdryCapVec_list;
   Teuchos::RCP<const Teuchos::Comm<int>> comm;
-  Teuchos::RCP<Tpetra_CrsGraph> K_graph;
+
+  /// Whether the current Jacobian has active coupled Neumann terms.
+  bool coupled_boundary = false;
 
   Teuchos::RCP<Tpetra_Operator> MueluPrec;
   Teuchos::RCP<Ifpack2_Preconditioner> ifpackPrec;

@@ -132,7 +132,6 @@ Teuchos::RCP<Trilinos> make_block_test_state(
 {
   auto state = Teuchos::rcp(new Trilinos());
   state->K = matrix;
-  state->Map = matrix->getRowMap();
   return state;
 }
 
@@ -390,6 +389,78 @@ TEST(TrilinosBipartitionBudget, LeavesCgAsATotalIterationLimit)
   EXPECT_THROW(
       trilinos_bipartition::make_belos_cg_max_iterations(0),
       std::runtime_error);
+}
+
+TEST(TrilinosTopologyCache, ReusesAnUnchangedStaticGraph)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0, 1};
+  Vector<int> unsorted = {0, 1};
+  Vector<int> row_pointer = {0, 2, 4};
+  Vector<int> columns = {0, 1, 0, 1};
+  trilinos_backend::TopologyCache topology;
+
+  EXPECT_TRUE(topology.ensure(
+      communicator, 2, 2, 2, 4,
+      sorted, unsorted, row_pointer, columns, 2, 0));
+  ASSERT_TRUE(topology.initialized());
+  ASSERT_NE(topology.map(), Teuchos::null);
+  ASSERT_NE(topology.graph(), Teuchos::null);
+  ASSERT_NE(topology.importer(), Teuchos::null);
+  const auto* first_map = topology.map().getRawPtr();
+  const auto* first_graph = topology.graph().getRawPtr();
+  const auto* first_importer = topology.importer().getRawPtr();
+
+  EXPECT_FALSE(topology.ensure(
+      communicator, 2, 2, 2, 4,
+      sorted, unsorted, row_pointer, columns, 2, 0));
+  EXPECT_EQ(topology.generation(), 1);
+  EXPECT_EQ(topology.map().getRawPtr(), first_map);
+  EXPECT_EQ(topology.graph().getRawPtr(), first_graph);
+  EXPECT_EQ(topology.importer().getRawPtr(), first_importer);
+}
+
+TEST(TrilinosTopologyCache, RebuildsWhenTheDofLayoutChanges)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0, 1};
+  Vector<int> unsorted = {0, 1};
+  Vector<int> row_pointer = {0, 2, 4};
+  Vector<int> columns = {0, 1, 0, 1};
+  trilinos_backend::TopologyCache topology;
+
+  ASSERT_TRUE(topology.ensure(
+      communicator, 2, 2, 2, 4,
+      sorted, unsorted, row_pointer, columns, 2, 0));
+  const auto* first_graph = topology.graph().getRawPtr();
+
+  EXPECT_TRUE(topology.ensure(
+      communicator, 2, 2, 2, 4,
+      sorted, unsorted, row_pointer, columns, 3, 0));
+  EXPECT_EQ(topology.generation(), 2);
+  EXPECT_EQ(topology.dof(), 3);
+  EXPECT_EQ(topology.map()->getGlobalNumElements(), 6);
+  EXPECT_NE(topology.graph().getRawPtr(), first_graph);
+}
+
+TEST(TrilinosTopologyCache, RejectsInvalidConnectivity)
+{
+  static TpetraBlockTestScope tpetra_scope;
+  auto communicator = Teuchos::rcp(new Teuchos::SerialComm<int>());
+  Vector<int> sorted = {0, 1};
+  Vector<int> unsorted = {0, 1};
+  Vector<int> row_pointer = {0, 1, 2};
+  Vector<int> columns = {0, 2};
+  trilinos_backend::TopologyCache topology;
+
+  EXPECT_THROW(topology.ensure(
+      communicator, 2, 2, 2, 2,
+      sorted, unsorted, row_pointer, columns, 2, 0),
+      std::runtime_error);
+  EXPECT_FALSE(topology.initialized());
+  EXPECT_EQ(topology.generation(), 0);
 }
 
 #endif

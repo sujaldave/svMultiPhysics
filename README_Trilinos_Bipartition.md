@@ -129,8 +129,28 @@ products use Tpetra and its configured Kokkos execution space. Only the small
 RI coefficient solve and final application-facing copy execute explicitly on
 the host.
 
-Solver, block, and preconditioner state is local to one invocation. The new
-files add no mutable file-scope state. The FSILS assembly fallback currently
-reads the legacy Trilinos adapter metadata; replacing that adapter with a
-cached static graph is planned independently and does not change this solver's
-block-system interface.
+Solver, block, and preconditioner state is owned by the equation-level
+Trilinos object. The implementation adds no mutable file-scope state. The
+FSILS assembly fallback reads the same equation-local topology metadata as the
+native Trilinos path and does not change the block-system interface.
+
+### Static Topology Reuse
+
+Each equation-level Trilinos object owns a `trilinos_backend::TopologyCache`.
+The cache retains the owned and ghost maps, solution importer, fill-complete
+`Tpetra::CrsGraph`, and derived assembly mappings across Newton iterations and
+time steps. `alloc()` creates a fresh `Tpetra::CrsMatrix` from that static graph
+and fresh right-hand-side, solution, and boundary vectors, so no Jacobian
+values or residual data survive between solves.
+
+The cache signature includes communicator size and rank, global/local/ghost
+node counts, DOF count, index base, local-to-global maps, CSR row pointers, and
+CSR column indices. Any change rebuilds the maps, importer, derived metadata,
+and graph together. An exact match reuses the same Tpetra objects. This keeps
+cache ownership equation-local and prevents FSI, mesh, or other equations from
+sharing incompatible distributions.
+
+The topology cache is independent of block extraction. The current BIPN path
+still extracts `A`, `B`, `C`, and `L` for each Jacobian because their values
+change. Caching those block graphs or assembling values directly into them is
+a separate optimization.
