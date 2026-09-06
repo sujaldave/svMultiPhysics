@@ -10,6 +10,7 @@
 
 #ifdef WITH_TRILINOS
 
+#include "Tpetra_CrsGraph.hpp"
 #include "Tpetra_Export.hpp"
 
 #include <stdexcept>
@@ -38,16 +39,6 @@ Teuchos::RCP<const Tpetra_Map> make_submap(
       full_map->getComm()));
 }
 
-void insert_global_values(const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
-    GO row_gid,
-    const Teuchos::Array<GO>& columns,
-    const Teuchos::Array<Scalar_d>& values)
-{
-  if (!columns.empty()) {
-    matrix->insertGlobalValues(row_gid, columns(), values());
-  }
-}
-
 Teuchos::RCP<Tpetra_MultiVector> import_to_submap(
     const Tpetra_MultiVector& source,
     const Teuchos::RCP<const Tpetra_Map>& sub_map)
@@ -72,6 +63,443 @@ bool same_map(const Teuchos::RCP<const Tpetra_Map>& left,
 }
 
 } // namespace
+
+class TrilinosNSBlockTopologyCache::Implementation
+{
+  public:
+    using local_matrix_type = Tpetra_CrsMatrix::local_matrix_device_type;
+    using offset_view_type = Kokkos::View<
+        std::size_t*, typename local_matrix_type::device_type>;
+
+    struct ValuePlan
+    {
+      offset_view_type source_offsets;
+      offset_view_type destination_offsets;
+    };
+
+    bool initialized = false;
+    std::size_t generation = 0;
+    std::size_t full_topology_generation = 0;
+    int nsd = 0;
+    int dof = 0;
+    Teuchos::RCP<const Tpetra_Map> full_map;
+    Teuchos::RCP<const Tpetra_Map> velocity_map;
+    Teuchos::RCP<const Tpetra_Map> pressure_map;
+    Teuchos::RCP<Tpetra_CrsGraph> A_graph;
+    Teuchos::RCP<Tpetra_CrsGraph> B_graph;
+    Teuchos::RCP<Tpetra_CrsGraph> C_graph;
+    Teuchos::RCP<Tpetra_CrsGraph> L_graph;
+    Teuchos::RCP<Tpetra_Import> velocity_importer;
+    Teuchos::RCP<Tpetra_Import> pressure_importer;
+    Teuchos::RCP<Tpetra_Export> velocity_exporter;
+    Teuchos::RCP<Tpetra_Export> pressure_exporter;
+    ValuePlan A_plan;
+    ValuePlan B_plan;
+    ValuePlan C_plan;
+    ValuePlan L_plan;
+
+    bool matches(const Tpetra_CrsMatrix& matrix,
+        std::size_t topology_generation, int new_nsd, int new_dof) const
+    {
+      return initialized &&
+        full_topology_generation == topology_generation &&
+        nsd == new_nsd && dof == new_dof &&
+        same_map(full_map, matrix.getRowMap());
+    }
+
+    static ValuePlan make_value_plan(
+        const std::vector<std::size_t>& source,
+        const std::vector<std::size_t>& destination,
+        const char* label)
+    {
+      if (source.size() != destination.size()) {
+        throw std::runtime_error(
+            "[TrilinosNSBlockTopologyCache] ERROR: invalid value-copy plan.");
+      }
+
+      ValuePlan plan;
+      plan.source_offsets = offset_view_type(
+          std::string(label) + "_source", source.size());
+      plan.destination_offsets = offset_view_type(
+          std::string(label) + "_destination", destination.size());
+      auto source_host = Kokkos::create_mirror_view(plan.source_offsets);
+      auto destination_host =
+          Kokkos::create_mirror_view(plan.destination_offsets);
+      for (std::size_t i = 0; i < source.size(); ++i) {
+        source_host(i) = source[i];
+        destination_host(i) = destination[i];
+      }
+      Kokkos::deep_copy(plan.source_offsets, source_host);
+      Kokkos::deep_copy(plan.destination_offsets, destination_host);
+      return plan;
+    }
+
+    static std::size_t find_block_offset(
+        const Tpetra_CrsGraph& graph, GO row_gid, GO column_gid)
+    {
+      const LO row_lid = graph.getRowMap()->getLocalElement(row_gid);
+      const LO column_lid = graph.getColMap()->getLocalElement(column_gid);
+      if (row_lid == Teuchos::OrdinalTraits<LO>::invalid() ||
+          column_lid == Teuchos::OrdinalTraits<LO>::invalid()) {
+        throw std::runtime_error(
+            "[TrilinosNSBlockTopologyCache] ERROR: block graph map lookup failed.");
+      }
+
+      const auto local_graph = graph.getLocalGraphHost();
+      const auto begin = local_graph.row_map(row_lid);
+      const auto end = local_graph.row_map(row_lid + 1);
+      for (std::size_t entry = begin; entry < end; ++entry) {
+        if (local_graph.entries(entry) == column_lid) {
+          return entry;
+        }
+      }
+      throw std::runtime_error(
+          "[TrilinosNSBlockTopologyCache] ERROR: block graph entry lookup failed.");
+    }
+
+    static void refresh_values(
+        const Tpetra_CrsMatrix& source,
+        Tpetra_CrsMatrix& destination,
+        const ValuePlan& plan,
+        const char* label)
+    {
+      const auto source_matrix = source.getLocalMatrixDevice();
+      auto destination_matrix = destination.getLocalMatrixDevice();
+      const auto source_offsets = plan.source_offsets;
+      const auto destination_offsets = plan.destination_offsets;
+      const std::size_t count = source_offsets.extent(0);
+      Kokkos::parallel_for(
+          label,
+          Kokkos::RangePolicy<typename Node::execution_space>(0, count),
+          KOKKOS_LAMBDA(const std::size_t i) {
+            destination_matrix.values(destination_offsets(i)) =
+                source_matrix.values(source_offsets(i));
+          });
+    }
+
+    void reset()
+    {
+      initialized = false;
+      full_topology_generation = 0;
+      nsd = 0;
+      dof = 0;
+      full_map = Teuchos::null;
+      velocity_map = Teuchos::null;
+      pressure_map = Teuchos::null;
+      A_graph = Teuchos::null;
+      B_graph = Teuchos::null;
+      C_graph = Teuchos::null;
+      L_graph = Teuchos::null;
+      velocity_importer = Teuchos::null;
+      pressure_importer = Teuchos::null;
+      velocity_exporter = Teuchos::null;
+      pressure_exporter = Teuchos::null;
+      A_plan = ValuePlan{};
+      B_plan = ValuePlan{};
+      C_plan = ValuePlan{};
+      L_plan = ValuePlan{};
+    }
+};
+
+TrilinosNSBlockTopologyCache::TrilinosNSBlockTopologyCache() :
+  implementation_(new Implementation())
+{
+}
+
+TrilinosNSBlockTopologyCache::~TrilinosNSBlockTopologyCache() = default;
+
+bool TrilinosNSBlockTopologyCache::ensure(
+    const Tpetra_CrsMatrix& full_matrix,
+    std::size_t full_topology_generation,
+    int nsd,
+    int dof)
+{
+  if (!full_matrix.isFillComplete()) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: full matrix must be fill complete.");
+  }
+  if (nsd <= 0 || dof <= nsd) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: require dof > nsd > 0.");
+  }
+  if (implementation_->matches(
+          full_matrix, full_topology_generation, nsd, dof)) {
+    return false;
+  }
+
+  implementation_->reset();
+  auto& cache = *implementation_;
+  cache.full_topology_generation = full_topology_generation;
+  cache.nsd = nsd;
+  cache.dof = dof;
+  cache.full_map = full_matrix.getRowMap();
+  const auto local_gids = cache.full_map->getLocalElementList();
+  const GO index_base = cache.full_map->getIndexBase();
+
+  std::vector<GO> velocity_gids;
+  std::vector<GO> pressure_gids;
+  velocity_gids.reserve(local_gids.size());
+  pressure_gids.reserve(local_gids.size());
+  for (const GO gid : local_gids) {
+    const int component = dof_component(gid, index_base, dof);
+    if (component < nsd) {
+      velocity_gids.push_back(gid);
+    } else if (component == nsd) {
+      pressure_gids.push_back(gid);
+    }
+  }
+
+  cache.velocity_map = make_submap(cache.full_map, velocity_gids);
+  cache.pressure_map = make_submap(cache.full_map, pressure_gids);
+  const std::size_t max_entries = static_cast<std::size_t>(
+      full_matrix.getGlobalMaxNumRowEntries());
+  cache.A_graph = Teuchos::rcp(
+      new Tpetra_CrsGraph(cache.velocity_map, max_entries));
+  cache.B_graph = Teuchos::rcp(
+      new Tpetra_CrsGraph(cache.velocity_map, max_entries));
+  cache.C_graph = Teuchos::rcp(
+      new Tpetra_CrsGraph(cache.pressure_map, max_entries));
+  cache.L_graph = Teuchos::rcp(
+      new Tpetra_CrsGraph(cache.pressure_map, max_entries));
+
+  const auto full_local_graph =
+      full_matrix.getCrsGraph()->getLocalGraphHost();
+  const auto full_column_map = full_matrix.getColMap();
+  for (std::size_t local_row = 0;
+       local_row < full_matrix.getLocalNumRows(); ++local_row) {
+    const GO row_gid = cache.full_map->getGlobalElement(
+        static_cast<LO>(local_row));
+    const int row_component = dof_component(row_gid, index_base, dof);
+    const bool row_is_velocity = row_component < nsd;
+    const bool row_is_pressure = row_component == nsd;
+    if (!row_is_velocity && !row_is_pressure) {
+      continue;
+    }
+
+    Teuchos::Array<GO> velocity_columns;
+    Teuchos::Array<GO> pressure_columns;
+    const std::size_t begin = full_local_graph.row_map(local_row);
+    const std::size_t end = full_local_graph.row_map(local_row + 1);
+    for (std::size_t entry = begin; entry < end; ++entry) {
+      const GO column_gid = full_column_map->getGlobalElement(
+          full_local_graph.entries(entry));
+      const int component = dof_component(column_gid, index_base, dof);
+      if (component < nsd) {
+        velocity_columns.push_back(column_gid);
+      } else if (component == nsd) {
+        pressure_columns.push_back(column_gid);
+      }
+    }
+    if (row_is_velocity) {
+      if (!velocity_columns.empty()) {
+        cache.A_graph->insertGlobalIndices(row_gid, velocity_columns());
+      }
+      if (!pressure_columns.empty()) {
+        cache.B_graph->insertGlobalIndices(row_gid, pressure_columns());
+      }
+    } else {
+      if (!velocity_columns.empty()) {
+        cache.C_graph->insertGlobalIndices(row_gid, velocity_columns());
+      }
+      if (!pressure_columns.empty()) {
+        cache.L_graph->insertGlobalIndices(row_gid, pressure_columns());
+      }
+    }
+  }
+
+  cache.A_graph->fillComplete(cache.velocity_map, cache.velocity_map);
+  cache.B_graph->fillComplete(cache.pressure_map, cache.velocity_map);
+  cache.C_graph->fillComplete(cache.velocity_map, cache.pressure_map);
+  cache.L_graph->fillComplete(cache.pressure_map, cache.pressure_map);
+
+  cache.velocity_importer = Teuchos::rcp(
+      new Tpetra_Import(cache.full_map, cache.velocity_map));
+  cache.pressure_importer = Teuchos::rcp(
+      new Tpetra_Import(cache.full_map, cache.pressure_map));
+  cache.velocity_exporter = Teuchos::rcp(
+      new Tpetra_Export(cache.velocity_map, cache.full_map));
+  cache.pressure_exporter = Teuchos::rcp(
+      new Tpetra_Export(cache.pressure_map, cache.full_map));
+
+  std::vector<std::size_t> A_source, A_destination;
+  std::vector<std::size_t> B_source, B_destination;
+  std::vector<std::size_t> C_source, C_destination;
+  std::vector<std::size_t> L_source, L_destination;
+  for (std::size_t local_row = 0;
+       local_row < full_matrix.getLocalNumRows(); ++local_row) {
+    const GO row_gid = cache.full_map->getGlobalElement(
+        static_cast<LO>(local_row));
+    const int row_component = dof_component(row_gid, index_base, dof);
+    const bool row_is_velocity = row_component < nsd;
+    const bool row_is_pressure = row_component == nsd;
+    if (!row_is_velocity && !row_is_pressure) {
+      continue;
+    }
+    const std::size_t begin = full_local_graph.row_map(local_row);
+    const std::size_t end = full_local_graph.row_map(local_row + 1);
+    for (std::size_t entry = begin; entry < end; ++entry) {
+      const GO column_gid = full_column_map->getGlobalElement(
+          full_local_graph.entries(entry));
+      const int column_component =
+          dof_component(column_gid, index_base, dof);
+      const bool column_is_velocity = column_component < nsd;
+      const bool column_is_pressure = column_component == nsd;
+      if (row_is_velocity && column_is_velocity) {
+        A_source.push_back(entry);
+        A_destination.push_back(Implementation::find_block_offset(
+            *cache.A_graph, row_gid, column_gid));
+      } else if (row_is_velocity && column_is_pressure) {
+        B_source.push_back(entry);
+        B_destination.push_back(Implementation::find_block_offset(
+            *cache.B_graph, row_gid, column_gid));
+      } else if (row_is_pressure && column_is_velocity) {
+        C_source.push_back(entry);
+        C_destination.push_back(Implementation::find_block_offset(
+            *cache.C_graph, row_gid, column_gid));
+      } else if (row_is_pressure && column_is_pressure) {
+        L_source.push_back(entry);
+        L_destination.push_back(Implementation::find_block_offset(
+            *cache.L_graph, row_gid, column_gid));
+      }
+    }
+  }
+
+  cache.A_plan = Implementation::make_value_plan(
+      A_source, A_destination, "svmp_ns_A_plan");
+  cache.B_plan = Implementation::make_value_plan(
+      B_source, B_destination, "svmp_ns_B_plan");
+  cache.C_plan = Implementation::make_value_plan(
+      C_source, C_destination, "svmp_ns_C_plan");
+  cache.L_plan = Implementation::make_value_plan(
+      L_source, L_destination, "svmp_ns_L_plan");
+  cache.initialized = true;
+  ++cache.generation;
+  return true;
+}
+
+bool TrilinosNSBlockTopologyCache::initialized() const
+{
+  return implementation_->initialized;
+}
+
+std::size_t TrilinosNSBlockTopologyCache::generation() const
+{
+  return implementation_->generation;
+}
+
+const Teuchos::RCP<const Tpetra_Map>&
+TrilinosNSBlockTopologyCache::velocity_map() const
+{
+  return implementation_->velocity_map;
+}
+
+const Teuchos::RCP<const Tpetra_Map>&
+TrilinosNSBlockTopologyCache::pressure_map() const
+{
+  return implementation_->pressure_map;
+}
+
+TrilinosNSBlockSystem TrilinosNSBlockTopologyCache::create_system(
+    const Teuchos::RCP<Trilinos>& trilinos) const
+{
+  if (!implementation_->initialized || trilinos == Teuchos::null ||
+      trilinos->K == Teuchos::null ||
+      !same_map(implementation_->full_map, trilinos->K->getRowMap())) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: cache and Trilinos state are incompatible.");
+  }
+
+  const auto& cache = *implementation_;
+  TrilinosNSBlockSystem system;
+  system.velocity_map = cache.velocity_map;
+  system.pressure_map = cache.pressure_map;
+  system.A = Teuchos::rcp(new Tpetra_CrsMatrix(cache.A_graph));
+  system.B = Teuchos::rcp(new Tpetra_CrsMatrix(cache.B_graph));
+  system.C = Teuchos::rcp(new Tpetra_CrsMatrix(cache.C_graph));
+  system.L = Teuchos::rcp(new Tpetra_CrsMatrix(cache.L_graph));
+  system.A->fillComplete(cache.velocity_map, cache.velocity_map);
+  system.B->fillComplete(cache.pressure_map, cache.velocity_map);
+  system.C->fillComplete(cache.velocity_map, cache.pressure_map);
+  system.L->fillComplete(cache.pressure_map, cache.pressure_map);
+  Implementation::refresh_values(
+      *trilinos->K, *system.A, cache.A_plan, "svmp_ns_refresh_A");
+  Implementation::refresh_values(
+      *trilinos->K, *system.B, cache.B_plan, "svmp_ns_refresh_B");
+  Implementation::refresh_values(
+      *trilinos->K, *system.C, cache.C_plan, "svmp_ns_refresh_C");
+  Implementation::refresh_values(
+      *trilinos->K, *system.L, cache.L_plan, "svmp_ns_refresh_L");
+  Kokkos::fence("svmp_ns_block_value_refresh");
+
+  system.boundary_vectors.reserve(trilinos->bdryVec_list.size());
+  for (const auto& vector : trilinos->bdryVec_list) {
+    system.boundary_vectors.push_back(
+        vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
+  }
+  system.boundary_cap_vectors.reserve(trilinos->bdryCapVec_list.size());
+  for (const auto& vector : trilinos->bdryCapVec_list) {
+    system.boundary_cap_vectors.push_back(
+        vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
+  }
+  return system;
+}
+
+Teuchos::RCP<Tpetra_MultiVector>
+TrilinosNSBlockTopologyCache::extract_velocity(
+    const Tpetra_MultiVector& source) const
+{
+  if (!implementation_->initialized ||
+      !same_map(source.getMap(), implementation_->full_map)) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: velocity import map mismatch.");
+  }
+  auto target = Teuchos::rcp(new Tpetra_MultiVector(
+      implementation_->velocity_map, source.getNumVectors()));
+  target->doImport(
+      source, *implementation_->velocity_importer, Tpetra::INSERT);
+  return target;
+}
+
+Teuchos::RCP<Tpetra_MultiVector>
+TrilinosNSBlockTopologyCache::extract_pressure(
+    const Tpetra_MultiVector& source) const
+{
+  if (!implementation_->initialized ||
+      !same_map(source.getMap(), implementation_->full_map)) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: pressure import map mismatch.");
+  }
+  auto target = Teuchos::rcp(new Tpetra_MultiVector(
+      implementation_->pressure_map, source.getNumVectors()));
+  target->doImport(
+      source, *implementation_->pressure_importer, Tpetra::INSERT);
+  return target;
+}
+
+void TrilinosNSBlockTopologyCache::scatter(
+    const Tpetra_MultiVector& velocity,
+    const Tpetra_MultiVector& pressure,
+    const Teuchos::RCP<Tpetra_Vector>& full_vector) const
+{
+  if (!implementation_->initialized || full_vector == Teuchos::null ||
+      !same_map(full_vector->getMap(), implementation_->full_map) ||
+      !same_map(velocity.getMap(), implementation_->velocity_map) ||
+      !same_map(pressure.getMap(), implementation_->pressure_map) ||
+      velocity.getNumVectors() != 1 || pressure.getNumVectors() != 1) {
+    throw std::runtime_error(
+        "[TrilinosNSBlockTopologyCache] ERROR: scatter map or column mismatch.");
+  }
+  full_vector->putScalar(0.0);
+  full_vector->doExport(
+      velocity, *implementation_->velocity_exporter, Tpetra::INSERT);
+  full_vector->doExport(
+      pressure, *implementation_->pressure_exporter, Tpetra::INSERT);
+}
+
+void TrilinosNSBlockTopologyCache::clear()
+{
+  implementation_->reset();
+}
 
 MomentumOperator::MomentumOperator(
     const Teuchos::RCP<Tpetra_CrsMatrix>& A,
@@ -236,122 +664,26 @@ TrilinosNSBlockSystem build_trilinos_ns_block_system(
     throw std::runtime_error(
         "[TrilinosNSBlockOperators] ERROR: full matrix must be non-null and fill complete.");
   }
-  if (nsd <= 0 || dof <= nsd) {
+  TrilinosNSBlockTopologyCache cache;
+  cache.ensure(*trilinos->K, 1, nsd, dof);
+  return cache.create_system(trilinos);
+}
+
+TrilinosNSBlockSystem build_trilinos_ns_block_system(
+    const Teuchos::RCP<Trilinos>& trilinos,
+    int nsd,
+    int dof,
+    std::size_t full_topology_generation,
+    TrilinosNSBlockTopologyCache& cache)
+{
+  if (trilinos == Teuchos::null || trilinos->K == Teuchos::null ||
+      !trilinos->K->isFillComplete()) {
     throw std::runtime_error(
-        "[TrilinosNSBlockOperators] ERROR: require dof > nsd > 0.");
+        "[TrilinosNSBlockOperators] ERROR: full matrix must be non-null and fill complete.");
   }
-
-  const auto full_map = trilinos->K->getRowMap();
-  const auto local_gids = full_map->getLocalElementList();
-  const GO index_base = full_map->getIndexBase();
-
-  std::vector<GO> velocity_gids;
-  std::vector<GO> pressure_gids;
-  velocity_gids.reserve(local_gids.size());
-  pressure_gids.reserve(local_gids.size());
-
-  for (const GO gid : local_gids) {
-    const int component = dof_component(gid, index_base, dof);
-    if (component < nsd) {
-      velocity_gids.push_back(gid);
-    } else if (component == nsd) {
-      pressure_gids.push_back(gid);
-    }
-  }
-
-  TrilinosNSBlockSystem system;
-  system.velocity_map = make_submap(full_map, velocity_gids);
-  system.pressure_map = make_submap(full_map, pressure_gids);
-
-  const size_t max_entries = static_cast<size_t>(
-      trilinos->K->getGlobalMaxNumRowEntries());
-  system.A = Teuchos::rcp(
-      new Tpetra_CrsMatrix(system.velocity_map, max_entries));
-  system.B = Teuchos::rcp(
-      new Tpetra_CrsMatrix(system.velocity_map, max_entries));
-  system.C = Teuchos::rcp(
-      new Tpetra_CrsMatrix(system.pressure_map, max_entries));
-  system.L = Teuchos::rcp(
-      new Tpetra_CrsMatrix(system.pressure_map, max_entries));
-
-  for (const GO row_gid : local_gids) {
-    const int row_component = dof_component(row_gid, index_base, dof);
-    const bool row_is_velocity = row_component < nsd;
-    const bool row_is_pressure = row_component == nsd;
-    if (!row_is_velocity && !row_is_pressure) {
-      continue;
-    }
-
-    const size_t row_entries =
-      trilinos->K->getNumEntriesInGlobalRow(row_gid);
-    Tpetra_CrsMatrix::nonconst_global_inds_host_view_type columns(
-        "svmp_ns_block_columns", row_entries);
-    Tpetra_CrsMatrix::nonconst_values_host_view_type values(
-        "svmp_ns_block_values", row_entries);
-    size_t num_entries = 0;
-    trilinos->K->getGlobalRowCopy(
-        row_gid, columns, values, num_entries);
-
-    Teuchos::Array<GO> A_columns;
-    Teuchos::Array<Scalar_d> A_values;
-    Teuchos::Array<GO> B_columns;
-    Teuchos::Array<Scalar_d> B_values;
-    Teuchos::Array<GO> C_columns;
-    Teuchos::Array<Scalar_d> C_values;
-    Teuchos::Array<GO> L_columns;
-    Teuchos::Array<Scalar_d> L_values;
-
-    for (size_t entry = 0; entry < num_entries; ++entry) {
-      const GO column_gid = columns(entry);
-      const int column_component =
-        dof_component(column_gid, index_base, dof);
-      const bool column_is_velocity = column_component < nsd;
-      const bool column_is_pressure = column_component == nsd;
-
-      if (row_is_velocity && column_is_velocity) {
-        A_columns.push_back(column_gid);
-        A_values.push_back(values(entry));
-      } else if (row_is_velocity && column_is_pressure) {
-        B_columns.push_back(column_gid);
-        B_values.push_back(values(entry));
-      } else if (row_is_pressure && column_is_velocity) {
-        C_columns.push_back(column_gid);
-        C_values.push_back(values(entry));
-      } else if (row_is_pressure && column_is_pressure) {
-        L_columns.push_back(column_gid);
-        L_values.push_back(values(entry));
-      }
-    }
-
-    if (row_is_velocity) {
-      insert_global_values(system.A, row_gid, A_columns, A_values);
-      insert_global_values(system.B, row_gid, B_columns, B_values);
-    } else {
-      insert_global_values(system.C, row_gid, C_columns, C_values);
-      insert_global_values(system.L, row_gid, L_columns, L_values);
-    }
-  }
-
-  system.A->fillComplete(system.velocity_map, system.velocity_map);
-  system.B->fillComplete(system.pressure_map, system.velocity_map);
-  system.C->fillComplete(system.velocity_map, system.pressure_map);
-  system.L->fillComplete(system.pressure_map, system.pressure_map);
-
-  system.boundary_vectors.reserve(trilinos->bdryVec_list.size());
-  for (const auto& vector : trilinos->bdryVec_list) {
-    system.boundary_vectors.push_back(
-        vector == Teuchos::null ? Teuchos::null :
-        import_to_submap(*vector, system.velocity_map));
-  }
-
-  system.boundary_cap_vectors.reserve(trilinos->bdryCapVec_list.size());
-  for (const auto& vector : trilinos->bdryCapVec_list) {
-    system.boundary_cap_vectors.push_back(
-        vector == Teuchos::null ? Teuchos::null :
-        import_to_submap(*vector, system.velocity_map));
-  }
-
-  return system;
+  cache.ensure(
+      *trilinos->K, full_topology_generation, nsd, dof);
+  return cache.create_system(trilinos);
 }
 
 Teuchos::RCP<Tpetra_MultiVector> extract_subvector(

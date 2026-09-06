@@ -14,6 +14,7 @@
 
 #include "trilinos_impl.h"
 
+#include <memory>
 #include <vector>
 
 /**
@@ -55,6 +56,88 @@ struct TrilinosNSBlockSystem
 
   /// Projection-only cap vectors restricted to velocity DOFs.
   std::vector<Teuchos::RCP<Tpetra_MultiVector>> boundary_cap_vectors;
+};
+
+/**
+ * @class TrilinosNSBlockTopologyCache
+ * @brief Caches equation-local NS block maps, graphs, and communication plans.
+ *
+ * The scalar equation topology is normally invariant across Newton iterations.
+ * This cache derives the velocity/pressure topology once for each full-matrix
+ * topology generation. Each Jacobian then receives fresh block matrices whose
+ * values are copied into the cached local CRS ordering on the active Kokkos
+ * execution space. Matrix values and solve vectors are deliberately not
+ * retained between Jacobians.
+ *
+ * One cache must belong to exactly one equation-level Trilinos backend. It is
+ * not thread-safe for concurrent mutation, but independent equation caches may
+ * be used concurrently.
+ */
+class TrilinosNSBlockTopologyCache
+{
+  public:
+    TrilinosNSBlockTopologyCache();
+    ~TrilinosNSBlockTopologyCache();
+
+    TrilinosNSBlockTopologyCache(
+        const TrilinosNSBlockTopologyCache&) = delete;
+    TrilinosNSBlockTopologyCache& operator=(
+        const TrilinosNSBlockTopologyCache&) = delete;
+
+    /**
+     * @brief Ensure that the cached split topology matches a full NS matrix.
+     * @param full_matrix Fill-complete scalar Jacobian.
+     * @param full_topology_generation Generation of its equation topology.
+     * @param nsd Number of velocity components.
+     * @param dof Number of scalar degrees of freedom per node.
+     * @return @c true when maps, graphs, and plans were rebuilt.
+     */
+    bool ensure(
+        const Tpetra_CrsMatrix& full_matrix,
+        std::size_t full_topology_generation,
+        int nsd,
+        int dof);
+
+    /// @brief Return whether a valid split topology has been built.
+    bool initialized() const;
+
+    /// @brief Return the number of split-topology generations built.
+    std::size_t generation() const;
+
+    /// @brief Return the cached velocity map.
+    const Teuchos::RCP<const Tpetra_Map>& velocity_map() const;
+
+    /// @brief Return the cached pressure map.
+    const Teuchos::RCP<const Tpetra_Map>& pressure_map() const;
+
+    /**
+     * @brief Create fresh A/B/C/L matrices and refresh their values on device.
+     * @param trilinos Full-system matrix and coupled-boundary vectors.
+     * @return A per-Jacobian block system backed by cached static graphs.
+     */
+    TrilinosNSBlockSystem create_system(
+        const Teuchos::RCP<Trilinos>& trilinos) const;
+
+    /// @brief Import a full vector through the cached velocity plan.
+    Teuchos::RCP<Tpetra_MultiVector> extract_velocity(
+        const Tpetra_MultiVector& source) const;
+
+    /// @brief Import a full vector through the cached pressure plan.
+    Teuchos::RCP<Tpetra_MultiVector> extract_pressure(
+        const Tpetra_MultiVector& source) const;
+
+    /// @brief Export disjoint block corrections through cached plans.
+    void scatter(
+        const Tpetra_MultiVector& velocity,
+        const Tpetra_MultiVector& pressure,
+        const Teuchos::RCP<Tpetra_Vector>& full_vector) const;
+
+    /// @brief Release all Tpetra and Kokkos objects before finalization.
+    void clear();
+
+  private:
+    class Implementation;
+    std::unique_ptr<Implementation> implementation_;
 };
 
 /**
@@ -176,6 +259,22 @@ TrilinosNSBlockSystem build_trilinos_ns_block_system(
     const Teuchos::RCP<Trilinos>& trilinos,
     int nsd,
     int dof);
+
+/**
+ * @brief Split an NS Jacobian while reusing equation-local block topology.
+ * @param trilinos Equation-level Trilinos state.
+ * @param nsd Number of velocity components.
+ * @param dof Number of scalar degrees of freedom per node.
+ * @param full_topology_generation Generation of the full scalar topology.
+ * @param cache Equation-owned block topology cache.
+ * @return Fresh block values on cached maps and graphs.
+ */
+TrilinosNSBlockSystem build_trilinos_ns_block_system(
+    const Teuchos::RCP<Trilinos>& trilinos,
+    int nsd,
+    int dof,
+    std::size_t full_topology_generation,
+    TrilinosNSBlockTopologyCache& cache);
 
 /**
  * @brief Import selected global IDs from a full vector into a submap.

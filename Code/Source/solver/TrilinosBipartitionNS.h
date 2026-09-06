@@ -71,6 +71,8 @@ class TrilinosBipartitionNSSolver
      * @param time_step Current svMultiPhysics time-step index.
      * @param momentum_muelu_cache Equation-local momentum AMG cache.
      * @param pressure_muelu_cache Equation-local pressure AMG cache.
+     * @param block_topology_cache Equation-local velocity/pressure topology
+     *        and communication-plan cache.
      */
     TrilinosBipartitionNSSolver(
         const Teuchos::RCP<Trilinos>& trilinos,
@@ -80,7 +82,9 @@ class TrilinosBipartitionNSSolver
         const Teuchos::RCP<preconditioners::MueLuReuseCache>&
             momentum_muelu_cache,
         const Teuchos::RCP<preconditioners::MueLuReuseCache>&
-            pressure_muelu_cache);
+            pressure_muelu_cache,
+        const Teuchos::RCP<TrilinosNSBlockTopologyCache>&
+            block_topology_cache);
 
     /**
      * @brief Solve a system assembled directly through Tpetra.
@@ -125,6 +129,8 @@ class TrilinosBipartitionNSSolver
         momentum_muelu_cache_;        ///< Momentum AMG hierarchy cache.
     Teuchos::RCP<preconditioners::MueLuReuseCache>
         pressure_muelu_cache_;        ///< Pressure AMG hierarchy cache.
+    Teuchos::RCP<TrilinosNSBlockTopologyCache>
+        block_topology_cache_;        ///< Static block topology and plans.
 };
 
 } // namespace trilinos_bipartition

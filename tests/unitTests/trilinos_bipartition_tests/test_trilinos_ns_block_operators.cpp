@@ -174,6 +174,73 @@ TEST(TrilinosNSBlockOperators, SplitsThreeDimensionalNodalBlocks)
   EXPECT_DOUBLE_EQ(matrix_value(*blocks.C, 7, 5), 706.0);
 }
 
+TEST(TrilinosNSBlockTopologyCache, ReusesTopologyAndRefreshesValues)
+{
+  const auto map = make_serial_map(6);
+  auto state = make_block_test_state(make_dense_matrix(map, 6));
+  trilinos_bipartition::TrilinosNSBlockTopologyCache cache;
+
+  EXPECT_TRUE(cache.ensure(*state->K, 4, 2, 3));
+  const auto first = cache.create_system(state);
+  const auto* velocity_map = first.velocity_map.getRawPtr();
+  const auto* pressure_map = first.pressure_map.getRawPtr();
+  const auto* A_graph = first.A->getCrsGraph().getRawPtr();
+  const auto* B_graph = first.B->getCrsGraph().getRawPtr();
+  EXPECT_DOUBLE_EQ(matrix_value(*first.A, 0, 4), 5.0);
+  EXPECT_DOUBLE_EQ(matrix_value(*first.B, 0, 5), 6.0);
+
+  state->K->scale(2.0);
+  EXPECT_FALSE(cache.ensure(*state->K, 4, 2, 3));
+  const auto second = cache.create_system(state);
+
+  EXPECT_EQ(cache.generation(), 1);
+  EXPECT_EQ(second.velocity_map.getRawPtr(), velocity_map);
+  EXPECT_EQ(second.pressure_map.getRawPtr(), pressure_map);
+  EXPECT_EQ(second.A->getCrsGraph().getRawPtr(), A_graph);
+  EXPECT_EQ(second.B->getCrsGraph().getRawPtr(), B_graph);
+  EXPECT_DOUBLE_EQ(matrix_value(*second.A, 0, 4), 10.0);
+  EXPECT_DOUBLE_EQ(matrix_value(*second.B, 0, 5), 12.0);
+  EXPECT_DOUBLE_EQ(matrix_value(*second.C, 2, 3), 408.0);
+  EXPECT_DOUBLE_EQ(matrix_value(*second.L, 2, 5), 412.0);
+}
+
+TEST(TrilinosNSBlockTopologyCache, RebuildsForNewFullTopologyGeneration)
+{
+  const auto map = make_serial_map(6);
+  auto state = make_block_test_state(make_dense_matrix(map, 6));
+  trilinos_bipartition::TrilinosNSBlockTopologyCache cache;
+
+  ASSERT_TRUE(cache.ensure(*state->K, 1, 2, 3));
+  const auto first = cache.create_system(state);
+  const auto* first_graph = first.A->getCrsGraph().getRawPtr();
+
+  EXPECT_TRUE(cache.ensure(*state->K, 2, 2, 3));
+  const auto second = cache.create_system(state);
+  EXPECT_EQ(cache.generation(), 2);
+  EXPECT_NE(second.A->getCrsGraph().getRawPtr(), first_graph);
+}
+
+TEST(TrilinosNSBlockTopologyCache, ReusesImportAndExportSemantics)
+{
+  const auto map = make_serial_map(3);
+  auto state = make_block_test_state(make_three_by_three_ns_matrix(map));
+  trilinos_bipartition::TrilinosNSBlockTopologyCache cache;
+  ASSERT_TRUE(cache.ensure(*state->K, 1, 2, 3));
+  const auto full = make_vector(map, {{0, 4.0}, {1, 5.0}, {2, 6.0}});
+
+  const auto velocity = cache.extract_velocity(*full);
+  const auto pressure = cache.extract_pressure(*full);
+  EXPECT_DOUBLE_EQ(vector_value(*velocity, 0), 4.0);
+  EXPECT_DOUBLE_EQ(vector_value(*velocity, 1), 5.0);
+  EXPECT_DOUBLE_EQ(vector_value(*pressure, 2), 6.0);
+
+  auto scattered = Teuchos::rcp(new Tpetra_Vector(map));
+  cache.scatter(*velocity, *pressure, scattered);
+  EXPECT_DOUBLE_EQ(vector_value(*scattered, 0), 4.0);
+  EXPECT_DOUBLE_EQ(vector_value(*scattered, 1), 5.0);
+  EXPECT_DOUBLE_EQ(vector_value(*scattered, 2), 6.0);
+}
+
 TEST(TrilinosNSBlockOperators, AppliesMomentumAndResistanceSchurOperators)
 {
   const auto map = make_serial_map(3);

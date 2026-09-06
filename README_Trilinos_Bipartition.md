@@ -42,6 +42,8 @@ rejects `trilinos-resistance`, which is a velocity-space operator.
 - `trilinos_backend::LocalAssemblyBuffer` accumulates native element tensors
   in overlapping local CRS storage and flushes them once per Jacobian.
 - `TrilinosBipartitionNSSolver` owns one Jacobian solve and the RI loop.
+- `TrilinosNSBlockTopologyCache` owns equation-local velocity/pressure maps,
+  static `A/B/C/L` graphs, value-copy offsets, and block communication plans.
 - `TrilinosNSBlockSystem` owns velocity/pressure maps and `A`, `B`, `C`, `L`.
 - `MomentumOperator` applies `A` plus coupled-outlet Jacobian terms.
 - `TrilinosResistanceOperator` applies the outlet transform `Q_R`.
@@ -206,8 +208,27 @@ and graph together. An exact match reuses the same Tpetra objects. This keeps
 cache ownership equation-local and prevents FSI, mesh, or other equations from
 sharing incompatible distributions.
 
-The topology cache is independent of block extraction. The current BIPN path
-still extracts `A`, `B`, `C`, and `L` for each Jacobian because their values
-change. MueLu may reuse hierarchy structure across those newly extracted
-matrices only after checking the time-step, topology, map, and matrix-shape
-signatures. Caching the block graphs themselves is a separate optimization.
+The scalar topology cache and `TrilinosNSBlockTopologyCache` have separate
+responsibilities. The scalar cache describes the complete equation, while the
+block cache derives and retains the velocity/pressure split. On its first use
+for a scalar topology generation, the block cache:
+
+1. Creates the velocity and pressure maps using the original scalar global
+   IDs.
+2. Builds and fill-completes the static `A`, `B`, `C`, and `L` graphs.
+3. Creates full-to-block importers and block-to-full exporters.
+4. Computes local CRS offset pairs from each full-matrix entry to its block
+   entry and stores those pairs in Kokkos device views.
+
+For every Jacobian, the solver constructs fresh matrices from the four cached
+graphs and copies only values from the full matrix into their local device CRS
+arrays. It does not rebuild submaps, globally insert block entries, or repeat
+graph `fillComplete()`. Boundary vectors and residuals use the cached import
+plans, and the final correction uses cached export plans. A changed scalar
+topology generation or incompatible `nsd`/`dof` split rebuilds the complete
+block cache.
+
+This lifetime deliberately differs from MueLu reuse. Block graph topology may
+persist across time steps, while numerical block values are refreshed for
+every Jacobian. MueLu then applies its per-time-step RAP policy to those fresh
+matrices after checking topology, map, and matrix-shape signatures.

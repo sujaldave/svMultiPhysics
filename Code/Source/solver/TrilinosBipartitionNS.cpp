@@ -307,17 +307,20 @@ TrilinosBipartitionNSSolver::TrilinosBipartitionNSSolver(
     const Teuchos::RCP<preconditioners::MueLuReuseCache>&
         momentum_muelu_cache,
     const Teuchos::RCP<preconditioners::MueLuReuseCache>&
-        pressure_muelu_cache) :
+        pressure_muelu_cache,
+    const Teuchos::RCP<TrilinosNSBlockTopologyCache>&
+        block_topology_cache) :
   trilinos_(trilinos),
   nsd_(nsd),
   dof_(dof),
   time_step_(time_step),
   momentum_muelu_cache_(momentum_muelu_cache),
-  pressure_muelu_cache_(pressure_muelu_cache)
+  pressure_muelu_cache_(pressure_muelu_cache),
+  block_topology_cache_(block_topology_cache)
 {
-  if (trilinos_ == Teuchos::null) {
+  if (trilinos_ == Teuchos::null || block_topology_cache_ == Teuchos::null) {
     throw std::runtime_error(
-        "[TrilinosBipartitionNS] ERROR: Trilinos state is null.");
+        "[TrilinosBipartitionNS] ERROR: Trilinos state or block cache is null.");
   }
 }
 
@@ -446,7 +449,9 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       new Tpetra_Vector(trilinos_->topology.map()));
   constructJacobiScaling(trilinos_, dirichlet_weights, *diagonal);
 
-  auto blocks = build_trilinos_ns_block_system(trilinos_, nsd_, dof_);
+  auto blocks = build_trilinos_ns_block_system(
+      trilinos_, nsd_, dof_, trilinos_->topology.generation(),
+      *block_topology_cache_);
   auto momentum = Teuchos::rcp(new MomentumOperator(
       blocks.A, blocks.boundary_vectors, blocks.boundary_cap_vectors));
   auto resistance = Teuchos::rcp(new TrilinosResistanceOperator(
@@ -490,8 +495,8 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       Teuchos::null,
       pressure_reuse);
 
-  auto initial_momentum = extract_subvector(*trilinos_->F, blocks.velocity_map);
-  auto initial_continuity = extract_subvector(*trilinos_->F, blocks.pressure_map);
+  auto initial_momentum = block_topology_cache_->extract_velocity(*trilinos_->F);
+  auto initial_continuity = block_topology_cache_->extract_pressure(*trilinos_->F);
   auto momentum_residual = clone_shape(*initial_momentum);
   auto continuity_residual = clone_shape(*initial_continuity);
   momentum_residual->update(1.0, *initial_momentum, 0.0);
@@ -511,7 +516,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
     Tpetra_MultiVector zero_pressure(blocks.pressure_map, 1);
     zero_velocity.putScalar(0.0);
     zero_pressure.putScalar(0.0);
-    scatter_subvectors_to_full_vector(
+    block_topology_cache_->scatter(
         zero_velocity, zero_pressure, trilinos_->X);
     copy_solution_to_host(trilinos_, solution);
     linear_solver.RI.suc = true;
@@ -741,7 +746,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
     }
   }
 
-  scatter_subvectors_to_full_vector(
+  block_topology_cache_->scatter(
       *velocity_solution, *pressure_solution, trilinos_->X);
   trilinos_->X->elementWiseMultiply(
       1.0, *trilinos_->X, *diagonal, 0.0);
