@@ -20,6 +20,31 @@ namespace trilinos_bipartition {
 
 namespace {
 
+using NSLocalMatrixDevice = Tpetra_CrsMatrix::local_matrix_device_type;
+using NSOffsetView = Kokkos::View<
+    std::size_t*, typename NSLocalMatrixDevice::device_type>;
+
+/**
+ * @brief Copy selected CRS values between device-local Tpetra matrices.
+ *
+ * A named namespace-scope functor avoids CUDA's restriction on extended
+ * host/device lambdas declared inside private nested implementation classes.
+ */
+struct CopyCrsValuesFunctor
+{
+  NSLocalMatrixDevice source_matrix;
+  NSLocalMatrixDevice destination_matrix;
+  NSOffsetView source_offsets;
+  NSOffsetView destination_offsets;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const std::size_t i) const
+  {
+    destination_matrix.values(destination_offsets(i)) =
+        source_matrix.values(source_offsets(i));
+  }
+};
+
 int dof_component(GO gid, GO index_base, int dof)
 {
   int component = static_cast<int>((gid - index_base) % dof);
@@ -68,9 +93,7 @@ bool same_map(const Teuchos::RCP<const Tpetra_Map>& left,
 class TrilinosNSBlockTopologyCache::Implementation
 {
   public:
-    using local_matrix_type = Tpetra_CrsMatrix::local_matrix_device_type;
-    using offset_view_type = Kokkos::View<
-        std::size_t*, typename local_matrix_type::device_type>;
+    using offset_view_type = NSOffsetView;
 
     struct ValuePlan
     {
@@ -172,10 +195,11 @@ class TrilinosNSBlockTopologyCache::Implementation
       Kokkos::parallel_for(
           label,
           Kokkos::RangePolicy<typename Node::execution_space>(0, count),
-          KOKKOS_LAMBDA(const std::size_t i) {
-            destination_matrix.values(destination_offsets(i)) =
-                source_matrix.values(source_offsets(i));
-          });
+          CopyCrsValuesFunctor{
+              source_matrix,
+              destination_matrix,
+              source_offsets,
+              destination_offsets});
     }
 
     void reset()
