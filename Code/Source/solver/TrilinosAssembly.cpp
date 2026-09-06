@@ -109,12 +109,17 @@ bool LocalAssemblyBuffer::flush(
   }
 
   // These device views trigger one bulk synchronization of the host-written
-  // matrix and RHS. No synchronization occurs inside the element loop.
-  const auto local_matrix_device = overlap_matrix_->getLocalMatrixDevice();
-  const auto local_rhs_device =
-      ghost_rhs.getLocalViewDevice(Tpetra::Access::ReadOnly);
-  (void)local_matrix_device;
-  (void)local_rhs_device;
+  // matrix and RHS. Destroy them before calling Tpetra operations that may
+  // access the same graph metadata on host; WrappedDualView forbids host
+  // access while a device graph view remains alive.
+  {
+    const auto local_matrix_device = overlap_matrix_->getLocalMatrixDevice();
+    const auto local_rhs_device =
+        ghost_rhs.getLocalViewDevice(Tpetra::Access::ReadOnly);
+    (void)local_matrix_device;
+    (void)local_rhs_device;
+    Kokkos::fence("svmp_trilinos_assembly_host_to_device");
+  }
 
   if (owned_matrix.isFillComplete()) {
     throw std::runtime_error(
