@@ -167,6 +167,7 @@ set(CSRCS
   FsilsLinearAlgebra.h FsilsLinearAlgebra.cpp
   PetscLinearAlgebra.h PetscLinearAlgebra.cpp
   TrilinosLinearAlgebra.h TrilinosLinearAlgebra.cpp
+  TrilinosBipartitionNS.h TrilinosBipartitionNS.cpp
   TrilinosNSBlockOperators.h TrilinosNSBlockOperators.cpp
   TrilinosPreconditionerFactory.h TrilinosPreconditionerFactory.cpp
   TrilinosResistanceOperator.h TrilinosResistanceOperator.cpp

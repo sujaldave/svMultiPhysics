@@ -6,11 +6,13 @@
 #ifdef WITH_TRILINOS
 
 #include "TrilinosNSBlockOperators.h"
+#include "TrilinosBipartitionNS.h"
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 
 #include "Teuchos_DefaultSerialComm.hpp"
 
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -346,6 +348,48 @@ TEST(TrilinosPreconditionerFactory, AttachesExistingHandleToBelos)
 
   EXPECT_EQ(problem->getLeftPrec().getRawPtr(),
       handle->left_operator().getRawPtr());
+}
+
+TEST(TrilinosBipartitionBudget, PreservesFsilsRestartCycles)
+{
+  const auto budget =
+      trilinos_bipartition::make_belos_gmres_budget(10, 300);
+
+  EXPECT_EQ(budget.maximum_iterations, 3000);
+  EXPECT_EQ(budget.num_blocks, 300);
+  EXPECT_EQ(budget.maximum_restarts, 9);
+}
+
+TEST(TrilinosBipartitionBudget, SupportsSingleOneDimensionalCycle)
+{
+  const auto budget =
+      trilinos_bipartition::make_belos_gmres_budget(1, 1);
+
+  EXPECT_EQ(budget.maximum_iterations, 1);
+  EXPECT_EQ(budget.num_blocks, 1);
+  EXPECT_EQ(budget.maximum_restarts, 0);
+}
+
+TEST(TrilinosBipartitionBudget, RejectsInvalidAndOverflowingBudgets)
+{
+  EXPECT_THROW(
+      trilinos_bipartition::make_belos_gmres_budget(0, 10),
+      std::runtime_error);
+  EXPECT_THROW(
+      trilinos_bipartition::make_belos_gmres_budget(10, 0),
+      std::runtime_error);
+  EXPECT_THROW(
+      trilinos_bipartition::make_belos_gmres_budget(
+          std::numeric_limits<int>::max(), 2),
+      std::runtime_error);
+}
+
+TEST(TrilinosBipartitionBudget, LeavesCgAsATotalIterationLimit)
+{
+  EXPECT_EQ(trilinos_bipartition::make_belos_cg_max_iterations(300), 300);
+  EXPECT_THROW(
+      trilinos_bipartition::make_belos_cg_max_iterations(0),
+      std::runtime_error);
 }
 
 #endif

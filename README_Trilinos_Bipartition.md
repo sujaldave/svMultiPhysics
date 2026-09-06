@@ -1,0 +1,136 @@
+# Trilinos Navier-Stokes Bi-Partition Solver
+
+## Purpose
+
+The Trilinos Navier-Stokes bi-partition solver mirrors the legacy FSILS RI
+algorithm using Tpetra sparse operators and Belos inner solvers. It is selected
+only when an equation uses both `LS type="NS"` and Trilinos linear algebra.
+FSILS and non-NS Trilinos solve paths are unchanged.
+
+## XML Configuration
+
+```xml
+<LS type="NS">
+  <Linear_algebra type="trilinos">
+    <GMRES_Preconditioner> trilinos-resistance </GMRES_Preconditioner>
+    <CG_Preconditioner> trilinos-diagonal </CG_Preconditioner>
+  </Linear_algebra>
+  <Max_iterations> 15 </Max_iterations>
+  <NS_GM_max_iterations> 10 </NS_GM_max_iterations>
+  <NS_CG_max_iterations> 300 </NS_CG_max_iterations>
+  <Tolerance> 0.2 </Tolerance>
+  <NS_GM_tolerance> 1e-3 </NS_GM_tolerance>
+  <NS_CG_tolerance> 0.02 </NS_CG_tolerance>
+  <Krylov_space_dimension> 300 </Krylov_space_dimension>
+</LS>
+```
+
+`GMRES_Preconditioner` controls both momentum GMRES solves.
+`CG_Preconditioner` controls the pressure Schur CG solve. Missing tags default
+to `trilinos-diagonal`.
+
+Both fields use the existing Trilinos preconditioner registry. The momentum
+field accepts `trilinos-diagonal`, `trilinos-blockjacobi`, `trilinos-ilu`,
+`trilinos-ilut`, `trilinos-riluk0`, `trilinos-riluk1`, `trilinos-ml`, and
+`trilinos-resistance`. The pressure field accepts the algebraic options but
+rejects `trilinos-resistance`, which is a velocity-space operator.
+
+## Components
+
+- `TrilinosBipartitionNSSolver` owns one Jacobian solve and the RI loop.
+- `TrilinosNSBlockSystem` owns velocity/pressure maps and `A`, `B`, `C`, `L`.
+- `MomentumOperator` applies `A` plus coupled-outlet Jacobian terms.
+- `TrilinosResistanceOperator` applies the outlet transform `Q_R`.
+- `PressureSchurOperator` applies the matrix-free operator
+  `L + B^T Q_R B`.
+- `TrilinosPreconditionerFactory` constructs reusable Ifpack2, MueLu, or
+  resistance handles and attaches them to Belos problems.
+
+All solver-facing types except the shared resistance operator live in the
+`trilinos_bipartition` namespace. The resistance operator is also used by the
+existing monolithic Trilinos solver.
+
+## Matrix And Vector Flow
+
+The full scalar Jacobian retains the original global ID
+`node*dof + component`. Block extraction creates:
+
+- A velocity map for components `0 <= component < nsd`.
+- A pressure map for component `nsd`.
+- `A`: velocity row and velocity column.
+- `B`: velocity row and pressure column.
+- `C`: pressure row and velocity column.
+- `L`: pressure row and pressure column.
+
+The full residual is imported into velocity and pressure subvectors. The final
+corrections are exported back into the disjoint full-system entries, right
+scaled by the existing Jacobi factor, imported to ghost nodes, and copied into
+the legacy node/DOF result ordering.
+
+Native Tpetra assembly and the existing FSILS assembly fallback both feed this
+same block solver. The fallback preserves the established nodal CSR traversal
+and lifts its assembled values and residual into the full Tpetra system before
+block extraction.
+
+## RI Solver Flow
+
+Each RI iteration performs:
+
+1. Momentum predictor: solve `A_m U = R_m` with Belos Block GMRES, where
+   `A_m` includes coupled-boundary Jacobian contributions.
+2. Pressure right-hand side: form `R_c - C U`.
+3. Pressure correction: solve `(L + B^T Q_R B) P = R_c - C U` with Belos
+   Pseudoblock CG.
+4. Momentum correction: solve `A_m U = R_m - B P` with the same GMRES setup.
+5. Apply the block images, assemble the RI Gram system with distributed
+   Tpetra dot products, and solve that small dense system on the host.
+6. Update the residual basis, convergence state, and final correction.
+
+One momentum and one pressure preconditioner are constructed after extracting
+the blocks. The same two handles are attached to fresh Belos linear problems
+throughout all RI iterations for that Jacobian. They are destroyed after the
+correction is scattered. Reuse across Newton iterations or time steps is a
+separate optimization and is not performed by this implementation.
+
+## Resistance Semantics
+
+For every active resistance or RCR outlet, the pressure Schur action includes
+`Q_R` regardless of the selected momentum preconditioner. Selecting
+`trilinos-resistance` for GMRES additionally attaches that velocity-space
+operator as the momentum left preconditioner. Other momentum policies attach
+only their selected Ifpack2 or MueLu operator.
+
+Cap vectors participate in the outlet scalar projection but not in its update
+vector, matching the FSILS convention.
+
+## GMRES Budgeting
+
+FSILS interprets `NS_GM_max_iterations` as a count of complete restarted-GMRES
+cycles. Belos uses a total iteration limit, so the solver translates:
+
+```text
+Maximum Iterations = NS_GM_max_iterations * Krylov_space_dimension
+Num Blocks         = Krylov_space_dimension
+Maximum Restarts   = NS_GM_max_iterations - 1
+```
+
+Thus `10` cycles with a Krylov dimension of `300` permit at most `3000` Belos
+iterations and `9` restarts. Invalid and overflowing budgets are rejected.
+`NS_CG_max_iterations` remains the total pressure-CG iteration limit.
+
+The FSILS absolute and relative stopping rules are preserved by passing Belos
+an effective relative tolerance equal to
+`max(relative_tolerance, absolute_tolerance / ||b||_2)` for a nonzero RHS.
+
+## Portability And Ownership
+
+Sparse products, block operator composition, vector updates, norms, and dot
+products use Tpetra and its configured Kokkos execution space. Only the small
+RI coefficient solve and final application-facing copy execute explicitly on
+the host.
+
+Solver, block, and preconditioner state is local to one invocation. The new
+files add no mutable file-scope state. The FSILS assembly fallback currently
+reads the legacy Trilinos adapter metadata; replacing that adapter with a
+cached static graph is planned independently and does not change this solver's
+block-system interface.

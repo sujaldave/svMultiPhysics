@@ -14,6 +14,7 @@
 
 #include "trilinos_impl.h"
 #include "ComMod.h"
+#include "TrilinosBipartitionNS.h"
 #include "TrilinosResistanceOperator.h"
 #include <cmath>
 #include <fstream>
@@ -1403,6 +1404,20 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve(ComMod& com_mod, eqType& lEq, co
     throw std::runtime_error("[TrilinosLinearAlgebra::solve] ERROR: '" + prec_name + "' is not a valid Trilinos preconditioner.");
   }
 
+  if (lEq.ls.LS_type == consts::SolverType::lSolver_NS) {
+    trilinos_bipartition::TrilinosBipartitionNSSolver ns_solver(
+        trilinos_, com_mod.nsd, com_mod.dof);
+    ns_solver.solve_fsils_assembled(
+        lEq, Val.data(), R.data(), R_.data(), W_.data());
+
+    for (int a = 0; a < com_mod.tnNo; ++a) {
+      for (int i = 0; i < com_mod.R.nrows(); ++i) {
+        com_mod.R(i, a) = R_(i, com_mod.lhs.map(a));
+      }
+    }
+    return;
+  }
+
   trilinos_global_solve_(trilinos_, Val.data(), R.data(), R_.data(), W_.data(), lEq.FSILS.RI.fNorm,
       lEq.FSILS.RI.iNorm, lEq.FSILS.RI.itr, lEq.FSILS.RI.callD, lEq.FSILS.RI.dB, lEq.FSILS.RI.suc,
       solver_type, lEq.FSILS.RI.relTol, lEq.FSILS.RI.mItr, lEq.FSILS.RI.sD, prec_type);
@@ -1438,6 +1453,19 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqTyp
   }
 
   init_dir_and_coup_neu(com_mod, incL, res);
+
+  if (lEq.ls.LS_type == consts::SolverType::lSolver_NS) {
+    trilinos_bipartition::TrilinosBipartitionNSSolver ns_solver(
+        trilinos_, com_mod.nsd, com_mod.dof);
+    ns_solver.solve_assembled(lEq, R_.data(), W_.data());
+
+    for (int a = 0; a < com_mod.tnNo; ++a) {
+      for (int i = 0; i < com_mod.R.nrows(); ++i) {
+        com_mod.R(i, a) = R_(i, com_mod.lhs.map(a));
+      }
+    }
+    return;
+  }
 
   trilinos_solve_(trilinos_, R_.data(), W_.data(), lEq.FSILS.RI.fNorm, lEq.FSILS.RI.iNorm, 
       lEq.FSILS.RI.itr, lEq.FSILS.RI.callD, lEq.FSILS.RI.dB, lEq.FSILS.RI.suc, 
