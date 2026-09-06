@@ -48,7 +48,7 @@ rejects `trilinos-resistance`, which is a velocity-space operator.
 - `MomentumOperator` applies `A` plus coupled-outlet Jacobian terms.
 - `TrilinosResistanceOperator` applies the outlet transform `Q_R`.
 - `PressureSchurOperator` applies the matrix-free operator
-  `L + B^T Q_R B`.
+  `L + B^T Q_R B` and reuses instance-owned apply workspace.
 - `TrilinosPreconditionerFactory` constructs reusable Ifpack2, MueLu, or
   resistance handles and attaches them to Belos problems.
 - `MueLuReuseCache` retains one role-specific AMG hierarchy across Newton
@@ -180,6 +180,12 @@ Sparse products, block operator composition, vector updates, norms, and dot
 products use Tpetra and its configured Kokkos execution space. Only the small
 RI coefficient solve and final application-facing copy execute explicitly on
 the host.
+
+The pressure Schur operator retains its intermediate velocity, transformed
+velocity, and pressure multivectors for the lifetime of one Jacobian solve.
+Consequently, CG iterations do not repeatedly allocate distributed Tpetra
+vectors. A per-instance mutex protects that mutable workspace; independent
+equations and independent Schur operators do not share state.
 
 Solver, block, and preconditioner state is owned by the equation-level
 Trilinos object. The implementation adds no mutable file-scope state. The

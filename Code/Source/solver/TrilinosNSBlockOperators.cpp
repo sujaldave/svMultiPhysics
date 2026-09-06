@@ -13,6 +13,7 @@
 #include "Tpetra_CrsGraph.hpp"
 #include "Tpetra_Export.hpp"
 
+#include <mutex>
 #include <stdexcept>
 
 namespace trilinos_bipartition {
@@ -587,13 +588,42 @@ Teuchos::RCP<const Tpetra_Map> MomentumOperator::getRangeMap() const
   return A_->getRangeMap();
 }
 
+class PressureSchurOperator::Workspace
+{
+  public:
+    void ensure(const Teuchos::RCP<const Tpetra_Map>& pressure_map,
+        const Teuchos::RCP<const Tpetra_Map>& velocity_map,
+        std::size_t num_vectors)
+    {
+      if (result != Teuchos::null &&
+          result->getNumVectors() == num_vectors) {
+        return;
+      }
+      result = Teuchos::rcp(
+          new Tpetra_MultiVector(pressure_map, num_vectors));
+      velocity = Teuchos::rcp(
+          new Tpetra_MultiVector(velocity_map, num_vectors));
+      transformed_velocity = Teuchos::rcp(
+          new Tpetra_MultiVector(velocity_map, num_vectors));
+      pressure = Teuchos::rcp(
+          new Tpetra_MultiVector(pressure_map, num_vectors));
+    }
+
+    std::mutex mutex;
+    Teuchos::RCP<Tpetra_MultiVector> result;
+    Teuchos::RCP<Tpetra_MultiVector> velocity;
+    Teuchos::RCP<Tpetra_MultiVector> transformed_velocity;
+    Teuchos::RCP<Tpetra_MultiVector> pressure;
+};
+
 PressureSchurOperator::PressureSchurOperator(
     const Teuchos::RCP<Tpetra_CrsMatrix>& L,
     const Teuchos::RCP<Tpetra_CrsMatrix>& B,
     const Teuchos::RCP<Tpetra_Operator>& resistance_operator) :
   L_(L),
   B_(B),
-  resistance_operator_(resistance_operator)
+  resistance_operator_(resistance_operator),
+  workspace_(new Workspace())
 {
   if (L_ == Teuchos::null || B_ == Teuchos::null ||
       !L_->isFillComplete() || !B_->isFillComplete()) {
@@ -613,6 +643,8 @@ PressureSchurOperator::PressureSchurOperator(
   }
 }
 
+PressureSchurOperator::~PressureSchurOperator() = default;
+
 void PressureSchurOperator::apply(const Tpetra_MultiVector& X,
     Tpetra_MultiVector& Y, Teuchos::ETransp mode, Scalar_d alpha,
     Scalar_d beta) const
@@ -626,11 +658,13 @@ void PressureSchurOperator::apply(const Tpetra_MultiVector& X,
         "[PressureSchurOperator] ERROR: input and output column counts differ.");
   }
 
-  Tpetra_MultiVector result(getRangeMap(), X.getNumVectors());
-  Tpetra_MultiVector velocity(B_->getRangeMap(), X.getNumVectors());
-  Tpetra_MultiVector transformed_velocity(
-      B_->getRangeMap(), X.getNumVectors());
-  Tpetra_MultiVector pressure(getRangeMap(), X.getNumVectors());
+  std::lock_guard<std::mutex> lock(workspace_->mutex);
+  workspace_->ensure(
+      getRangeMap(), B_->getRangeMap(), X.getNumVectors());
+  auto& result = *workspace_->result;
+  auto& velocity = *workspace_->velocity;
+  auto& transformed_velocity = *workspace_->transformed_velocity;
+  auto& pressure = *workspace_->pressure;
 
   L_->apply(X, result);
   B_->apply(X, velocity);

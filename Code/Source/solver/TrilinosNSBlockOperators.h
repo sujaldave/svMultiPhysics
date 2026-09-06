@@ -201,6 +201,11 @@ class MomentumOperator final : public Tpetra_Operator
  * ]
  * where $Q_R$ is the resistance transform. A null resistance operator is
  * interpreted as identity, yielding $L+B^TB$.
+ *
+ * Temporary pressure and velocity multivectors are allocated on first use and
+ * reused by subsequent applications with the same column count. Access is
+ * serialized per operator instance so concurrent callers cannot overwrite the
+ * shared workspace.
  */
 class PressureSchurOperator final : public Tpetra_Operator
 {
@@ -215,6 +220,9 @@ class PressureSchurOperator final : public Tpetra_Operator
     PressureSchurOperator(const Teuchos::RCP<Tpetra_CrsMatrix>& L,
         const Teuchos::RCP<Tpetra_CrsMatrix>& B,
         const Teuchos::RCP<Tpetra_Operator>& resistance_operator = Teuchos::null);
+
+    /// @brief Destroy instance-owned Tpetra work vectors.
+    ~PressureSchurOperator() override;
 
     /**
      * @brief Apply $Y=\beta Y+\alpha S_pX$.
@@ -236,9 +244,11 @@ class PressureSchurOperator final : public Tpetra_Operator
     Teuchos::RCP<const Tpetra_Map> getRangeMap() const override;
 
   private:
+    class Workspace;
     Teuchos::RCP<Tpetra_CrsMatrix> L_; ///< Pressure stabilization block.
     Teuchos::RCP<Tpetra_CrsMatrix> B_; ///< Pressure-to-momentum block.
     Teuchos::RCP<Tpetra_Operator> resistance_operator_; ///< Optional velocity transform.
+    mutable std::unique_ptr<Workspace> workspace_; ///< Reused apply temporaries.
 };
 
 /**

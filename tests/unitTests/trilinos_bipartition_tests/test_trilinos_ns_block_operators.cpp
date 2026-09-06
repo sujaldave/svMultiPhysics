@@ -270,6 +270,11 @@ TEST(TrilinosNSBlockOperators, AppliesMomentumAndResistanceSchurOperators)
   Tpetra_MultiVector untransformed_output(blocks.pressure_map, 1);
   schur_without_resistance.apply(*pressure_input, untransformed_output);
   EXPECT_NEAR(vector_value(untransformed_output, 2), 10.0, 1.0e-13);
+  const auto second_pressure_input =
+    make_vector(blocks.pressure_map, {{2, 3.0}});
+  schur_without_resistance.apply(
+      *second_pressure_input, untransformed_output);
+  EXPECT_NEAR(vector_value(untransformed_output, 2), 15.0, 1.0e-13);
 
   std::vector<Trilinos::ResistanceFaceData> face_data(1);
   face_data[0].face_id = 0;
@@ -284,6 +289,24 @@ TEST(TrilinosNSBlockOperators, AppliesMomentumAndResistanceSchurOperators)
   Tpetra_MultiVector pressure_output(blocks.pressure_map, 1);
   schur.apply(*pressure_input, pressure_output);
   EXPECT_NEAR(vector_value(pressure_output, 2), 6.5, 1.0e-13);
+}
+
+TEST(TrilinosNSBlockOperators, ResizesSchurWorkspaceForMultipleVectors)
+{
+  const auto map = make_serial_map(3);
+  auto state = make_block_test_state(make_three_by_three_ns_matrix(map));
+  const auto blocks =
+    trilinos_bipartition::build_trilinos_ns_block_system(state, 2, 3);
+  trilinos_bipartition::PressureSchurOperator schur(blocks.L, blocks.B);
+
+  Tpetra_MultiVector input(blocks.pressure_map, 2);
+  input.getVectorNonConst(0)->replaceGlobalValue(2, 1.0);
+  input.getVectorNonConst(1)->replaceGlobalValue(2, 4.0);
+  Tpetra_MultiVector output(blocks.pressure_map, 2);
+  schur.apply(input, output);
+
+  EXPECT_NEAR(vector_value(*output.getVector(0), 2), 5.0, 1.0e-13);
+  EXPECT_NEAR(vector_value(*output.getVector(1), 2), 20.0, 1.0e-13);
 }
 
 TEST(TrilinosNSBlockOperators, ExtractsAndScattersWithoutHostAssembly)
