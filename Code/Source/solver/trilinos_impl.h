@@ -450,8 +450,8 @@ public:
 void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType, 
   Teuchos::RCP<Belos_LinearProblem>& BelosProblem);
 
-void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner>& MueLuPrec, 
-  const Teuchos::RCP<Tpetra_CrsMatrix>& A);
+void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner>& MueLuPrec,
+  const Teuchos::RCP<Tpetra_CrsMatrix>& A, int dof);
 
 void checkDiagonalIsZero(const Teuchos::RCP<Trilinos> &trilinos_);
 
