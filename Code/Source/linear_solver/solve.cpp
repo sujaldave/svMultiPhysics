@@ -127,7 +127,9 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
       ns_solver::ns_solver(lhs, ls, dof, Val, R);
     break;
 
-    case LinearSolverType::LS_TYPE_GMRES:
+    case LinearSolverType::LS_TYPE_GMRES: {
+      svmp_profiling::ProfilingScope profiling_scope(
+          svmp_profiling::stages::LinearSolve);
       if (dof == 1) {
         auto Valv = Val.row(0);
         auto Rv = R.row(0);
@@ -137,9 +139,12 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
       } else {
         gmres::gmres_v(lhs, ls.RI, dof, Val, R);
       }
+    }
     break;
 
-    case LinearSolverType::LS_TYPE_CG:
+    case LinearSolverType::LS_TYPE_CG: {
+      svmp_profiling::ProfilingScope profiling_scope(
+          svmp_profiling::stages::LinearSolve);
       if (dof == 1) {
         auto Valv = Val.row(0);
         auto Rv = R.row(0);
@@ -149,9 +154,12 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
       } else {
         cgrad::cgrad_v(lhs, ls.RI, dof, Val, R);
       }
+    }
     break;
 
-    case LinearSolverType::LS_TYPE_BICGS:
+    case LinearSolverType::LS_TYPE_BICGS: {
+      svmp_profiling::ProfilingScope profiling_scope(
+          svmp_profiling::stages::LinearSolve);
       if (dof == 1) {
         auto Valv = Val.row(0);
         auto Rv = R.row(0);
@@ -161,6 +169,7 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
       } else {
         bicgs::bicgsv(lhs, ls.RI, dof, Val, R);
       }
+    }
     break;
 
     default:

@@ -347,6 +347,23 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   #endif
   bool flagFassem = isFassem;
 
+  // Distinguishes CPU-Trilinos and GPU-Trilinos in profiling output, and
+  // tags every row from this solve with the active preconditioner. Both are
+  // safe to call every solve since the last call simply wins.
+  svmp_profiling::set_backend_label(
+      std::string("Trilinos-") + Node::execution_space::name());
+  {
+    const auto prec_name_it = consts::preconditioner_type_to_name.find(
+        static_cast<consts::PreconditionerType>(precondType));
+    const std::string prec_name = prec_name_it != consts::preconditioner_type_to_name.end() ?
+        prec_name_it->second : "none";
+    // This monolithic path has one preconditioner, not separate GMRES/CG
+    // roles, so both profiling columns carry the same name.
+    svmp_profiling::set_preconditioner_labels(prec_name, prec_name);
+  }
+
+  svmp_profiling::begin(svmp_profiling::stages::SystemSetup);
+
   // Native assembly stages local and ghost rows in one overlap matrix. Flush
   // it once so Tpetra performs a bulk device synchronization and MPI export.
   trilinos_->local_assembly.flush(
@@ -377,6 +394,8 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   trilinos_->F->norm2(norms());
   initNorm = norms[0];
 
+  svmp_profiling::end(svmp_profiling::stages::SystemSetup);
+
   Teuchos::RCP<TrilinosMatVec> K_bdry = Teuchos::rcp(new TrilinosMatVec(trilinos_));
 
   // Define Belos linear problem if v is 0 does standard matvec product with K
@@ -387,7 +406,9 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   */
   auto BelosProblem = Teuchos::rcp(new Belos_LinearProblem(K_bdry, trilinos_->X, trilinos_->F));
 
+  svmp_profiling::begin(svmp_profiling::stages::PreconditionerSetup);
   setPreconditioner(trilinos_, precondType, BelosProblem);
+  svmp_profiling::end(svmp_profiling::stages::PreconditionerSetup);
 
   bool set = BelosProblem->setProblem();
   if (!set) {
@@ -445,8 +466,10 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   Teuchos::Time timer("Belos Solve Timer");
   timer.start();
 
+  svmp_profiling::begin(svmp_profiling::stages::LinearSolve);
+
   Belos::ReturnType result = solverManager->solve();
-  
+
   timer.stop();
 
   solverTime = timer.totalElapsedTime();
@@ -475,6 +498,10 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   // Convert to decibel scale
   dB = 10.0 * log10(relRes);
 
+  svmp_profiling::end(svmp_profiling::stages::LinearSolve);
+
+  svmp_profiling::begin(svmp_profiling::stages::HostDeviceSynchronization);
+
   //Right scaling so need to multiply x by diagonal
   trilinos_->X->elementWiseMultiply(1.0, *trilinos_->X, *diagonal, 0.0);
 
@@ -491,6 +518,8 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   for (size_t i = 0; i < localLength; ++i) {
     x[i] = localView(i, 0);
   }
+
+  svmp_profiling::end(svmp_profiling::stages::HostDeviceSynchronization);
 
   // Zero out residual and solution vectors, lhs and, if used,
   // any preconditioner objects
@@ -533,7 +562,9 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
     //   ||S_f||^2 and alpha_f = -R_f / (1 + R_f ||S_f||^2).
     // These are logged immediately so the Trilinos and FSILS paths can be
     // compared before Belos starts iterating.
+    svmp_profiling::begin(svmp_profiling::stages::BoundaryCondition);
     resistancePrec->compute();
+    svmp_profiling::end(svmp_profiling::stages::BoundaryCondition);
     trilinos_->resistanceFaces = resistancePrec->resistance_faces();
     trilinos_->resistancePrec = resistancePrec;
 
@@ -592,7 +623,9 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
 
   } else if (precondType == TRILINOS_ML_PRECONDITIONER) {
     checkDiagonalIsZero(trilinos_);
+    svmp_profiling::begin(svmp_profiling::stages::MueLuSetup);
     setMueLuPreconditioner(trilinos_->MueluPrec, trilinos_->K);
+    svmp_profiling::end(svmp_profiling::stages::MueLuSetup);
     BelosProblem->setLeftPrec(trilinos_->MueluPrec);
     return;
   } else {
