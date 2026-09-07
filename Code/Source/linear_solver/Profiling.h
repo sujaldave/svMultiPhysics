@@ -44,6 +44,22 @@ namespace stages {
 /// Safe to call repeatedly (e.g. once per Jacobian); the last call wins.
 void set_backend_label(const std::string& label);
 
+/**
+ * @brief Record which preconditioner is active for the momentum/GMRES and
+ * pressure/CG inner solves, so runs that only differ by preconditioner
+ * choice (e.g. trilinos-ml vs. trilinos-diagonal on the same backend) can
+ * be told apart in the CSV. For FSILS, which configures one preconditioner
+ * for the whole system, pass the same name for both arguments.
+ *
+ * Safe to call repeatedly (e.g. once per Jacobian, since the preconditioner
+ * choice is read from the equation's XML config each solve); the last call
+ * wins. Every row written by write_csv() after this call carries these
+ * labels until they are changed again.
+ */
+void set_preconditioner_labels(
+    const std::string& gmres_preconditioner,
+    const std::string& cg_preconditioner);
+
 /// @brief Start (or resume, if already active) timing a named stage.
 void begin(const std::string& stage);
 
@@ -73,12 +89,12 @@ class ProfilingScope
  * @brief Append this rank's accumulated stage totals to a CSV file.
  *
  * Only MPI rank 0 writes. Columns are:
- * backend,stage,calls,total_seconds,avg_seconds
+ * backend,gmres_preconditioner,cg_preconditioner,stage,calls,total_seconds,avg_seconds
  *
  * A header row is written only when the file does not already exist, so
- * repeated runs (e.g. one per backend under comparison) can all target the
- * same path and accumulate into a single file ready for cross-backend
- * histograms.
+ * repeated runs (e.g. one per backend and/or preconditioner combination
+ * under comparison) can all target the same path and accumulate into a
+ * single file ready for cross-backend and cross-preconditioner histograms.
  */
 void write_csv(const std::string& path);
 

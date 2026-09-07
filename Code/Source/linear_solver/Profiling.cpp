@@ -52,6 +52,18 @@ std::string& backend_label()
   return label;
 }
 
+std::string& gmres_preconditioner_label()
+{
+  static std::string label = "n/a";
+  return label;
+}
+
+std::string& cg_preconditioner_label()
+{
+  static std::string label = "n/a";
+  return label;
+}
+
 int mpi_rank()
 {
   int initialized = 0;
@@ -70,6 +82,15 @@ void set_backend_label(const std::string& label)
 {
   std::lock_guard<std::mutex> lock(registry_mutex());
   backend_label() = label;
+}
+
+void set_preconditioner_labels(
+    const std::string& gmres_preconditioner,
+    const std::string& cg_preconditioner)
+{
+  std::lock_guard<std::mutex> lock(registry_mutex());
+  gmres_preconditioner_label() = gmres_preconditioner;
+  cg_preconditioner_label() = cg_preconditioner;
 }
 
 void begin(const std::string& stage)
@@ -111,11 +132,15 @@ void reset()
 void write_csv(const std::string& path)
 {
   std::map<std::string, StageTotals> totals_copy;
-  std::string label_copy;
+  std::string backend_copy;
+  std::string gmres_prec_copy;
+  std::string cg_prec_copy;
   {
     std::lock_guard<std::mutex> lock(registry_mutex());
     totals_copy = totals();
-    label_copy = backend_label();
+    backend_copy = backend_label();
+    gmres_prec_copy = gmres_preconditioner_label();
+    cg_prec_copy = cg_preconditioner_label();
   }
 
   if (mpi_rank() != 0) {
@@ -134,7 +159,8 @@ void write_csv(const std::string& path)
   }
 
   if (need_header) {
-    out << "backend,stage,calls,total_seconds,avg_seconds\n";
+    out << "backend,gmres_preconditioner,cg_preconditioner,stage,calls,"
+           "total_seconds,avg_seconds\n";
   }
 
   for (const auto& entry : totals_copy) {
@@ -142,7 +168,8 @@ void write_csv(const std::string& path)
     const auto& stage_totals = entry.second;
     const double avg = stage_totals.calls > 0 ?
         stage_totals.total_seconds / stage_totals.calls : 0.0;
-    out << label_copy << "," << stage << "," << stage_totals.calls << ","
+    out << backend_copy << "," << gmres_prec_copy << "," << cg_prec_copy
+        << "," << stage << "," << stage_totals.calls << ","
         << stage_totals.total_seconds << "," << avg << "\n";
   }
 }

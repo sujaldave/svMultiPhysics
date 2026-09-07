@@ -100,6 +100,15 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
 
   svmp_profiling::set_backend_label("FSILS-CPU");
   {
+    const auto prec_name_it = consts::preconditioner_type_to_name.find(prec);
+    const std::string prec_name = prec_name_it != consts::preconditioner_type_to_name.end() ?
+        prec_name_it->second : "unknown";
+    // FSILS configures one preconditioner for the whole system rather than
+    // separate momentum/pressure choices, so both profiling columns carry
+    // the same name.
+    svmp_profiling::set_preconditioner_labels(prec_name, prec_name);
+  }
+  {
     svmp_profiling::ProfilingScope profiling_scope(
         svmp_profiling::stages::PreconditionerSetup);
     if (prec == PreconditionerType::PREC_FSILS) {

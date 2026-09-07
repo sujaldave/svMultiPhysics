@@ -425,6 +425,15 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         "[TrilinosBipartitionNS] ERROR: assembled Tpetra system is incomplete.");
   }
 
+  // Tags every profiling row from this Jacobian with the actual GMRES/CG
+  // preconditioner choice, so runs that only differ by preconditioner (e.g.
+  // trilinos-ml vs. trilinos-diagonal) are distinguishable in the CSV.
+  svmp_profiling::set_preconditioner_labels(
+      consts::preconditioner_type_to_name.at(
+          equation.linear_algebra_gmres_preconditioner),
+      consts::preconditioner_type_to_name.at(
+          equation.linear_algebra_cg_preconditioner));
+
   auto& linear_solver = equation.FSILS;
   linear_solver.RI.suc = false;
   linear_solver.GM.suc = true;
