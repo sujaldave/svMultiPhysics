@@ -8,6 +8,7 @@
 #include "gmres.h"
 #include "ns_solver.h"
 #include "precond.h"
+#include "Profiling.h"
 
 namespace fsi_linear_solver {
 
@@ -97,12 +98,17 @@ void fsils_solve(FSILS_lhsType& lhs, FSILS_lsType& ls, const int dof, Array<doub
   // Modifies Val and R.
   //
 
-  if (prec == PreconditionerType::PREC_FSILS) {
-    precond::precond_diag(lhs, lhs.rowPtr, lhs.colPtr, lhs.diagPtr, dof, Val, R, Wc);
-  } else if (prec == PreconditionerType::PREC_RCS) {
-    precond::precond_rcs(lhs, lhs.rowPtr, lhs.colPtr, lhs.diagPtr, dof, Val, R, Wr, Wc);
-  } else {
-    //PRINT *, "This linear solver and preconditioner combination is not supported."
+  svmp_profiling::set_backend_label("FSILS-CPU");
+  {
+    svmp_profiling::ProfilingScope profiling_scope(
+        svmp_profiling::stages::PreconditionerSetup);
+    if (prec == PreconditionerType::PREC_FSILS) {
+      precond::precond_diag(lhs, lhs.rowPtr, lhs.colPtr, lhs.diagPtr, dof, Val, R, Wc);
+    } else if (prec == PreconditionerType::PREC_RCS) {
+      precond::precond_rcs(lhs, lhs.rowPtr, lhs.colPtr, lhs.diagPtr, dof, Val, R, Wr, Wc);
+    } else {
+      //PRINT *, "This linear solver and preconditioner combination is not supported."
+    }
   }
 
   // Solve for 'R'.

@@ -12,6 +12,7 @@
 
 #include "Tpetra_CrsGraph.hpp"
 #include "Tpetra_Export.hpp"
+#include "Profiling.h"
 
 #include <mutex>
 #include <stdexcept>
@@ -454,7 +455,13 @@ TrilinosNSBlockSystem TrilinosNSBlockTopologyCache::create_system(
       *trilinos->K, *system.C, cache.C_plan, "svmp_ns_refresh_C");
   Implementation::refresh_values(
       *trilinos->K, *system.L, cache.L_plan, "svmp_ns_refresh_L");
-  Kokkos::fence("svmp_ns_block_value_refresh");
+  {
+    // Nested inside the caller's "Block Extraction" scope: isolates the
+    // device-synchronous wait from the (mostly async-launched) kernels above.
+    svmp_profiling::ProfilingScope profiling_scope(
+        svmp_profiling::stages::HostDeviceSynchronization);
+    Kokkos::fence("svmp_ns_block_value_refresh");
+  }
 
   system.boundary_vectors.reserve(trilinos->bdryVec_list.size());
   for (const auto& vector : trilinos->bdryVec_list) {

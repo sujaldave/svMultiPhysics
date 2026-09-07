@@ -20,6 +20,7 @@
 #include "initialize.h"
 #include "ls.h"
 #include "output.h"
+#include "Profiling.h"
 #include "read_files.h"
 #include "read_msh.h"
 #include "remesh.h"
@@ -693,6 +694,11 @@ int main(int argc, char *argv[])
       auto& eq = simulation->com_mod.eq[iEq];
       finalize_linear_algebra(eq);
     }
+
+  // Written once here (rather than inside each backend's own finalization)
+  // so the FSILS, Trilinos-CPU, and Trilinos-GPU paths all produce exactly
+  // one set of rows per run, ready to compare across backends.
+  svmp_profiling::write_csv();
 
   MPI_Finalize();
   return 0;

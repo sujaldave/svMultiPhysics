@@ -14,6 +14,7 @@
 
 #include "trilinos_impl.h"
 #include "ComMod.h"
+#include "Profiling.h"
 #include "TrilinosBipartitionNS.h"
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
@@ -128,6 +129,12 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
 
   trilinos_->comm = Tpetra::getDefaultComm();
 
+  // Distinguishes the CPU-Trilinos and GPU-Trilinos configurations in
+  // profiling output using the actual Kokkos execution space rather than a
+  // compile-time guess.
+  svmp_profiling::set_backend_label(
+      std::string("Trilinos-") + Node::execution_space::name());
+
   #ifdef debug_trilinos_lhs_create
   std::cout <<  msg_prefix << "indexBase: " << indexBase << std::endl;
   std::cout << msg_prefix << "dof: " << Dof << std::endl;
@@ -150,38 +157,43 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
       Dof,
       indexBase);
 
-  // --- Create block finite element matrix from graph with fillcomplete ------
-  // construct matrix from filled graph
-  trilinos_->K = Teuchos::rcp(
-      new Tpetra_CrsMatrix(trilinos_->topology.graph()));
-
-  //construct RHS force vector F topology
-  trilinos_->F = Teuchos::rcp(
-      new Tpetra_MultiVector(trilinos_->topology.map(), 1));
-
-  //construct RHS force vector ghostF topology
-  trilinos_->ghostF = Teuchos::rcp(
-      new Tpetra_MultiVector(trilinos_->topology.ghost_map(), 1));
-
-  // Construct a boundary vector for each coupled Neumann boundary condition
-  trilinos_->bdryVec_list.clear();
-  trilinos_->bdryCapVec_list.clear();
-  for (int i = 0; i < numCoupledNeumannBC; ++i)
   {
-    trilinos_->bdryVec_list.push_back(Teuchos::rcp(
-        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
-    trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(
-        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
+    svmp_profiling::ProfilingScope profiling_scope(
+        svmp_profiling::stages::TpetraAllocation);
+
+    // --- Create block finite element matrix from graph with fillcomplete ------
+    // construct matrix from filled graph
+    trilinos_->K = Teuchos::rcp(
+        new Tpetra_CrsMatrix(trilinos_->topology.graph()));
+
+    //construct RHS force vector F topology
+    trilinos_->F = Teuchos::rcp(
+        new Tpetra_MultiVector(trilinos_->topology.map(), 1));
+
+    //construct RHS force vector ghostF topology
+    trilinos_->ghostF = Teuchos::rcp(
+        new Tpetra_MultiVector(trilinos_->topology.ghost_map(), 1));
+
+    // Construct a boundary vector for each coupled Neumann boundary condition
+    trilinos_->bdryVec_list.clear();
+    trilinos_->bdryCapVec_list.clear();
+    for (int i = 0; i < numCoupledNeumannBC; ++i)
+    {
+      trilinos_->bdryVec_list.push_back(Teuchos::rcp(
+          new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
+      trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(
+          new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
+    }
+
+    // Initialize solution vector which is unique and does not include the ghost
+    // indices using the unique map
+    trilinos_->X = Teuchos::rcp(
+        new Tpetra_Vector(trilinos_->topology.map()));
+
+    //initialize vector which will import the ghost nodes using the ghost map
+    trilinos_->ghostX = Teuchos::rcp(
+        new Tpetra_Vector(trilinos_->topology.ghost_map()));
   }
-
-  // Initialize solution vector which is unique and does not include the ghost
-  // indices using the unique map
-  trilinos_->X = Teuchos::rcp(
-      new Tpetra_Vector(trilinos_->topology.map()));
-
-  //initialize vector which will import the ghost nodes using the ghost map
-  trilinos_->ghostX = Teuchos::rcp(
-      new Tpetra_Vector(trilinos_->topology.ghost_map()));
 
 } // trilinos_lhs_create_
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "TrilinosPreconditionerFactory.h"
+#include "Profiling.h"
 
 /**
  * @file TrilinosPreconditionerFactory.cpp
@@ -354,6 +355,8 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
     copy_with_repaired_diagonal(matrix);
 
   if (type == consts::PreconditionerType::PREC_TRILINOS_ML) {
+    svmp_profiling::ProfilingScope profiling_scope(
+        svmp_profiling::stages::MueLuSetup);
     if (reuse.muelu_cache != Teuchos::null) {
       if (reuse.time_step < 0 || reuse.topology_generation == 0) {
         throw std::runtime_error(

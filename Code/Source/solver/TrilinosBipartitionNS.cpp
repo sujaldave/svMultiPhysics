@@ -5,6 +5,7 @@
 
 #ifdef WITH_TRILINOS
 
+#include "Profiling.h"
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 
@@ -233,6 +234,8 @@ void copy_solution_to_host(
     const Teuchos::RCP<Trilinos>& trilinos,
     double* solution)
 {
+  svmp_profiling::ProfilingScope profiling_scope(
+      svmp_profiling::stages::HostDeviceSynchronization);
   trilinos->ghostX->doImport(
       *trilinos->X, *trilinos->topology.importer(), Tpetra::INSERT);
   const auto local_view =
@@ -433,6 +436,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   linear_solver.GM.dB = 0.0;
   linear_solver.CG.dB = 0.0;
 
+  svmp_profiling::begin(svmp_profiling::stages::SystemSetup);
   trilinos_->local_assembly.flush(
       trilinos_->topology, *trilinos_->K, *trilinos_->ghostF);
   if (!trilinos_->K->isFillComplete()) {
@@ -448,18 +452,24 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   auto diagonal = Teuchos::rcp(
       new Tpetra_Vector(trilinos_->topology.map()));
   constructJacobiScaling(trilinos_, dirichlet_weights, *diagonal);
+  svmp_profiling::end(svmp_profiling::stages::SystemSetup);
 
+  svmp_profiling::begin(svmp_profiling::stages::BlockExtraction);
   auto blocks = build_trilinos_ns_block_system(
       trilinos_, nsd_, dof_, trilinos_->topology.generation(),
       *block_topology_cache_);
+  svmp_profiling::end(svmp_profiling::stages::BlockExtraction);
+
   auto momentum = Teuchos::rcp(new MomentumOperator(
       blocks.A, blocks.boundary_vectors, blocks.boundary_cap_vectors));
+  svmp_profiling::begin(svmp_profiling::stages::BoundaryCondition);
   auto resistance = Teuchos::rcp(new TrilinosResistanceOperator(
       blocks.velocity_map,
       blocks.boundary_vectors,
       blocks.boundary_cap_vectors,
       trilinos_->resistanceFaces));
   resistance->compute();
+  svmp_profiling::end(svmp_profiling::stages::BoundaryCondition);
   auto resistance_operator =
       Teuchos::rcp_implicit_cast<Tpetra_Operator>(resistance);
   auto pressure = Teuchos::rcp(new PressureSchurOperator(
@@ -472,7 +482,10 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   }
 
   // These are the only two preconditioner constructions for this Jacobian.
-  // Every LinearProblem below attaches one of these existing handles.
+  // Every LinearProblem below attaches one of these existing handles. Any
+  // MueLu build/reuse inside create_preconditioner() is additionally timed
+  // under "MueLu Setup" as a sub-component of "Preconditioner Setup".
+  svmp_profiling::begin(svmp_profiling::stages::PreconditionerSetup);
   preconditioners::PreconditionerReuseContext momentum_reuse;
   momentum_reuse.muelu_cache = momentum_muelu_cache_;
   momentum_reuse.time_step = time_step_;
@@ -494,11 +507,14 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       blocks.L,
       Teuchos::null,
       pressure_reuse);
+  svmp_profiling::end(svmp_profiling::stages::PreconditionerSetup);
 
+  svmp_profiling::begin(svmp_profiling::stages::TpetraAllocation);
   auto initial_momentum = block_topology_cache_->extract_velocity(*trilinos_->F);
   auto initial_continuity = block_topology_cache_->extract_pressure(*trilinos_->F);
   auto momentum_residual = clone_shape(*initial_momentum);
   auto continuity_residual = clone_shape(*initial_continuity);
+  svmp_profiling::end(svmp_profiling::stages::TpetraAllocation);
   momentum_residual->update(1.0, *initial_momentum, 0.0);
   continuity_residual->update(1.0, *initial_continuity, 0.0);
 
@@ -564,6 +580,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
 
     velocity_basis[iteration] = Teuchos::rcp(
         new Tpetra_MultiVector(blocks.velocity_map, 1));
+    svmp_profiling::begin(svmp_profiling::stages::Predictor);
     const auto predictor = solve_with_belos(
         "Block GMRES",
         Teuchos::rcp_implicit_cast<Tpetra_Operator>(momentum),
@@ -574,6 +591,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         linear_solver.GM.absTol,
         linear_solver.GM.mItr,
         linear_solver.GM.sD);
+    svmp_profiling::end(svmp_profiling::stages::Predictor);
     accumulate_inner_solve(linear_solver.GM, predictor);
 
     auto pressure_rhs = Teuchos::rcp(
@@ -583,6 +601,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
 
     pressure_basis[iteration] = Teuchos::rcp(
         new Tpetra_MultiVector(blocks.pressure_map, 1));
+    svmp_profiling::begin(svmp_profiling::stages::LinearSolve);
     const auto cg = solve_with_belos(
         "Pseudoblock CG",
         Teuchos::rcp_implicit_cast<Tpetra_Operator>(pressure),
@@ -593,6 +612,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         linear_solver.CG.absTol,
         linear_solver.CG.mItr,
         linear_solver.CG.sD);
+    svmp_profiling::end(svmp_profiling::stages::LinearSolve);
     accumulate_inner_solve(linear_solver.CG, cg);
 
     momentum_images[pressure_index] = Teuchos::rcp(
@@ -607,6 +627,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
     momentum_images[velocity_index]->update(
         -1.0, *momentum_images[pressure_index], 1.0);
 
+    svmp_profiling::begin(svmp_profiling::stages::LinearSolve);
     const auto correction = solve_with_belos(
         "Block GMRES",
         Teuchos::rcp_implicit_cast<Tpetra_Operator>(momentum),
@@ -617,6 +638,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         linear_solver.GM.absTol,
         linear_solver.GM.mItr,
         linear_solver.GM.sD);
+    svmp_profiling::end(svmp_profiling::stages::LinearSolve);
     accumulate_inner_solve(linear_solver.GM, correction);
 
     momentum->apply(
@@ -722,12 +744,14 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   }
   linear_solver.RI.fNorm = std::sqrt(ri_norm_squared);
 
+  svmp_profiling::begin(svmp_profiling::stages::TpetraAllocation);
   auto velocity_solution = Teuchos::rcp(
       new Tpetra_MultiVector(blocks.velocity_map, 1));
   auto pressure_solution = Teuchos::rcp(
       new Tpetra_MultiVector(blocks.pressure_map, 1));
   velocity_solution->putScalar(0.0);
   pressure_solution->putScalar(0.0);
+  svmp_profiling::end(svmp_profiling::stages::TpetraAllocation);
 
   if (active_basis >= 2) {
     velocity_solution->update(

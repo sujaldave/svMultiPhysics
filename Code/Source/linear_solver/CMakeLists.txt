@@ -43,6 +43,7 @@ set(CSRCS
   omp_la.h omp_la.cpp
   pc_gmres.h pc_gmres.cpp
   precond.h precond.cpp
+  Profiling.h Profiling.cpp
   solve.cpp
   spar_mul.h spar_mul.cpp
 )

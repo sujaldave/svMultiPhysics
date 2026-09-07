@@ -23,6 +23,7 @@
 #include "ustruct.h"
 
 #include <fsils_api.hpp>
+#include "Profiling.h"
 
 #include <math.h>
 
@@ -390,6 +391,9 @@ void global_eq_assem(ComMod& com_mod, CepMod& cep_mod, const mshType& lM, const 
   dmsg << "eq.sym: " << eq.sym;
   dmsg << "eq.phys: " << eq.phys;
   #endif
+
+  svmp_profiling::ProfilingScope profiling_scope(
+      svmp_profiling::stages::ElementAssembly);
 
   switch (eq.phys) {
 

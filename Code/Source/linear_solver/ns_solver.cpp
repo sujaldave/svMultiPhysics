@@ -16,6 +16,7 @@
 #include "ge.h"
 #include "gmres.h"
 #include "norm.h"
+#include "Profiling.h"
 #include "spar_mul.h"
 
 #include "Array3.h"
@@ -149,6 +150,8 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
   double time = fsi_linear_solver::fsils_cpu_t();
   #endif
 
+  svmp_profiling::set_backend_label("FSILS-CPU");
+
   const int nNo = lhs.nNo;
   const int nnz = lhs.nnz;
   const int mynNo = lhs.mynNo;
@@ -167,7 +170,9 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
   Ri.write(msg_prefix+"Ri");
   #endif
 
-  Vector<double> Rc(nNo), Rci(nNo), tmp(nB*nB+nB), tmpG(nB*nB+nB), B(nB), xB(nB), oldxB(nB); 
+  svmp_profiling::begin(svmp_profiling::stages::SystemSetup);
+
+  Vector<double> Rc(nNo), Rci(nNo), tmp(nB*nB+nB), tmpG(nB*nB+nB), B(nB), xB(nB), oldxB(nB);
   Array<double> Rm(nsd,nNo), Rmi(nsd,nNo), A(nB,nB), P(nNo,iB), MP(nNo,nB);
   Array3<double> U(nsd,nNo,iB), MU(nsd,nNo,nB);
 
@@ -209,18 +214,24 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
   dmsg << "ls.RI.fNorm: " << ls.RI.fNorm;
   #endif
 
+  svmp_profiling::end(svmp_profiling::stages::SystemSetup);
+
   Array<double> Gt(nsd,nnz), mK(nsd*nsd,nnz), mG(nsd,nnz), mD(nsd,nnz);
-  Vector<double> mL(nnz); 
+  Vector<double> mL(nnz);
 
   // Store sections of the 'Val' array into separate arrays: 'Gt', 'mK', etc.
   //
   // Modfies: Gt, mK, mG, mD, and mL.
   //
+  svmp_profiling::begin(svmp_profiling::stages::BlockExtraction);
   depart(lhs, nsd, dof, nNo, nnz, Val, Gt, mK, mG, mD, mL);
+  svmp_profiling::end(svmp_profiling::stages::BlockExtraction);
 
   // Computes lhs.face[].nS for each face.
   //
+  svmp_profiling::begin(svmp_profiling::stages::BoundaryCondition);
   bc_pre(lhs, nsd, dof, nNo, mynNo);
+  svmp_profiling::end(svmp_profiling::stages::BoundaryCondition);
 
   for (int faIn = 0; faIn < lhs.nFaces; faIn++) {
     auto& face = lhs.face[faIn];
@@ -257,7 +268,9 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
     // Solve for U = inv(mK) * Rm
     //
     auto U_slice = U.slice(i);
+    svmp_profiling::begin(svmp_profiling::stages::Predictor);
     gmres::gmres(lhs, ls.GM, nsd, mK, Rm, U_slice);
+    svmp_profiling::end(svmp_profiling::stages::Predictor);
     U.set_slice(i, U_slice);
 
     // P = D*U
@@ -273,7 +286,9 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
     // P = [L + G^t*G]^-1*P
     //
     P_col = P.rcol(i);
+    svmp_profiling::begin(svmp_profiling::stages::LinearSolve);
     cgrad::schur(lhs, ls.CG, nsd, Gt, mG, mL, P_col);
+    svmp_profiling::end(svmp_profiling::stages::LinearSolve);
     //P.set_col(i, P_col);
 
     // MU1 = G*P
@@ -295,7 +310,9 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
     //
     lhs.debug_active = true;
     auto U_i = U.rslice(i);
+    svmp_profiling::begin(svmp_profiling::stages::LinearSolve);
     gmres::gmres(lhs, ls.GM, nsd, mK, MU.slice(iBB), U_i);
+    svmp_profiling::end(svmp_profiling::stages::LinearSolve);
     //U.set_slice(i, U_i);
 
     // MU2 = K*U
@@ -304,7 +321,9 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
     spar_mul::fsils_spar_mul_vv(lhs, lhs.rowPtr, lhs.colPtr, nsd, mK, U.rslice(i), MU_iBB);
     //MU.set_slice(iBB, MU_iBB);
 
+    svmp_profiling::begin(svmp_profiling::stages::BoundaryCondition);
     add_bc_mul::add_bc_mul(lhs, BcopType::BCOP_TYPE_ADD, nsd, U.rslice(i), MU_iBB);
+    svmp_profiling::end(svmp_profiling::stages::BoundaryCondition);
     //MU.set_slice(iBB, MU_iBB);
 
     // MP1 = L*P
