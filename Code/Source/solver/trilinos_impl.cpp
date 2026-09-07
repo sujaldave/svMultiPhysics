@@ -624,7 +624,7 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
   } else if (precondType == TRILINOS_ML_PRECONDITIONER) {
     checkDiagonalIsZero(trilinos_);
     svmp_profiling::begin(svmp_profiling::stages::MueLuSetup);
-    setMueLuPreconditioner(trilinos_->MueluPrec, trilinos_->K);
+    setMueLuPreconditioner(trilinos_->MueluPrec, trilinos_->K, trilinos_->topology.dof());
     svmp_profiling::end(svmp_profiling::stages::MueLuSetup);
     BelosProblem->setLeftPrec(trilinos_->MueluPrec);
     return;
@@ -647,7 +647,7 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
  * https://trilinos.github.io/pdfs/mueluguide.pdf
  */
 void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
-                            const Teuchos::RCP<Tpetra_CrsMatrix> &A)
+                            const Teuchos::RCP<Tpetra_CrsMatrix> &A, int dof)
 {
   // MueLuPrec is now a Tpetra::Operator that can be plug into BelosProblem
   std::string optionsFile = "mueluOptions.xml";
@@ -662,7 +662,7 @@ void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
 
   // Problem type
   mueluParams.set("problem: type", "unknown"); // FSI is generally nonsymmetric
-  mueluParams.set("number of equations", 4);   // dof
+  mueluParams.set("number of equations", dof);
 
   // Aggregation
   mueluParams.set("aggregation: type", "uncoupled");
