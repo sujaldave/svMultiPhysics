@@ -99,10 +99,10 @@ class ProfilingScope
   public:
     explicit ProfilingScope(const std::string& stage) : stage_(stage)
     {
-      begin(stage_);
+      svmp_profiling::begin(stage_);
     }
 
-    ~ProfilingScope() { end(stage_); }
+    ~ProfilingScope() { svmp_profiling::end(stage_); }
 
     ProfilingScope(const ProfilingScope&) = delete;
     ProfilingScope& operator=(const ProfilingScope&) = delete;
