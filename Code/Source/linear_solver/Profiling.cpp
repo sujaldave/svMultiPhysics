@@ -54,6 +54,13 @@ std::map<std::string, ActiveTimer>& active_timers()
   return map;
 }
 
+// TEMPORARY diagnostic: remove once the empty-CSV issue is understood.
+long long& begin_call_count()
+{
+  static long long count = 0;
+  return count;
+}
+
 std::string& backend_label()
 {
   static std::string label = "unknown";
@@ -116,6 +123,7 @@ void set_preconditioner_labels(
 void begin(const std::string& stage)
 {
   std::lock_guard<std::mutex> lock(registry_mutex());
+  ++begin_call_count(); // TEMPORARY diagnostic.
   auto& timer = active_timers()[stage];
   if (timer.depth == 0) {
     timer.start = std::chrono::steady_clock::now();
@@ -159,6 +167,11 @@ void write_csv(const std::string& path)
     std::lock_guard<std::mutex> lock(registry_mutex());
     totals_copy = totals();
   }
+
+  // TEMPORARY diagnostic: remove once the empty-CSV issue is understood.
+  std::cerr << "[svmp_profiling] write_csv('" << path << "'): mpi_rank="
+             << mpi_rank() << " rows=" << totals_copy.size()
+             << " begin_calls=" << begin_call_count() << std::endl;
 
   if (mpi_rank() != 0) {
     return;
