@@ -11,6 +11,7 @@
 #include "ls.h"
 #include "nn.h"
 #include "output.h"
+#include "Profiling.h"
 #include "ris.h"
 #include "set_bc.h"
 #include "ustruct.h"
@@ -233,6 +234,12 @@ void Integrator::assemble_equations() {
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
   dmsg << "Assembling equation: " << com_mod.eq[com_mod.cEq].sym;
   #endif
+
+  // Element assembly runs before solve_linear_system() sets this for the
+  // current equation, so without this it would still carry whichever
+  // equation solved last (e.g. an FSI run's mesh "MS" assembly getting
+  // mislabeled as "FS" from the fluid solve the step before).
+  svmp_profiling::set_equation_label(com_mod.eq[com_mod.cEq].sym);
 
   for (int iM = 0; iM < com_mod.nMsh; iM++) {
     eq_assem::global_eq_assem(com_mod, cep_mod, com_mod.msh[iM], solutions_);
