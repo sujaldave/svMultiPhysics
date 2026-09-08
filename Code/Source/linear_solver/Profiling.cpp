@@ -9,12 +9,19 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <tuple>
 
 #include <mpi.h>
 
 namespace svmp_profiling {
 
 namespace {
+
+// (equation, backend, gmres_preconditioner, cg_preconditioner, stage).
+// Every stage timer is filed under the label snapshot captured when it
+// started, so two equations (or two preconditioner choices) that happen to
+// share a stage name never blend into one total.
+using RowKey = std::tuple<std::string, std::string, std::string, std::string, std::string>;
 
 struct StageTotals
 {
@@ -26,6 +33,7 @@ struct ActiveTimer
 {
   std::chrono::steady_clock::time_point start;
   int depth = 0;
+  RowKey key;
 };
 
 std::mutex& registry_mutex()
@@ -34,9 +42,9 @@ std::mutex& registry_mutex()
   return mutex;
 }
 
-std::map<std::string, StageTotals>& totals()
+std::map<RowKey, StageTotals>& totals()
 {
-  static std::map<std::string, StageTotals> map;
+  static std::map<RowKey, StageTotals> map;
   return map;
 }
 
@@ -47,6 +55,12 @@ std::map<std::string, ActiveTimer>& active_timers()
 }
 
 std::string& backend_label()
+{
+  static std::string label = "unknown";
+  return label;
+}
+
+std::string& equation_label()
 {
   static std::string label = "unknown";
   return label;
@@ -84,6 +98,12 @@ void set_backend_label(const std::string& label)
   backend_label() = label;
 }
 
+void set_equation_label(const std::string& equation)
+{
+  std::lock_guard<std::mutex> lock(registry_mutex());
+  equation_label() = equation;
+}
+
 void set_preconditioner_labels(
     const std::string& gmres_preconditioner,
     const std::string& cg_preconditioner)
@@ -99,6 +119,9 @@ void begin(const std::string& stage)
   auto& timer = active_timers()[stage];
   if (timer.depth == 0) {
     timer.start = std::chrono::steady_clock::now();
+    timer.key = RowKey(
+        equation_label(), backend_label(), gmres_preconditioner_label(),
+        cg_preconditioner_label(), stage);
   }
   ++timer.depth;
 }
@@ -117,7 +140,7 @@ void end(const std::string& stage)
     return;
   }
   const std::chrono::duration<double> elapsed = now - it->second.start;
-  auto& stage_totals = totals()[stage];
+  auto& stage_totals = totals()[it->second.key];
   stage_totals.total_seconds += elapsed.count();
   ++stage_totals.calls;
 }
@@ -131,16 +154,10 @@ void reset()
 
 void write_csv(const std::string& path)
 {
-  std::map<std::string, StageTotals> totals_copy;
-  std::string backend_copy;
-  std::string gmres_prec_copy;
-  std::string cg_prec_copy;
+  std::map<RowKey, StageTotals> totals_copy;
   {
     std::lock_guard<std::mutex> lock(registry_mutex());
     totals_copy = totals();
-    backend_copy = backend_label();
-    gmres_prec_copy = gmres_preconditioner_label();
-    cg_prec_copy = cg_preconditioner_label();
   }
 
   if (mpi_rank() != 0) {
@@ -159,17 +176,21 @@ void write_csv(const std::string& path)
   }
 
   if (need_header) {
-    out << "backend,gmres_preconditioner,cg_preconditioner,stage,calls,"
-           "total_seconds,avg_seconds\n";
+    out << "backend,equation,gmres_preconditioner,cg_preconditioner,stage,"
+           "calls,total_seconds,avg_seconds\n";
   }
 
   for (const auto& entry : totals_copy) {
-    const auto& stage = entry.first;
+    const auto& equation = std::get<0>(entry.first);
+    const auto& backend = std::get<1>(entry.first);
+    const auto& gmres_prec = std::get<2>(entry.first);
+    const auto& cg_prec = std::get<3>(entry.first);
+    const auto& stage = std::get<4>(entry.first);
     const auto& stage_totals = entry.second;
     const double avg = stage_totals.calls > 0 ?
         stage_totals.total_seconds / stage_totals.calls : 0.0;
-    out << backend_copy << "," << gmres_prec_copy << "," << cg_prec_copy
-        << "," << stage << "," << stage_totals.calls << ","
+    out << backend << "," << equation << "," << gmres_prec << ","
+        << cg_prec << "," << stage << "," << stage_totals.calls << ","
         << stage_totals.total_seconds << "," << avg << "\n";
   }
 }

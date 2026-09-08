@@ -8,6 +8,7 @@
 
 #include "fsils_api.hpp"
 #include "consts.h"
+#include "Profiling.h"
 
 #include <math.h>
 
@@ -49,6 +50,12 @@ void ls_solve(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vecto
   dmsg << "lEq.useTLS: " << lEq.useTLS;
   dmsg << "lEq.assmTLS: " << lEq.assmTLS;
   #endif
+
+  // Tags every profiling stage timer started during this solve with which
+  // equation it belongs to, so e.g. an FSI run's "FS" fluid solve and "MS"
+  // mesh solve accumulate into separate CSV rows despite sharing stage
+  // names like "System Setup".
+  svmp_profiling::set_equation_label(lEq.sym);
 
   lEq.linear_algebra->solve(com_mod, lEq, incL, res);
 }
