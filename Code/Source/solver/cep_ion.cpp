@@ -11,12 +11,7 @@
 
 namespace cep_ion {
 
-/// @brief Modifies:
-/// \code {.cpp}
-///   cep_mod.Xion
-/// \endcode
-//
-void cep_init(Simulation *simulation) {
+void cep_init(Simulation *simulation, SolutionStates &solutions) {
   using namespace consts;
   auto &com_mod = simulation->com_mod;
 
@@ -106,6 +101,15 @@ void cep_init(Simulation *simulation) {
           cep_mod.Xion(i + nX, a) = Xgl(i);
         }
       }
+    }
+
+    // Copy the action potential into the solution vector, as cep_integ does at
+    // every time step. Without this the initial solution holds a zero potential
+    // while the ionic model rests at its own initial value.
+    auto &Yo = solutions.old.get_velocity();
+
+    for (int Ac = 0; Ac < tnNo; Ac++) {
+      Yo(eq.e, Ac) = cep_mod.Xion(0, Ac);
     }
   }
 }
@@ -295,7 +299,7 @@ void cep_integ_l(CepMod &cep_mod, cepModelType &cep, Vector<double> &X,
       cep.ionic_model, "ionic model was not constructed.");
 
   for (unsigned int i = 0; i < nt; ++i) {
-    const double t = t1 + i * dt;
+    const double t = t1 + i * cep.dt;
     const double Istim = cep.stimulus_value(t, x);
 
     cep.ionic_model->integ(cep.odes, cep.imyo, t, cep.dt, Istim, Ksac, X, Xg);

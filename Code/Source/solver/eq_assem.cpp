@@ -78,9 +78,8 @@ void b_assem_neu_bc(ComMod& com_mod, const faceType& lFa, const Vector<double>& 
     }
 
     for (int g = 0; g < lFa.nG; g++) {
-      Vector<double> nV(nsd);
       auto Nx = lFa.Nx.rslice(g);
-      nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, eNoN, Nx, nV, solutions, consts::MechanicalConfigurationType::reference);
+      Vector<double> nV = nn::gnnb(com_mod, lFa, e, g, Nx, solutions);
       double Jac = utils::norm(nV);
       nV = nV / Jac;
       double w = lFa.w(g)*Jac;
@@ -251,9 +250,8 @@ void b_neu_folw_p(ComMod& com_mod, const bcType& lBc, const faceType& lFa, const
       }
 
       // Get surface normal vector
-      Vector<double> nV(nsd);
       auto Nx_g = lFa.Nx.rslice(g);
-      nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, eNoNb, Nx_g, nV, solutions, consts::MechanicalConfigurationType::reference);
+      Vector<double> nV = nn::gnnb(com_mod, lFa, e, g, Nx_g, solutions);
       Jac = utils::norm(nV);
       nV = nV / Jac;
       double w = lFa.w(g)*Jac;
@@ -325,13 +323,13 @@ void fsi_ls_upd(ComMod& com_mod, const bcType& lBc, const faceType& lFa, const S
       // CALL NRBNNXB(msh(iM),lFa,e)
     }
     for (int g = 0; g < lFa.nG; g++) {
-      Vector<double> n(nsd);
       auto Nx = lFa.Nx.rslice(g);
 
       auto cfg = MechanicalConfigurationType::new_timestep;
 
-      nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, lFa.eNoN, Nx, n, solutions, cfg);
-      // 
+      const Vector<double> n = nn::gnnb(com_mod, lFa, e, g, Nx, solutions, cfg,
+                                        com_mod.eq[com_mod.cEq].s);
+
       for (int a = 0; a < lFa.eNoN; a++) {
         int Ac = lFa.IEN(a,e);
         for (int i = 0; i < nsd; i++) {

@@ -18,7 +18,7 @@
 #include <iostream>
 #include <math.h>
 
-#include "ionic_model.h"
+#include "IonicModel.h"
 
 extern "C" {
 
@@ -320,6 +320,7 @@ void distribute(Simulation* simulation)
 
     cm.bcast(cm_mod, &com_mod.saveATS);
     cm.bcast(cm_mod, &com_mod.saveAve);
+    cm.bcast(cm_mod, &com_mod.alwaysSaveDomainID);
     cm.bcast(cm_mod, &com_mod.saveVTK);
     cm.bcast(cm_mod, &com_mod.bin2VTK);
 
@@ -551,8 +552,10 @@ void distribute(Simulation* simulation)
   cm.bcast(cm_mod, &cplBC.useGenBC);
   cm.bcast(cm_mod, &cplBC.useSvZeroD);
   cm.bcast(cm_mod, &cplBC.useSvOneD);
+  cm.bcast(cm_mod, &cplBC.finite_difference_absolute_perturbation);
+  cm.bcast(cm_mod, &cplBC.finite_difference_relative_perturbation);
 
-  if (cplBC.useGenBC) {   
+  if (cplBC.useGenBC) {
     if (cm.slv(cm_mod)) {   
       cplBC.nX = 0;
       cplBC.xo.resize(cplBC.nX);

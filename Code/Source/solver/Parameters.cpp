@@ -1208,6 +1208,14 @@ svZeroDSolverInterfaceParameters::svZeroDSolverInterfaceParameters() {
   set_parameter("Initial_flows", 0.0, !required, initial_flows);
   set_parameter("Initial_pressures", 0.0, !required, initial_pressures);
 
+  // Finite-difference perturbation used for the coupled-BC tangent dP/dQ,
+  //   diff = max(rms(Q) * Finite_difference_relative_perturbation,
+  //              Finite_difference_absolute_perturbation).
+  set_parameter("Finite_difference_absolute_perturbation", 1.0e-7, !required,
+                finite_difference_absolute_perturbation);
+  set_parameter("Finite_difference_relative_perturbation", 1.0e-5, !required,
+                finite_difference_relative_perturbation);
+
   set_parameter("Configuration_file", "", required, configuration_file);
 
   set_parameter("Shared_library", "", required, shared_library);
@@ -2807,9 +2815,9 @@ GeneralSimulationParameters::GeneralSimulationParameters() {
   set_parameter("Debug", false, !required, debug);
 
   set_parameter("Include_xml", "", !required, include_xml);
-  set_parameter("Increment_in_saving_restart_files", 0, !required,
+  set_parameter("Increment_in_saving_restart_files", 1, !required,
                 increment_in_saving_restart_files);
-  set_parameter("Increment_in_saving_VTK_files", 0, !required,
+  set_parameter("Increment_in_saving_VTK_files", 1, !required,
                 increment_in_saving_vtk_files);
 
   set_parameter("Name_prefix_of_saved_VTK_files", "", !required,
@@ -2828,6 +2836,8 @@ GeneralSimulationParameters::GeneralSimulationParameters() {
 
   set_parameter("Save_averaged_results", false, !required,
                 save_averaged_results);
+  set_parameter("Save_domain_ID_in_every_file", false, !required,
+                save_domain_id_in_every_file);
   set_parameter("Save_results_in_folder", "", !required,
                 save_results_in_folder);
   set_parameter("Save_results_to_VTK_format", false, required,
@@ -2910,9 +2920,22 @@ void GeneralSimulationParameters::set_values(tinyxml2::XMLElement *xml_element,
     item = item->NextSiblingElement();
   }
 
-  // Check that required parameters have been set.
   if (!from_external_xml) {
+    // Check that required parameters have been set.
     check_required();
+
+    // The saving increments select the time steps to save by taking the
+    // remainder of the time step number, so they cannot be zero.
+    svmp::check<svmp::ParseException>(
+        increment_in_saving_restart_files.value() >= 1,
+        "The GeneralSimulationParameters element "
+        "'Increment_in_saving_restart_files' must be greater than or equal "
+        "to 1.");
+
+    svmp::check<svmp::ParseException>(
+        increment_in_saving_vtk_files.value() >= 1,
+        "The GeneralSimulationParameters element "
+        "'Increment_in_saving_VTK_files' must be greater than or equal to 1.");
   }
 }
 
