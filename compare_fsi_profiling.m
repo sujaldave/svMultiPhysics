@@ -82,27 +82,58 @@ MESH_PRECOND_CODES = {'diag', 'ml', 'fsils'};
 cases = build_fsi_cases(PROC_COUNTS, BACKEND_CODES, FSI_PRECOND_CODES, ...
     MESH_PRECOND_CODES, BACKEND_LABELS, PRECOND_NAMES);
 nCases = numel(cases);
-caseLabels = {cases.label};
 
 EQUATIONS = {'FS', 'MS'};
 EQUATION_TITLES = containers.Map({'FS', 'MS'}, {'FSI/fluid (FS)', 'Mesh (MS)'});
 
 %% ---------------------------------------------------------------------
-%  Load data
+%  Load data -- a case (e.g. a GPU/ML combination that crashed mid-run and
+%  never reached write_csv()) is skipped entirely, with a warning, rather
+%  than aborting the whole comparison. Every remaining figure is built
+%  only from cases that loaded successfully.
 %  ---------------------------------------------------------------------
-profilingTables = struct('FS', {cell(nCases, 1)}, 'MS', {cell(nCases, 1)});
-histTables = cell(nCases, 1);
+profilingTablesRaw = struct('FS', {cell(nCases, 1)}, 'MS', {cell(nCases, 1)});
+histTablesRaw = cell(nCases, 1);
 allStages = struct('FS', {{}}, 'MS', {{}});
+keep = false(nCases, 1);
 
 for i = 1:nCases
+    try
+        caseProfiling = struct();
+        for e = 1:numel(EQUATIONS)
+            eqSym = EQUATIONS{e};
+            caseProfiling.(eqSym) = resolve_and_read_profiling(cases(i), eqSym, SHARED_CSV);
+        end
+        caseHistor = read_histor(cases(i).historDat);
+    catch causeException
+        warning('compare_fsi_profiling:skippingCase', ...
+            'Skipping case "%s": %s', cases(i).label, causeException.message);
+        continue;
+    end
+
     for e = 1:numel(EQUATIONS)
         eqSym = EQUATIONS{e};
-        T = resolve_and_read_profiling(cases(i), eqSym, SHARED_CSV);
-        profilingTables.(eqSym){i} = T;
-        allStages.(eqSym) = union(allStages.(eqSym), cellstr(T.stage), 'stable');
+        profilingTablesRaw.(eqSym){i} = caseProfiling.(eqSym);
+        allStages.(eqSym) = union(allStages.(eqSym), cellstr(caseProfiling.(eqSym).stage), 'stable');
     end
-    histTables{i} = read_histor(cases(i).historDat);
+    histTablesRaw{i} = caseHistor;
+    keep(i) = true;
 end
+
+if ~any(keep)
+    error('compare_fsi_profiling:noCasesLoaded', ...
+        'No case loaded successfully -- nothing to compare.');
+end
+if ~all(keep)
+    fprintf('compare_fsi_profiling: comparing %d of %d cases (see warnings above for skipped ones).\n', ...
+        sum(keep), nCases);
+end
+
+cases = cases(keep);
+nCases = numel(cases);
+caseLabels = {cases.label};
+histTables = histTablesRaw(keep);
+profilingTables = struct('FS', {profilingTablesRaw.FS(keep)}, 'MS', {profilingTablesRaw.MS(keep)});
 
 stageOrder = struct();
 stageColors = struct();
