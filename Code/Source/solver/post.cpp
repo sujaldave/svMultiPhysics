@@ -1064,7 +1064,9 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
           if (nsd == 3) {
             ksix(2,0) = ksix(2,0) +(Nx(0,a)*yl(2,a) + Nx(2,a)*yl(0,a))*0.5;
             ksix(2,1) = ksix(2,1) +(Nx(1,a)*yl(2,a) + Nx(2,a)*yl(1,a))*0.5;
-            ksix(2,2) = ksix(2,2) + Nx(1,a)*yl(1,a);
+            // [3D fix, found while auditing 2D] e_zz is du_z/dz; this read
+            // Nx(1,a)*yl(1,a) (= e_yy) instead of Nx(2,a)*yl(2,a).
+            ksix(2,2) = ksix(2,2) + Nx(2,a)*yl(2,a);
           }
         }
 
@@ -1880,7 +1882,10 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
           } else { 
             ed(0) = ed(0) + Nx(0,a)*dl(i,a);
             ed(1) = ed(1) + Nx(1,a)*dl(j,a);
-            ed(2) = ed(2) + Nx(1,a)*dl(i,a) + Nx(1,a)*dl(j,a);
+            // [2D fix] engineering shear strain is du_x/dy + du_y/dx; the
+            // second term used Nx(1,a) (d/dy) instead of Nx(0,a) (d/dx).
+            // Cf. l_elas_2d()'s ed(2) and the nsd == 3 branch's ed(3).
+            ed(2) = ed(2) + Nx(1,a)*dl(i,a) + Nx(0,a)*dl(j,a);
           }
         }
       }

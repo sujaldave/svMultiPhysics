@@ -259,10 +259,18 @@ void construct_fsi(ComMod& com_mod, CepMod& cep_mod, const mshType& lM, const So
                                  ya_l_s, ya_l_n, lR, lK);
           } break;
 
-          case Equation_ustruct:
-            throw std::runtime_error("[construct_fsi] USTRUCT2D_M not implemented");
-            //CALL USTRUCT2D_M(vmsStab, fs(1).eNoN, fs(2).eNoN, nFn, w, Jac, fs(1).N(:,g), fs(2).N(:,g), Nwx, al, yl, dl, bfl, fN, ya_l, lR, lK, lKd)
-          break;
+          case Equation_ustruct: {
+            // [2D fix] ustruct_2d_m() exists in ustruct.cpp and is already used
+            // by construct_usolid(); only the FSI path was left unwired, which
+            // made every 2D ustruct-based FSI run abort. Mirrors the nsd == 3
+            // branch above.
+            auto N0 = fs_1[0].N.col(g);
+            auto N1 = fs_1[1].N.col(g);
+            ustruct::ustruct_2d_m(com_mod, cep_mod, vmsStab, fs_1[0].eNoN,
+                                  fs_1[1].eNoN, nFn, w, Jac, N0, N1, Nwx, al,
+                                  yl, dl, bfl, fN, ya_l_f, ya_l_s, ya_l_n, lR,
+                                  lK, lKd);
+          } break;
         }
       }
     } // g: loop
@@ -330,10 +338,14 @@ void construct_fsi(ComMod& com_mod, CepMod& cep_mod, const mshType& lM, const So
             fluid::fluid_2d_c(com_mod, vmsStab, fs_2[0].eNoN, fs_2[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, 0.0);
           } break;
 
-          case Equation_ustruct:
-            throw std::runtime_error("[construct_fsi] USTRUCT2D_C not implemented");
-            //CALL USTRUCT2D_C(vmsStab, fs(1).eNoN, fs(2).eNoN, w, Jac, fs(1).N(:,g), fs(2).N(:,g), Nwx, Nqx, al, yl, dl, bfl, lR, lK, lKd)
-          break;
+          case Equation_ustruct: {
+            // [2D fix] see the ustruct_2d_m() note in Gauss integration 1.
+            auto N0 = fs_2[0].N.col(g);
+            auto N1 = fs_2[1].N.col(g);
+            ustruct::ustruct_2d_c(com_mod, cep_mod, vmsStab, fs_2[0].eNoN,
+                                  fs_2[1].eNoN, w, Jac, N0, N1, Nwx, Nqx, al,
+                                  yl, dl, bfl, lR, lK, lKd);
+          } break;
         }
       }
     } // g: loop

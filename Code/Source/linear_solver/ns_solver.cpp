@@ -359,9 +359,26 @@ void ns_solver(fsi_linear_solver::FSILS_lhsType& lhs, fsi_linear_solver::FSILS_l
     if (ge::ge(nB, iBB+1, A, xB)) {
       oldxB = xB;
 
-    } else { 
+    } else {
+      // A rank-deficient projection matrix means the bi-partitioned search
+      // space is exhausted: the newest pair of search directions is (to
+      // round-off) a linear combination of the previous ones, so no further
+      // progress is possible. That is a normal termination condition, not a
+      // fatal error -- fall back on the last good coefficients and stop.
+      //
+      // This branch used to throw "FSILS: Singular matrix detected" on the
+      // master rank while every other rank took the graceful path below. That
+      // aborted the run on any problem where BIPN exhausts its search space
+      // before reaching the requested tolerance, which happens routinely with
+      // a tight LS <Tolerance> or a large LS <Max_iterations>, in both 2D and
+      // 3D. It also made the two code paths rank-dependent, so in parallel
+      // rank 0 aborted while the others carried on.
       if (lhs.commu.masF) {
-        throw std::runtime_error("FSILS: Singular matrix detected");
+        std::cout << "[svMultiPhysics] WARNING: The NS solver search space is "
+                     "exhausted after " << iBB+1 << " directions; stopping the "
+                     "linear solve early. Reduce the LS Tolerance requirement "
+                     "or Max_iterations if this happens every step."
+                  << std::endl;
       }
 
       xB = oldxB;

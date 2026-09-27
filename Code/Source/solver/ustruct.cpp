@@ -448,10 +448,12 @@ void ustruct_2d_c(ComMod& com_mod, CepMod& cep_mod, const bool vmsFlag, const in
   auto& dmn = eq.dmn[cDmn];
   const double dt = com_mod.dt;
 
+  // [2D fix] fb is sized nsd=2; the former 'fb[2] = f_z' was an out-of-bounds
+  // write (Vector bounds checking is enabled, so it threw at runtime). In 2D
+  // there is no z body force, so only f_x/f_y are read. Cf. ustruct_3d_c().
   Vector<double> fb(2);
   fb[0] = dmn.prop[PhysicalPropertyType::f_x];
   fb[1] = dmn.prop[PhysicalPropertyType::f_y];
-  fb[2] = dmn.prop[PhysicalPropertyType::f_z];
 
   double am = eq.am;
   double af = eq.af * eq.gam * dt;
@@ -539,7 +541,7 @@ void ustruct_2d_c(ComMod& com_mod, CepMod& cep_mod, const bool vmsFlag, const in
     NwxFi(1,a) = Nwx(0,a)*Fi(0,1) + Nwx(1,a)*Fi(1,1);
   }
 
-  Array<double> NqxFi(2,eNoNw);
+  Array<double> NqxFi(2,eNoNq);
 
   for (int a = 0; a < eNoNq; a++) {
     NqxFi(0,a) = Nqx(0,a)*Fi(0,0) + Nqx(1,a)*Fi(1,0);
@@ -573,7 +575,8 @@ void ustruct_2d_c(ComMod& com_mod, CepMod& cep_mod, const bool vmsFlag, const in
   }
 
   Vector<double> rMNwx(eNoNw);
-  Array<double> VxNwx(3,eNoNw);
+  // [2D fix] VxNwx only needs nsd=2 rows in 2D (was 3).
+  Array<double> VxNwx(2,eNoNw);
 
   for (int a = 0; a < eNoNw; a++) {
     rMNwx(a) = rM(0)*NwxFi(0,a) + rM(1)*NwxFi(1,a);
@@ -608,7 +611,11 @@ void ustruct_2d_c(ComMod& com_mod, CepMod& cep_mod, const bool vmsFlag, const in
       lKd(5,a,b) = lKd(5,a,b) + Ku;
 
       T1 = (am*tauM*rho)*NqxFi(1,a)*Nw(b) + af*Nq(a)*NwxFi(1,b);
-      lK(8,a,b) = lK(8,a,b) + w*Jac*T1 + afm*Ku;
+      // [2D fix] dof = nsd+1 = 3, so the continuity row is row 2 and
+      // dC/dV_2 lives at 2*dof + 1 = 7 (was 8, which is dC/dP).
+      // Cf. ustruct_3d_c(), where dC/dV_2 -> lK(13) = 3*4 + 1, and
+      // ustruct_do_assem(), which reads lK(6) and lK(7) for dC/dV.
+      lK(7,a,b) = lK(7,a,b) + w*Jac*T1 + afm*Ku;
     }
   }
 
@@ -619,7 +626,9 @@ void ustruct_2d_c(ComMod& com_mod, CepMod& cep_mod, const bool vmsFlag, const in
       T0 = (am*beta + af*dbeta*pd)*Nq(a)*Nq(b);
       T1 = NqxFi(0,a)*vd(0) + NqxFi(1,a)*vd(1);
       T2 = T0 + af*tauM*(NxNx + drho*T1*Nq(b));
-      lK(9,a,b) = lK(9,a,b) + w*Jac*T2;
+      // [2D fix] dC/dP is at 2*dof + 2 = 8. Index 9 was out of bounds for
+      // lK(dof*dof = 9, ...). Cf. ustruct_3d_c() -> lK(15) = 3*4 + 3.
+      lK(8,a,b) = lK(8,a,b) + w*Jac*T2;
     }
   }
 }
@@ -1022,7 +1031,10 @@ void ustruct_2d_m(ComMod &com_mod, CepMod &cep_mod, const bool vmsFlag,
 
    // Velocity gradient in current configuration
   auto VxFi = mat_mul(vx, Fi);
-  double rC  = beta*pd + VxFi(1,1) + VxFi(2,2);
+  // [2D fix] rC is beta*pd + tr(VxFi). VxFi is 2x2 here, so the trace is
+  // VxFi(0,0) + VxFi(1,1); the former 'VxFi(1,1) + VxFi(2,2)' both dropped
+  // the (0,0) term and read out of bounds. Cf. ustruct_3d_m().
+  double rC  = beta*pd + VxFi(0,0) + VxFi(1,1);
   double rCl = -p + tauC*rC;
 
   // Local residual
@@ -1050,8 +1062,13 @@ void ustruct_2d_m(ComMod &com_mod, CepMod &cep_mod, const bool vmsFlag,
     Bm(1,0,a) = Nwx(1,a)*F(0,1);
     Bm(1,1,a) = Nwx(1,a)*F(1,1);
 
-    Bm(2,0,a) = Nwx(2,a)*F(0,2) + F(0,0)*Nwx(1,a);
-    Bm(2,1,a) = Nwx(2,a)*F(1,2) + F(1,0)*Nwx(1,a);
+    // [2D fix] The shear (Voigt row 2) entries were copied from the 3D
+    // Bm(3,*,a) block but kept 3D indices Nwx(2,*) / F(*,2), which are out of
+    // bounds for the 2x(eNoN) Nwx and 2x2 F used here. The 2D form matches
+    // struct_2d() and ustruct_3d_m()'s Bm(3,*,a):
+    //   Bm(2,i,a) = Nwx(0,a)*F(i,1) + F(i,0)*Nwx(1,a)
+    Bm(2,0,a) = Nwx(0,a)*F(0,1) + F(0,0)*Nwx(1,a);
+    Bm(2,1,a) = Nwx(0,a)*F(1,1) + F(1,0)*Nwx(1,a);
   }
 
   Array<double> VxNx(2,eNoNw);
@@ -1154,8 +1171,11 @@ void ustruct_2d_m(ComMod &com_mod, CepMod &cep_mod, const bool vmsFlag,
       lK(2,a,b) = lK(2,a,b) + w*Jac*T1;
 
       // dM_1/dP
+      // [2D fix] dof = nsd+1 = 3, so dM_1/dP is at 1*dof + 2 = 5. Index 6 is
+      // the first entry of the continuity row (dC/dV_1), which this term was
+      // corrupting. Cf. ustruct_3d_m() -> lK(7) = 1*4 + 3.
       T1 = T0*NxFi(1,a)*Nq(b) + af*drho*vd(1)*Nw(a)*Nq(b);
-      lK(6,a,b) = lK(6,a,b) + w*Jac*T1;
+      lK(5,a,b) = lK(5,a,b) + w*Jac*T1;
     }
   }
 }
@@ -1828,7 +1848,11 @@ void ustruct_r(ComMod& com_mod, const SolutionStates& solutions)
           continue;
         }
 
-        for (int i = rowPtr(a); i <= rowPtr(a+1); i++) {
+        // [2D fix] CSR row 'a' spans [rowPtr(a), rowPtr(a+1)-1]. The upper
+        // bound was rowPtr(a+1), so this loop ran one entry into the next row
+        // (and past the end of colPtr/Kd on the last row). Cf. the nsd == 3
+        // branch above, and every other CSR sweep in the code base.
+        for (int i = rowPtr(a); i <= rowPtr(a+1)-1; i++) {
           int c = colPtr(i);
           KU(0,a) = KU(0,a) + Kd(0,i)*Rd(0,c) + Kd(1,i)*Rd(1,c);
           KU(1,a) = KU(1,a) + Kd(2,i)*Rd(0,c) + Kd(3,i)*Rd(1,c);
