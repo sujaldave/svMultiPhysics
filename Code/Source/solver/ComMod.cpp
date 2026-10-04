@@ -11,31 +11,30 @@
 //
 ComMod::ComMod() 
 {
-  mvMsh        = false;
+  mvMsh              = false;
 
-  stFileFlag   = false;
-  stFileRepl   = false;
+  stFileFlag         = false;
+  stFileRepl         = false;
 
-  bin2VTK      = false;
-  saveAve      = false;
-  sepOutput    = false;
-  saveATS      = 1;
-  saveIncr     = 10;
-  nITs         = 0;
-  startTS      = 0;
-  stFileName   = "stFile";
-  iniFilePath  = "";
-  stopTrigName = "STOP_SIM";
-  ichckIEN     = true; 
-  zeroAve      = false;
-  cmmInit      = false;
-  cmmVarWall   = false;
-  shlEq        = false;
-  pstEq        = false;
-  sstEq        = false;
-  ibFlag       = false;
-  risFlag      = false;
-
+  bin2VTK            = false;
+  saveAve            = false;
+  alwaysSaveDomainID = false;
+  saveATS            = 1;
+  saveIncr           = 10;
+  nITs               = 0;
+  startTS            = 0;
+  stFileName         = "stFile";
+  iniFilePath        = "";
+  stopTrigName       = "STOP_SIM";
+  ichckIEN           = true;
+  zeroAve            = false;
+  cmmInit            = false;
+  cmmVarWall         = false;
+  shlEq              = false;
+  pstEq              = false;
+  sstEq              = false;
+  ibFlag             = false;
+  risFlag            = false;
 }
 
 //---------
@@ -190,10 +189,10 @@ rmshType::rmshType()
 
 
 /////////////////////////////////////////////////////////
-// s v Z e r o D S o l v e r I n t e r f a c e T y p e //
+// s v Z e r o D S o l v e r I n t e r f a c e D a t a //
 /////////////////////////////////////////////////////////
 
-void svZeroDSolverInterfaceType::set_data(const svZeroDSolverInterfaceParameters& params)
+void svZeroDSolverInterfaceData::set_data(const svZeroDSolverInterfaceParameters& params)
 {
   if (!params.defined()) {
     return;
@@ -216,4 +215,14 @@ void svZeroDSolverInterfaceType::set_data(const svZeroDSolverInterfaceParameters
   }
 
   has_data = true;
+}
+
+void svOneDSolverInterfaceData::set_data(const svOneDSolverInterfaceParameters& params)
+{
+  if (!params.defined()) {
+    return;
+  }
+
+  solver_library = params.shared_library();
+  has_data       = true;
 }

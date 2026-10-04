@@ -23,15 +23,18 @@
 # LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 include_directories(${SV_SOURCE_DIR}/ThirdParty/eigen/include)
+include_directories(${SV_SOURCE_DIR}/ThirdParty/eigen/include/eigen3)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/parmetis_internal/simvascular_parmetis_internal/ParMETISLib)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tetgen/simvascular_tetgen)
 include_directories(${SV_SOURCE_DIR}/ThirdParty/tinyxml/simvascular_tinyxml)
 include_directories(${MPI_C_INCLUDE_PATH})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Core)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/FE)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/FE/Common)
 
 # Find Trilinos package if requested
@@ -86,7 +89,7 @@ endif()
 # add trilinos flags and defines
 if(USE_TRILINOS)
   ADD_DEFINITIONS(-DWITH_TRILINOS)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++${CMAKE_CXX_STANDARD}")
   # GPU compatibility: CUDA-enabled Trilinos/Tacho builds may leave CUDA TPLs
   # out of Trilinos_TPL_LIBRARIES, so link the imported CUDA targets when they
   # are available.  This stays optional for CPU-only Trilinos installations.
@@ -160,6 +163,40 @@ include(${VTK_USE_FILE})
 
 set(lib ${SV_LIB_SVFSI_NAME})
 
+# coverage
+if(ENABLE_COVERAGE)
+  # set compiler flags
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -coverage")
+
+  # find required tools
+  find_program(LCOV lcov REQUIRED)
+  find_program(GENHTML genhtml REQUIRED)
+
+  # add coverage target
+  add_custom_target(coverage
+    # gather data
+    COMMAND ${LCOV} --directory . --capture --output-file coverage.info --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
+    # exclude externals
+    COMMAND ${LCOV} --remove coverage.info -o coverage.info '/usr/*' '/opt/*' "${PROJECT_SOURCE_DIR}/ThirdParty/*" '/Library/*' 'v1/*' --ignore-errors unused
+    # generate report
+    COMMAND ${GENHTML} --demangle-cpp -o coverage coverage.info
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+endif()
+
+add_subdirectory(Core)
+add_subdirectory(FE/Common)
+add_subdirectory(FE/Math)
+add_subdirectory(FE/Basis)
+add_subdirectory(FE/Quadrature)
+
+set(SVMP_ARCHITECTURE_TARGETS
+  svmp_core
+  svmp_fe_common
+  svmp_fe_math
+  svmp_fe_basis
+  svmp_fe_quadrature
+)
+
 set(CSRCS 
   Array3.h Array3.cpp 
   Array.h Array.cpp
@@ -174,7 +211,8 @@ set(CSRCS
   TrilinosResistanceOperator.h TrilinosResistanceOperator.cpp
   TrilinosTopology.cpp
   Tensor4.h Tensor4.cpp
-  Vector.h Vector.cpp 
+  Vector.h Vector.cpp
+  FourierInterpolation.cpp
 
   lapack_defs.h
 
@@ -192,12 +230,12 @@ set(CSRCS
   cmm.h cmm.cpp
   consts.h consts.cpp
   contact.h contact.cpp
+  darcy.h darcy.cpp
   distribute.h distribute.cpp
   eq_assem.h eq_assem.cpp
   fluid.h fluid.cpp
   fsi.h fsi.cpp
   fs.h fs.cpp
-  fft.h fft.cpp
   heatf.h heatf.cpp
   heats.h heats.cpp
   initialize.h initialize.cpp
@@ -222,6 +260,7 @@ set(CSRCS
   stokes.h stokes.cpp
   sv_struct.h sv_struct.cpp
   svZeroD_interface.h svZeroD_interface.cpp
+  svOneD_interface.h svOneD_interface.cpp
   txt.h txt.cpp
   utils.h utils.cpp
   ustruct.h ustruct.cpp
@@ -231,39 +270,33 @@ set(CSRCS
   uris.h uris.cpp
 
   CepMod.h CepMod.cpp
-  CepModAp.h CepModAp.cpp
-  CepModBo.h CepModBo.cpp
-  CepModFn.h CepModFn.cpp
-  CepModTtp.h CepModTtp.cpp
   ChnlMod.h ChnlMod.cpp
   CmMod.h CmMod.cpp
   ComMod.h ComMod.cpp
   Timer.h
   ArtificialNeuralNetMaterial.h ArtificialNeuralNetMaterial.cpp
-  
+
+  IonicModel.cpp
+  IonicModelAlievPanfilov.cpp
+  IonicModelBuenoOrovio.cpp
+  IonicModelFitzHughNagumo.cpp
+  IonicModelTTP.cpp
+
+  ActiveStress.cpp
+  ActiveStressUniformSteady.cpp
+  ActiveStressUniformUnsteady.cpp
+  ActiveStressODE.cpp
+  ActiveStressNashPanfilov.cpp
+  ActiveStressRegazzoni.cpp
+
   SPLIT.c
 
   svZeroD_interface/LPNSolverInterface.h svZeroD_interface/LPNSolverInterface.cpp
+  svOneD_interface/OneDSolverInterface.h svOneD_interface/OneDSolverInterface.cpp
 
   BoundaryCondition.h BoundaryCondition.cpp
   RobinBoundaryCondition.h RobinBoundaryCondition.cpp
   CoupledBoundaryCondition.h CoupledBoundaryCondition.cpp
-)
-
-file(GLOB SOLVER_CORE_SRCS CONFIGURE_DEPENDS
-  Core/*.cpp
-  Core/*.h
-  Core/*.inl
-)
-
-file(GLOB SOLVER_FE_COMMON_SRCS CONFIGURE_DEPENDS
-  FE/Common/*.cpp
-  FE/Common/*.h
-)
-
-list(APPEND CSRCS
-  ${SOLVER_CORE_SRCS}
-  ${SOLVER_FE_COMMON_SRCS}
 )
 
   # Set PETSc interace code.
@@ -293,6 +326,7 @@ simvascular_add_executable(${SV_MULTIPHYSICS_EXE}
   INSTALL_DESTINATION ${SV_INSTALL_RUNTIME_DIR})
 
 target_link_libraries(${SV_MULTIPHYSICS_EXE}
+  ${SVMP_ARCHITECTURE_TARGETS}
   ${GLOBAL_LIBRARIES}
   ${INTELRUNTIME_LIBRARIES}
   ${ZLIB_LIBRARY}
@@ -320,41 +354,29 @@ if(USE_PETSC)
   target_link_libraries(${SV_MULTIPHYSICS_EXE} ${PETSC_LIBRARY_DIRS})
 endif()
 
-# coverage
-if(ENABLE_COVERAGE)
-  # set compiler flags
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -coverage")
-
-  # find required tools
-  find_program(LCOV lcov REQUIRED)
-  find_program(GENHTML genhtml REQUIRED)
-
-  # add coverage target
-  add_custom_target(coverage
-    # gather data
-    COMMAND ${LCOV} --directory . --capture --output-file coverage.info --ignore-errors mismatch --rc geninfo_unexecuted_blocks=1
-    # exclude externals
-    COMMAND ${LCOV} --remove coverage.info -o coverage.info '/usr/*' '/opt/*' "${PROJECT_SOURCE_DIR}/ThirdParty/*" '/Library/*' 'v1/*' --ignore-errors unused
-    # generate report
-    COMMAND ${GENHTML} --demangle-cpp -o coverage coverage.info
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-endif()
-
 # unit tests and Google Test
 if(ENABLE_UNIT_TEST)
 
   # link pthread on ubuntu20
   find_package(Threads REQUIRED)
-
+  include(FetchContent)
   # install Google Test
   #if(NOT TARGET gtest_main AND NOT TARGET gtest)
-  include(FetchContent)
   FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/refs/heads/main.zip
-    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+          googletest
+          GIT_REPOSITORY https://github.com/google/googletest.git
+          GIT_TAG v1.17.0
+          DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
   FetchContent_MakeAvailable(googletest)
+
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_STANDARD GREATER_EQUAL 20)
+    foreach(GTEST_TARGET gtest gtest_main gmock gmock_main)
+      if(TARGET ${GTEST_TARGET})
+        target_compile_options(${GTEST_TARGET} PRIVATE -std=gnu++17)
+      endif()
+    endforeach()
+  endif()
   #endif()
 
   enable_testing()
@@ -390,6 +412,7 @@ if(ENABLE_UNIT_TEST)
 
   # libraries
   target_link_libraries(run_all_unit_tests
+    ${SVMP_ARCHITECTURE_TARGETS}
     ${GLOBAL_LIBRARIES}
     ${INTELRUNTIME_LIBRARIES}
     ${ZLIB_LIBRARY}
@@ -409,6 +432,12 @@ if(ENABLE_UNIT_TEST)
     gtest
     GTest::gtest_main 
     pthread   # link pthread on ubuntu20
+  )
+
+  # Define the path to the unit-test reference-data directory as a preprocessor
+  # macro.
+  target_compile_definitions(run_all_unit_tests PRIVATE
+    UNIT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../tests/unitTests/reference_data"
   )
 
   # gtest_discover_tests(runUnitTest)

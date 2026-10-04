@@ -145,6 +145,9 @@ void petsc_create_linearsolver(const consts::SolverType lsType, const consts::Pr
         case EquationType::phys_stokes:
             psol[cEq].pre = "ss_";
             break;
+        case EquationType::phys_darcy:
+            psol[cEq].pre = "dr_";
+            break;
         default:
             PetscPrintf(MPI_COMM_WORLD, "ERROR <PETSC_CREATE_LINEARSOLVER>: "
                 "equation type %d is not defined.\n", phys);
@@ -1073,8 +1076,8 @@ void PetscLinearAlgebra::PetscImpl::solve(ComMod& com_mod, eqType& lEq, const Ve
 
   petsc_set_values(com_mod.dof, com_mod.cEq, com_mod.R.data(), com_mod.Val.data(), W_.data(), V_.data());
 
-  petsc_solve(&lEq.FSILS.RI.fNorm, &lEq.FSILS.RI.iNorm, &lEq.FSILS.RI.dB, &lEq.FSILS.RI.callD, 
-      &lEq.FSILS.RI.suc, &lEq.FSILS.RI.itr, com_mod.R.data(), lEq.FSILS.RI.mItr, com_mod.dof, com_mod.cEq);
-
+  petsc_solve(&lEq.FSILS.RI.fNorm, &lEq.FSILS.RI.iNorm, &lEq.FSILS.RI.dB,
+              &lEq.FSILS.RI.callD, &lEq.FSILS.RI.success, &lEq.FSILS.RI.itr,
+              com_mod.R.data(), lEq.FSILS.RI.mItr, com_mod.dof, com_mod.cEq);
 }
 

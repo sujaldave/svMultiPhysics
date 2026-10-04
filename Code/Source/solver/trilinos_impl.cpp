@@ -662,7 +662,7 @@ void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
 
   // Problem type
   mueluParams.set("problem: type", "unknown"); // FSI is generally nonsymmetric
-  mueluParams.set("number of equations", dof);
+  mueluParams.set("number of equations", dof); // dof for this equation
 
   // Aggregation
   mueluParams.set("aggregation: type", "uncoupled");
@@ -1364,9 +1364,11 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve(ComMod& com_mod, eqType& lEq, co
     return;
   }
 
-  trilinos_global_solve_(trilinos_, Val.data(), R.data(), R_.data(), W_.data(), lEq.FSILS.RI.fNorm,
-      lEq.FSILS.RI.iNorm, lEq.FSILS.RI.itr, lEq.FSILS.RI.callD, lEq.FSILS.RI.dB, lEq.FSILS.RI.suc,
-      solver_type, lEq.FSILS.RI.relTol, lEq.FSILS.RI.mItr, lEq.FSILS.RI.sD, prec_type);
+  trilinos_global_solve_(trilinos_, Val.data(), R.data(), R_.data(), W_.data(),
+                         lEq.FSILS.RI.fNorm, lEq.FSILS.RI.iNorm,
+                         lEq.FSILS.RI.itr, lEq.FSILS.RI.callD, lEq.FSILS.RI.dB,
+                         lEq.FSILS.RI.success, solver_type, lEq.FSILS.RI.relTol,
+                         lEq.FSILS.RI.mItr, lEq.FSILS.RI.sD, prec_type);
 
   for (int a = 0; a < com_mod.tnNo; a++) {
     for (int i = 0; i < com_mod.R.nrows(); i++) {
@@ -1378,7 +1380,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve(ComMod& com_mod, eqType& lEq, co
 /// @brief Solve a system of linear equations assembled by Trilinos.
 void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vector<double>& res)
 {
-  lEq.FSILS.RI.suc = false; 
+  lEq.FSILS.RI.success = false;
   int solver_type = static_cast<int>(lEq.ls.LS_type);
   int prec_type = static_cast<int>(preconditioner_);
   bool assembled = true;
@@ -1390,7 +1392,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqTyp
   std::cout << "[TrilinosImpl::solve_assembled] prec_type: " << prec_name << std::endl;
   std::cout << "[TrilinosImpl::solve_assembled] R_.size(): " << R_.size() << std::endl;
   std::cout << "[TrilinosImpl::solve_assembled] W_.size(): " << W_.size() << std::endl;
-  std::cout << "[TrilinosImpl::solve_assembled] lEq.FSILS.RI.suc: " << lEq.FSILS.RI.suc << std::endl;
+  std::cout << "[TrilinosImpl::solve_assembled] lEq.FSILS.RI.success: "
+            << lEq.FSILS.RI.success << std::endl;
   #endif
 
   if (consts::trilinos_preconditioners.count(preconditioner_) == 0) {
@@ -1415,10 +1418,11 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqTyp
     return;
   }
 
-  trilinos_solve_(trilinos_, R_.data(), W_.data(), lEq.FSILS.RI.fNorm, lEq.FSILS.RI.iNorm, 
-      lEq.FSILS.RI.itr, lEq.FSILS.RI.callD, lEq.FSILS.RI.dB, lEq.FSILS.RI.suc, 
-      solver_type, lEq.FSILS.RI.relTol, lEq.FSILS.RI.mItr, lEq.FSILS.RI.sD, 
-      prec_type, assembled);
+  trilinos_solve_(trilinos_, R_.data(), W_.data(), lEq.FSILS.RI.fNorm,
+                  lEq.FSILS.RI.iNorm, lEq.FSILS.RI.itr, lEq.FSILS.RI.callD,
+                  lEq.FSILS.RI.dB, lEq.FSILS.RI.success, solver_type,
+                  lEq.FSILS.RI.relTol, lEq.FSILS.RI.mItr, lEq.FSILS.RI.sD,
+                  prec_type, assembled);
 
   for (int a = 0; a < com_mod.tnNo; a++) {
     for (int i = 0; i < com_mod.R.nrows(); i++) {

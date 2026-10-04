@@ -27,7 +27,13 @@ static void build_svzero_coupled_bc_idxs(ComMod& com_mod)
   cpl.svZeroD_coupled_bc_idxs.clear();
   for (int iEq = 0; iEq < com_mod.nEq; iEq++) {
     for (int iBc = 0; iBc < com_mod.eq[iEq].nBc; iBc++) {
-      if (utils::btest(com_mod.eq[iEq].bc[iBc].bType, consts::iBC_Coupled)) {
+      const auto& bc = com_mod.eq[iEq].bc[iBc];
+      // A Coupled face belongs to svZeroD only when it is not a 1D face.
+      // The is_svOneD_face() helper encapsulates the routing invariant:
+      //   1D face → oned_input_file_ non-empty, block_name_ empty
+      //   0D face → block_name_ non-empty, oned_input_file_ empty
+      if (utils::btest(bc.bType, consts::iBC_Coupled) &&
+          !bc.coupled_bc.is_svOneD_face()) {
         cpl.svZeroD_coupled_bc_idxs.emplace_back(iEq, iBc);
       }
     }
@@ -51,6 +57,11 @@ static bool nth_coupled_bc(ComMod& com_mod, int n, bcType** out_bc)
 static int numCoupledSrfs;
 static bool writeSvZeroD = true;
 static double svZeroDTime = 0.0;
+
+/// Directory the svZeroD output files (svZeroD_data, Q_svZeroD, P_svZeroD) are
+/// written to, set in init_svZeroD() to the simulation results directory
+/// (chnl_mod.appPath). Includes the trailing separator.
+static std::string svZeroD_output_dir = "";
 
 int num_output_steps;
 int system_size;
@@ -142,7 +153,7 @@ void write_svZeroD_solution(const double* lpn_time, std::vector<double>& lpn_sol
     std::vector<std::string> variable_names;
     variable_names = interface->variable_names_;
     std::ofstream out_file;
-    out_file.open("svZeroD_data", std::ios::out | std::ios::app);
+    out_file.open(svZeroD_output_dir + "svZeroD_data", std::ios::out);
     out_file<<system_size<<" ";
     for (int i = 0; i < system_size; i++) {
       out_file<<static_cast<std::string>(variable_names[i])<<" ";
@@ -150,7 +161,7 @@ void write_svZeroD_solution(const double* lpn_time, std::vector<double>& lpn_sol
     out_file<<'\n';
   } else {
     std::ofstream out_file;
-    out_file.open("svZeroD_data", std::ios::out | std::ios::app);
+    out_file.open(svZeroD_output_dir + "svZeroD_data", std::ios::out | std::ios::app);
     out_file<<*lpn_time<<" ";
     for (int i = 0; i < system_size; i++) {
       out_file<<lpn_solution[i]<<" ";
@@ -187,7 +198,8 @@ void get_coupled_QP(ComMod& com_mod, double QCoupled[], double QnCoupled[], doub
 
 void print_svZeroD(int* nSrfs, const std::vector<int>& surfID, double Q[], double P[]) {
   int nParam = 2;
-  const char* fileNames[2] = {"Q_svZeroD", "P_svZeroD"};
+  const std::string fileNames[2] = {svZeroD_output_dir + "Q_svZeroD",
+                                    svZeroD_output_dir + "P_svZeroD"};
   std::vector<std::vector<double>> R(nParam, std::vector<double>(*nSrfs));
 
   if (*nSrfs == 0) return;
@@ -220,7 +232,7 @@ void print_svZeroD(int* nSrfs, const std::vector<int>& surfID, double Q[], doubl
 // init_svZeroD
 //--------------
 //
-void init_svZeroD(ComMod& com_mod, const CmMod& cm_mod) 
+void init_svZeroD(ComMod& com_mod, const CmMod& cm_mod, const std::string& appPath)
 {
   using namespace consts;
   
@@ -234,6 +246,8 @@ void init_svZeroD(ComMod& com_mod, const CmMod& cm_mod)
   auto& solver_interface = cplBC.svzerod_solver_interface;
   auto& cm = com_mod.cm;
   double dt = com_mod.dt;
+
+  svZeroD_output_dir = appPath;
 
   build_svzero_coupled_bc_idxs(com_mod);
   if (cplBC.nSvZeroD_coupled_bc == 0) {
@@ -386,6 +400,14 @@ void calc_svZeroD(ComMod& com_mod, const CmMod& cm_mod, char BCFlag)
     double params[2];
     double times[2];
     int error_code;
+
+    // Temporary arrays to record relaxed values for history update on 'L' steps.
+    std::vector<double> P_sent_old_arr(numCoupledSrfs, 0.0);
+    std::vector<double> P_sent_new_arr(numCoupledSrfs, 0.0);
+    std::vector<double> Q_input_sent_old_arr(numCoupledSrfs, 0.0);
+    std::vector<double> Q_input_sent_new_arr(numCoupledSrfs, 0.0);
+    std::vector<double> Q_relaxed_arr(numCoupledSrfs, 0.0);
+    std::vector<double> P_relaxed_arr(numCoupledSrfs, 0.0);
     
     get_coupled_QP(com_mod, QCoupled, QnCoupled, PCoupled, PnCoupled);
 
@@ -416,11 +438,53 @@ void calc_svZeroD(ComMod& com_mod, const CmMod& cm_mod, char BCFlag)
         double sign = bc->coupled_bc.get_in_out_sign();
 
         if (is_dirichlet) {
-          params[0] = PCoupled[i];
-          params[1] = PnCoupled[i];
+          double raw_P_old = PCoupled[i];
+          double raw_P_new = PnCoupled[i];
+
+          // Step 1: apply pressure ramp (scales amplitude from ramp_ref_pressure
+          //         to actual 3D pressure over the first ramp_steps steps).
+          int ramp_steps = bc->coupled_bc.get_oned_ramp_steps();
+          double P_target_old, P_target_new;
+          if (ramp_steps > 0) {
+            double ramp_factor = std::min(1.0, static_cast<double>(bc->coupled_bc.get_ramp_step_count()) / ramp_steps);
+            double P_ref = bc->coupled_bc.get_oned_ramp_ref_pressure();
+            P_target_old = P_ref + ramp_factor * (raw_P_old - P_ref);
+            P_target_new = P_ref + ramp_factor * (raw_P_new - P_ref);
+          } else {
+            P_target_old = raw_P_old;
+            P_target_new = raw_P_new;
+          }
+
+          // Step 2: apply under-relaxation (damps timestep-to-timestep oscillations).
+          // P_sent = omega * P_target + (1 - omega) * P_prev_sent
+          const double omega = bc->coupled_bc.get_oned_relax_factor();
+          params[0] = omega * P_target_old + (1.0 - omega) * bc->coupled_bc.get_P_prev_sent_old();
+          params[1] = omega * P_target_new + (1.0 - omega) * bc->coupled_bc.get_P_prev_sent_new();
+          P_sent_old_arr[i] = params[0];
+          P_sent_new_arr[i] = params[1];
         } else {
-          params[0] = sign * QCoupled[i];
-          params[1] = sign * QnCoupled[i];
+          double raw_Q_old = sign * QCoupled[i];
+          double raw_Q_new = sign * QnCoupled[i];
+
+          // Step 1: apply flow ramp (scales Q from ramp_ref over the first ramp_steps steps).
+          int ramp_steps = bc->coupled_bc.get_oned_ramp_steps();
+          double Q_target_old, Q_target_new;
+          if (ramp_steps > 0) {
+            double ramp_factor = std::min(1.0, static_cast<double>(bc->coupled_bc.get_ramp_step_count()) / ramp_steps);
+            double Q_ref = 0.0;  // ref value (0.0 by default)
+            Q_target_old = Q_ref + ramp_factor * (raw_Q_old - Q_ref);
+            Q_target_new = Q_ref + ramp_factor * (raw_Q_new - Q_ref);
+          } else {
+            Q_target_old = raw_Q_old;
+            Q_target_new = raw_Q_new;
+          }
+
+          // Step 2: apply under-relaxation.
+          const double omega = bc->coupled_bc.get_oned_relax_factor();
+          params[0] = omega * Q_target_old + (1.0 - omega) * bc->coupled_bc.get_Q_input_prev_old();
+          params[1] = omega * Q_target_new + (1.0 - omega) * bc->coupled_bc.get_Q_input_prev_new();
+          Q_input_sent_old_arr[i] = params[0];
+          Q_input_sent_new_arr[i] = params[1];
         }
         update_svZeroD_block_params(svzd_blk_names[i], times, params);
       }
@@ -447,12 +511,20 @@ void calc_svZeroD(ComMod& com_mod, const CmMod& cm_mod, char BCFlag)
         }
 
         if (bc->coupled_bc.get_bc_type() == consts::BoundaryConditionType::bType_Neu) {
-          PCoupled[i] = lpn_state_y[pressure_id];
-          bc->coupled_bc.set_pressure(PCoupled[i]);
+          double P_raw = lpn_state_y[pressure_id];
+          // Apply under-relaxation to the pressure output.
+          const double omega = bc->coupled_bc.get_oned_relax_factor();
+          double P_relaxed = omega * P_raw + (1.0 - omega) * bc->coupled_bc.get_P_neu_prev();
+          bc->coupled_bc.set_pressure(P_relaxed);
+          P_relaxed_arr[i] = P_relaxed;
         } else if (bc->coupled_bc.get_bc_type() == consts::BoundaryConditionType::bType_Dir) {
-          QCoupled[i] = in_out * lpn_state_y[flow_id];
+          double Q_raw = in_out * lpn_state_y[flow_id];
+          // Apply under-relaxation to the flow output to damp timestep-to-timestep oscillations.
+          const double omega = bc->coupled_bc.get_oned_relax_factor();
+          double Q_relaxed = omega * Q_raw + (1.0 - omega) * bc->coupled_bc.get_Q_prev_sent();
           double Qo_prev = bc->coupled_bc.get_Qn();
-          bc->coupled_bc.set_flowrates(Qo_prev, QCoupled[i]);
+          bc->coupled_bc.set_flowrates(Qo_prev, Q_relaxed);
+          Q_relaxed_arr[i] = Q_relaxed;
         } else {
           throw std::runtime_error("ERROR: [calc_svZeroD] Invalid Coupled BC type.");
         }
@@ -462,6 +534,20 @@ void calc_svZeroD(ComMod& com_mod, const CmMod& cm_mod, char BCFlag)
         // Save state and update time only after the last inner iteration
         interface->return_ydot(last_state_ydot);
         std::copy(lpn_state_y.begin(), lpn_state_y.end(), last_state_y.begin());
+
+        // Update ramp/relax history for all coupled BCs.
+        for (int i = 0; i < numCoupledSrfs; ++i) {
+          bcType* bc_hist = nullptr;
+          if (!nth_coupled_bc(com_mod, i, &bc_hist)) continue;
+          if (bc_hist->coupled_bc.get_bc_type() == consts::BoundaryConditionType::bType_Dir) {
+            bc_hist->coupled_bc.set_P_prev_sent(P_sent_old_arr[i], P_sent_new_arr[i]);
+            bc_hist->coupled_bc.set_Q_prev_sent(Q_relaxed_arr[i]);
+          } else {
+            bc_hist->coupled_bc.set_Q_input_prev(Q_input_sent_old_arr[i], Q_input_sent_new_arr[i]);
+            bc_hist->coupled_bc.set_P_neu_prev(P_relaxed_arr[i]);
+          }
+          bc_hist->coupled_bc.increment_ramp_step_count();
+        }
 
         if (writeSvZeroD == 1) {
           // Write the state vector to a file
@@ -486,6 +572,9 @@ void calc_svZeroD(ComMod& com_mod, const CmMod& cm_mod, char BCFlag)
           if (utils::btest(bc.bType, iBC_Coupled) &&
               bc.coupled_bc.get_bc_type() == BoundaryConditionType::bType_Neu) {
             bc.coupled_bc.bcast_coupled_neumann_pressure(cm_mod, cm);
+          } else if (utils::btest(bc.bType, iBC_Coupled) &&
+                     bc.coupled_bc.get_bc_type() == BoundaryConditionType::bType_Dir) {
+            bc.coupled_bc.bcast_coupled_dir_flowrate(cm_mod, cm);
           }
         }
       }

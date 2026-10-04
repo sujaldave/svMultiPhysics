@@ -3,7 +3,11 @@
 
 #include "post.h"
 
+#include "Core/Exception.h"
+#include "FE/Common/FEException.h"
+#include "FE/Math/DenseLinearAlgebra.h"
 #include "all_fun.h"
+#include "darcy.h"
 #include "fluid.h"
 #include "fs.h"
 #include "initialize.h"
@@ -13,9 +17,41 @@
 #include "shells.h"
 #include "utils.h"
 #include "vtk_xml.h"
+#include <algorithm>
+#include <cmath>
 #include <math.h>
+#include <vector>
 
 namespace post {
+
+  namespace {
+
+    Array<double> deformation_gradient(const Array<double>& Nx, const Array<double>& dl,
+        int nsd, int nNo, int eq_start)
+    {
+      auto F = mat_fun::mat_id(nsd);
+      for (int a = 0; a < nNo; a++) {
+        if (nsd == 3) {
+          F(0,0) = F(0,0) + Nx(0,a)*dl(eq_start,a);
+          F(0,1) = F(0,1) + Nx(1,a)*dl(eq_start,a);
+          F(0,2) = F(0,2) + Nx(2,a)*dl(eq_start,a);
+          F(1,0) = F(1,0) + Nx(0,a)*dl(eq_start+1,a);
+          F(1,1) = F(1,1) + Nx(1,a)*dl(eq_start+1,a);
+          F(1,2) = F(1,2) + Nx(2,a)*dl(eq_start+1,a);
+          F(2,0) = F(2,0) + Nx(0,a)*dl(eq_start+2,a);
+          F(2,1) = F(2,1) + Nx(1,a)*dl(eq_start+2,a);
+          F(2,2) = F(2,2) + Nx(2,a)*dl(eq_start+2,a);
+        } else {
+          F(0,0) = F(0,0) + Nx(0,a)*dl(eq_start,a);
+          F(0,1) = F(0,1) + Nx(1,a)*dl(eq_start,a);
+          F(1,0) = F(1,0) + Nx(0,a)*dl(eq_start+1,a);
+          F(1,1) = F(1,1) + Nx(1,a)*dl(eq_start+1,a);
+        }
+      }   
+      return F;
+    }
+
+  }
 
 void all_post(Simulation* simulation, Array<double>& res, const SolutionStates& solutions,
     consts::OutputNameType outGrp, const int iEq) 
@@ -47,7 +83,7 @@ void all_post(Simulation* simulation, Array<double>& res, const SolutionStates& 
     } else if (outGrp == OutputNameType::outGrp_J) {
       Array<double> tmpV(1,msh.nNo); 
       Vector<double> tmpVe(msh.nEl);
-      tpost(simulation, msh, 1, tmpV, tmpVe, solutions, iEq, outGrp);
+      tensor_post(simulation, msh, 1, tmpV, tmpVe, solutions, iEq, outGrp);
       res = 0.0;
       for (int a = 0; a < com_mod.msh[iM].nNo; a++) {
         int Ac = msh.gN(a);
@@ -57,7 +93,7 @@ void all_post(Simulation* simulation, Array<double>& res, const SolutionStates& 
      } else if (outGrp == OutputNameType::outGrp_mises) {
        Array<double> tmpV(1,msh.nNo); 
        Vector<double> tmpVe(msh.nEl);
-       tpost(simulation, msh, 1, tmpV, tmpVe, solutions, iEq, outGrp);
+       tensor_post(simulation, msh, 1, tmpV, tmpVe, solutions, iEq, outGrp);
        res = 0.0;
        for (int a = 0; a < com_mod.msh[iM].nNo; a++) {
          int Ac = msh.gN(a);
@@ -222,7 +258,7 @@ void bpost(Simulation* simulation, const mshType& lM, Array<double>& res, const 
       double Jac;
 
       for (int a = 0; a < eNoN; a++) {
-        if (utils::is_zero(utils::norm(lnV.col(a)))) {
+        if (utils::is_zero(utils::norm_squared(lnV.col(a)))) {
           lnV.set_col(a, nV);
         }
       }
@@ -443,17 +479,8 @@ void div_post(Simulation* simulation, const mshType& lM, Array<double>& res, con
             vx(2,0) = vx(2,0) + Nx(0,a)*yl(k,a);
             vx(2,1) = vx(2,1) + Nx(1,a)*yl(k,a);
             vx(2,2) = vx(2,2) + Nx(2,a)*yl(k,a);
-
-            F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-            F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-            F(0,2) = F(0,2) + Nx(2,a)*dl(i,a);
-            F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-            F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-            F(1,2) = F(1,2) + Nx(2,a)*dl(j,a);
-            F(2,0) = F(2,0) + Nx(0,a)*dl(k,a);
-            F(2,1) = F(2,1) + Nx(1,a)*dl(k,a);
-            F(2,2) = F(2,2) + Nx(2,a)*dl(k,a);
           }
+          F = deformation_gradient(Nx, dl, nsd, eNoN, i);
 
           auto Fi = mat_fun::mat_inv(F,3);
 
@@ -468,12 +495,8 @@ void div_post(Simulation* simulation, const mshType& lM, Array<double>& res, con
             vx(0,1) = vx(0,1) + Nx(1,a)*yl(i,a);
             vx(1,0) = vx(1,0) + Nx(0,a)*yl(j,a);
             vx(1,1) = vx(1,1) + Nx(1,a)*yl(j,a);
-
-            F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-            F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-            F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-            F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
           }
+          F = deformation_gradient(Nx, dl, nsd, eNoN, i);
 
           auto Fi =  mat_fun::mat_inv(F,2);
           VxFi(0) = vx(0,0)*Fi(0,0) + vx(0,1)*Fi(1,0);
@@ -562,40 +585,21 @@ void fib_algn_post(Simulation* simulation, const mshType& lM, Array<double>& res
       double Jac = 0.0;
 
       if (g == 0 || !lM.lShpF) {
-        auto Nx = lM.Nx.slice(g);
-        nn::gnn(eNoN, nsd, nsd, Nx, xl, Nx, Jac, F);
+        auto Nxi = lM.Nx.slice(g);
+        nn::gnn(eNoN, nsd, nsd, Nxi, xl, Nx, Jac, F);
       }
 
       double w = lM.w(g)*Jac;
-      auto F = mat_fun::mat_id(nsd); 
-
-      for (int a = 0; a < eNoN; a++) {
-        if (nsd == 3) {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(0,2) = F(0,2) + Nx(2,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-          F(1,2) = F(1,2) + Nx(2,a)*dl(j,a);
-          F(2,0) = F(2,0) + Nx(0,a)*dl(k,a);
-          F(2,1) = F(2,1) + Nx(1,a)*dl(k,a);
-          F(2,2) = F(2,2) + Nx(2,a)*dl(k,a);
-        } else {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-        }
-      }
+      auto F = deformation_gradient(Nx, dl, nsd, eNoN, i);
       for (int iFn = 0; iFn < 2; iFn++) {
         for (int i = 0; i < nsd; i++) {
           auto fN_col = fN.col(iFn);
           auto F_fN = mat_fun::mat_mul(F, fN_col);
-          fl.set_col(iFn, F_fN / sqrt(utils::norm(F_fN)));
+          fl.set_col(iFn, F_fN / utils::norm(F_fN));
         }
       }
 
-      double sHat = utils::norm(fl.col(0), fl.col(1));
+      double sHat = fl.rcol(0) * fl.rcol(1);
 
       for (int a = 0; a < eNoN; a++) {
         int Ac = lM.IEN(a,e);
@@ -684,32 +688,13 @@ void fib_dir_post(Simulation* simulation, const mshType& lM, const int nFn, Arra
 
       double w = lM.w(g) * Jac;
       N = lM.N.col(g);
-      F = mat_fun::mat_id(nsd); 
-
-      for (int a = 0; a < eNoN; a++) {
-        if (nsd == 3) {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(0,2) = F(0,2) + Nx(2,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-          F(1,2) = F(1,2) + Nx(2,a)*dl(j,a);
-          F(2,0) = F(2,0) + Nx(0,a)*dl(k,a);
-          F(2,1) = F(2,1) + Nx(1,a)*dl(k,a);
-          F(2,2) = F(2,2) + Nx(2,a)*dl(k,a);
-        } else {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-        }
-      }
+      F = deformation_gradient(Nx, dl, nsd, eNoN, i);
 
       for (int iFn = 0; iFn < lM.nFn; iFn++) {
         for (int i = 0; i < nsd; i++) {
           auto fN_col = fN.col(iFn);
           auto F_fN = mat_fun::mat_mul(F, fN_col);
-          fl.set_col(iFn, F_fN / sqrt(utils::norm(F_fN)));
+          fl.set_col(iFn, F_fN / utils::norm(F_fN));
         }
       }
 
@@ -740,45 +725,38 @@ void fib_dir_post(Simulation* simulation, const mshType& lM, const int nFn, Arra
 
 }
 
-/// @brief Compute fiber stretch based on 4th invariant: I_{4,f}
+/// @brief Compute fiber stretch based on 4th invariant: λ = sqrt(I_{4,f})
 //
-void fib_strech(Simulation* simulation, const int iEq, const mshType& lM, const SolutionStates& solutions, Vector<double>& res)
+void fib_stretch(const ComMod& com_mod, const int iEq, const mshType& lM,
+    const Array<double>& lD, Vector<double>& res)
 {
   using namespace consts;
 
-  auto& com_mod = simulation->com_mod;
-  auto& cm = com_mod.cm;
-  auto& cm_mod = simulation->cm_mod;
-  const auto& lD = solutions.old.get_displacement();
   auto& eq = com_mod.eq[iEq];
-
   int nsd = com_mod.nsd;
   int tnNo = com_mod.tnNo;
   int tDof = com_mod.tDof;
-
-  // [NOTE] Setting gobal variable 'dof'.
-  com_mod.dof = eq.dof;
-
   int eNoN = lM.eNoN;
   int i = eq.s;
-  int j = i + 1;
-  int k = j + 1;
 
-  Vector<double> sA(tnNo); 
-  Vector<double> sF(tnNo); 
-  Array<double> xl(nsd,eNoN); 
+  Vector<double> sA(tnNo);
+  Vector<double> sF(tnNo);
+  Array<double> xl(nsd,eNoN);
   Array<double> dl(tDof,eNoN);
-  Array<double> Nx(nsd,eNoN); 
-  Vector<double> N(eNoN);
+  Array<double> Nx(nsd,eNoN);
 
   for (int e = 0; e < lM.nEl; e++) {
-    int cDmn  = all_fun::domain(com_mod, lM, iEq, e);
+    int cDmn = all_fun::domain(com_mod, lM, iEq, e);
     auto cPhys = eq.dmn[cDmn].phys;
+    if (cPhys != EquationType::phys_struct && cPhys != EquationType::phys_ustruct) {
+      continue;
+    }
+
     if (lM.eType == ElementType::NRB) {
       //CALL NRBNNX(lM, e)
     }
 
-    for (int a = 0; a < eNoN; a++) { 
+    for (int a = 0; a < eNoN; a++) {
       int Ac = lM.IEN(a,e);
       xl.set_col(a, com_mod.x.col(Ac));
       dl.set_col(a, lD.col(Ac));
@@ -788,40 +766,25 @@ void fib_strech(Simulation* simulation, const int iEq, const mshType& lM, const 
       double Jac = 0.0;
       Array<double> F(nsd,nsd);
       if (g == 0 || !lM.lShpF) {
-        auto Nx = lM.Nx.slice(g);
-        nn::gnn(eNoN, nsd, nsd, Nx, xl, Nx, Jac, F);
+        auto Nxi = lM.Nx.slice(g);
+        Array<double> dummy_ksix(nsd,nsd);
+        nn::gnn(eNoN, nsd, nsd, Nxi, xl, Nx, Jac, dummy_ksix);
       }
 
+      // Compute Deformation Gradient: F = I + grad(u)
+      F = deformation_gradient(Nx, dl, nsd, eNoN, i);
+
+      // Compute fiber stretch based on 4th invariant: I_{4,f} = F.fN.F.fN
+      auto fl = mat_fun::mat_mul(F, lM.fN.rows(0,nsd-1,e));
+      double lambda = utils::norm(fl);
+
+      // L2 projection from integration points to nodes
       double w = lM.w(g)*Jac;
       auto N = lM.N.col(g);
-      F = mat_fun::mat_id(nsd);
-
-      for (int a = 0; a < eNoN; a++) { 
-        if (nsd == 3) {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(0,2) = F(0,2) + Nx(2,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-          F(1,2) = F(1,2) + Nx(2,a)*dl(j,a);
-          F(2,0) = F(2,0) + Nx(0,a)*dl(k,a);
-          F(2,1) = F(2,1) + Nx(1,a)*dl(k,a);
-          F(2,2) = F(2,2) + Nx(2,a)*dl(k,a);
-        } else {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-        }
-      }
-
-      auto fl = mat_fun::mat_mul(F, lM.fN.rows(0,nsd-1,e));
-      double I4f = utils::norm(fl);
-
-      for (int a = 0; a < eNoN; a++) { 
+      for (int a = 0; a < eNoN; a++) {
         int Ac = lM.IEN(a,e);
         sA(Ac) = sA(Ac) + w*N(a);
-        sF(Ac) = sF(Ac) + w*N(a)*I4f;
+        sF(Ac) = sF(Ac) + w*N(a)*lambda;
       }
     }
   }
@@ -837,7 +800,31 @@ void fib_strech(Simulation* simulation, const int iEq, const mshType& lM, const 
       res(a) = res(a) + sF(Ac) / sA(Ac);
     }
   }
+}
 
+/// @brief Compute fiber stretch rate dλ/dt via backward finite difference.
+//
+void fib_stretch_rate(const ComMod& com_mod, const int iEq, const mshType& lM, const SolutionStates& solutions, Vector<double>& res)
+{
+  const double dt = com_mod.dt;
+  int nNo = lM.nNo;
+
+  if (dt <= 0.0) {
+    svmp::raise<svmp::FE::InvalidArgumentException>(
+        "[fib_stretch_rate] Expected com_mod.dt > 0, but got " + std::to_string(dt) + ".");
+  }
+
+  if (res.size() != nNo) {
+    svmp::raise<svmp::FE::InvalidArgumentException>(
+        "[fib_stretch_rate] Expected res size " + std::to_string(nNo) + ", but got " + std::to_string(res.size()) + ".");
+  }
+
+  Vector<double> lambda_old(nNo);
+
+  fib_stretch(com_mod, iEq, lM, solutions.current.get_displacement(), res);
+  fib_stretch(com_mod, iEq, lM, solutions.old.get_displacement(), lambda_old);
+
+  res = (res - lambda_old) / dt; 
 }
 
 void post(Simulation* simulation, const mshType& lM, Array<double>& res, const SolutionStates& solutions,
@@ -872,13 +859,13 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
   int nsd = com_mod.nsd;
 
   if ((outGrp == OutputNameType::outGrp_eFlx) && (com_mod.dmnId.size() == 0)) {
-    double rho = eq.dmn[0].prop[PhysicalProperyType::fluid_density];
+    double rho = eq.dmn[0].prop[PhysicalPropertyType::fluid_density];
     for (int a = 0; a < lM.nNo; a++) {
       int Ac = lM.gN(a);
       double p  = lY(nsd,Ac);
 
       auto u  = lY.col(Ac, {0,nsd-1});
-      double unorm = utils::norm(u);
+      double unorm = utils::norm_squared(u);
       for (int i = 0; i < nsd; i++) {
         res(i,Ac) = (p + 0.5 * rho * unorm) * u(i);
       }
@@ -898,6 +885,13 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
   Array<double> Nx(nsd,eNoN); 
   Vector<double> N(eNoN);
 
+  // Linear-simplex flux is constant; lumped recovery is already exact.
+  const bool project_flux = outGrp == OutputNameType::outGrp_darcyFlux &&
+      lM.eType != ElementType::TRI3 && lM.eType != ElementType::TET4;
+  // DenseLinearAlgebra expects row-major matrices and multiple right-hand sides.
+  std::vector<double> mass(project_flux ? eNoN * eNoN : 0);
+  std::vector<double> flux_rhs(project_flux ? eNoN * nsd : 0);
+
   int insd = nsd;
   if (lM.lFib) {
     insd = 1;
@@ -908,6 +902,10 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
     if (cDmn == -1) {
       continue;
     } 
+    std::fill(mass.begin(), mass.end(), 0.0);
+    std::fill(flux_rhs.begin(), flux_rhs.end(), 0.0);
+    double element_volume = 0.0;
+
     if (lM.eType == ElementType::NRB) {
       // CALL NRBNNX(lM, e)
     }
@@ -979,7 +977,7 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
       //  Energy flux calculation   
       //
       } else if (outGrp == OutputNameType::outGrp_eFlx) {
-        double rho = eq.dmn[cDmn].prop[PhysicalProperyType::fluid_density];
+        double rho = eq.dmn[cDmn].prop[PhysicalPropertyType::fluid_density];
         double p = 0.0;
         Vector<double> u(nsd);
         Vector<double> lRes(maxNSD);
@@ -990,7 +988,7 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
             u(i) = u(i) + N(a)*yl(i,a);     
           }
         }
-        double unorm = utils::norm(u);
+        double unorm = utils::norm_squared(u);
 
         for (int i = 0; i < nsd; i++) {
           lRes(i) = (p + 0.5 * rho * unorm) * u(i);
@@ -999,7 +997,7 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
       // Heat flux calculation   
       //
       } else if (outGrp == OutputNameType::outGrp_hFlx) {
-        double kappa = eq.dmn[cDmn].prop[PhysicalProperyType::conductivity];
+        double kappa = eq.dmn[cDmn].prop[PhysicalPropertyType::conductivity];
         int i = eq.s;
 
         if (eq.phys == EquationType::phys_heatF) {
@@ -1028,6 +1026,28 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
           for (int j = 0; j < nsd; j++) {
             lRes(j) = -kappa * q(j);
           }
+        }
+
+      // Darcy flux, derived from pressure:
+      // q = -(K/mu) grad(p).
+      } else if (outGrp == OutputNameType::outGrp_darcyFlux) {
+        const double permeability =
+            eq.dmn[cDmn].prop[PhysicalPropertyType::darcy_permeability];
+        const double viscosity =
+            eq.dmn[cDmn].prop[PhysicalPropertyType::darcy_fluid_viscosity];
+        const double mobility = permeability / viscosity;
+        const int equation_index = eq.s;
+
+        Vector<double> grad_p(nsd);
+
+        for (int a = 0; a < eNoN; a++) {
+          for (int j = 0; j < nsd; j++) {
+            grad_p(j) = grad_p(j) + Nx(j,a) * yl(equation_index,a);
+          }
+        }
+         
+        for (int j = 0; j < nsd; j++) {
+          lRes(j) = -mobility * grad_p(j);
         }
 
       // Strain tensor invariants calculation   
@@ -1094,12 +1114,48 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
         throw std::runtime_error("Error in the post() function.");
       }
 
-      // Mapping Tau into the nodes by assembling it into a local vector
-      for (int a = 0; a < eNoN; a++) {
-        int Ac = lM.IEN(a,e);
-        sA(Ac) = sA(Ac) + w*N(a);
-        for (int i = 0; i < maxNSD; i++) {
-          sF(i,Ac) = sF(i,Ac) + w*N(a)*lRes(i);
+      if (project_flux) {
+        // M_ab = integral(N_a N_b), B_ai = integral(N_a q_i).
+        // Consistent projection avoids zero lumped weights on affine nodes.
+        element_volume += w;
+        for (int a = 0; a < eNoN; ++a) {
+          const double weighted_shape = w * N(a);
+          for (int b = 0; b < eNoN; ++b) {
+            mass[a * eNoN + b] += weighted_shape * N(b);
+          }
+          for (int i = 0; i < nsd; ++i) {
+            flux_rhs[a * nsd + i] += weighted_shape * lRes(i);
+          }
+        }
+      } else {
+        // Mapping Tau into the nodes by assembling it into a local vector
+        for (int a = 0; a < eNoN; a++) {
+          int Ac = lM.IEN(a,e);
+          sA(Ac) = sA(Ac) + w*N(a);
+          for (int i = 0; i < maxNSD; i++) {
+            sF(i,Ac) = sF(i,Ac) + w*N(a)*lRes(i);
+          }
+        }
+      }
+    }
+
+    if (project_flux) {
+      svmp::check<svmp::InternalErrorException>(
+          std::isfinite(element_volume) && element_volume > 0.0,
+          "Darcy flux projection requires a positive element volume.");
+
+      // Solve (M / volume) Q = B for volume-weighted flux directly.
+      // Normalizing M keeps the pivot tolerance independent of element size.
+      for (double& value : mass) {
+        value /= element_volume;
+      }
+      svmp::FE::math::factor_dense_matrix(mass, eNoN, "Darcy flux mass matrix").solve_in_place(flux_rhs, nsd);
+
+      for (int a = 0; a < eNoN; ++a) {
+        const int Ac = lM.IEN(a,e);
+        sA(Ac) += element_volume;
+        for (int i = 0; i < nsd; ++i) {
+          sF(i,Ac) += flux_rhs[a * nsd + i];
         }
       }
     }
@@ -1110,6 +1166,11 @@ void post(Simulation* simulation, const mshType& lM, Array<double>& res, const S
 
   for (int a = 0; a < lM.nNo; a++) {
     int Ac = lM.gN(a);
+    if (project_flux) {
+      svmp::check<svmp::InternalErrorException>(
+          std::isfinite(sA(Ac)) && sA(Ac) > 0.0,
+          "Darcy flux projection requires a positive nodal volume weight.");
+    }
     for (int i = 0; i < maxNSD; i++) {
       res(i,a) = sF(i,Ac) / sA(Ac);
     }
@@ -1279,8 +1340,8 @@ void shl_post(Simulation* simulation, const mshType& lM, const int m, Array<doub
     //if (lM.eType .EQ. eType_NRB) CALL NRBNNX(lM, e)
 
     // Get shell properties
-    double nu = eq.dmn[cDmn].prop.at(PhysicalProperyType::poisson_ratio);
-    double ht = eq.dmn[cDmn].prop.at(PhysicalProperyType::shell_thickness);
+    double nu = eq.dmn[cDmn].prop.at(PhysicalPropertyType::poisson_ratio);
+    double ht = eq.dmn[cDmn].prop.at(PhysicalPropertyType::shell_thickness);
 
     // Check for incompressibility
     //
@@ -1386,12 +1447,12 @@ void shl_post(Simulation* simulation, const mshType& lM, const int m, Array<doub
         // Covariant and contravariant bases (ref. config.)
         //
         nn::gnns(nsd, eNoN, Nx, x0, nV0, aCov0, aCnv0);
-        auto Jac0 = sqrt(norm(nV0));
+        auto Jac0 = norm(nV0);
         nV0 = nV0 / Jac0;
 
         // Covariant and contravariant bases (spatial config.)
         nn::gnns(nsd, eNoN, Nx, xc, nV, aCov, aCnv);
-        auto Jac = sqrt(norm(nV));
+        auto Jac = norm(nV);
         nV = nV/Jac;
 
         // Second derivatives for curvature coeffs. (ref. config)
@@ -1462,7 +1523,7 @@ void shl_post(Simulation* simulation, const mshType& lM, const int m, Array<doub
         }
 
         nn::gnns(nsd, lM.eNoN, Nx, tmpX, nV0, aCov0, aCnv0);
-        auto Jac0 = sqrt(norm(nV0));
+        auto Jac0 = norm(nV0);
         nV0  = nV0 / Jac0;
 
         // Covariant and contravariant bases (spatial config.)
@@ -1474,7 +1535,7 @@ void shl_post(Simulation* simulation, const mshType& lM, const int m, Array<doub
         }
 
         nn::gnns(nsd, lM.eNoN, Nx, tmpX, nV, aCov, aCnv);
-        auto Jac = sqrt(norm(nV));
+        auto Jac = norm(nV);
         nV = nV / Jac;
 
         // Compute metric tensor (aa)
@@ -1635,11 +1696,16 @@ void shl_post(Simulation* simulation, const mshType& lM, const int m, Array<doub
 }
 
 //-------
-// tpost
+// tensor_post
 //-------
 // Routine for post processing stress tensor
 //
-void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>& res, Vector<double>& resE,
+namespace {
+
+/// @brief Implementation of tensor_post templated on nsd
+///
+template <int nsd>
+void tensor_post_impl(Simulation* simulation, const mshType& lM, const int m, Array<double>& res, Vector<double>& resE,
     const SolutionStates& solutions, const int iEq, consts::OutputNameType outGrp)
 {
   using namespace consts;
@@ -1653,8 +1719,8 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
   const auto& lD = solutions.current.get_displacement();
   auto& eq = com_mod.eq[iEq];
 
-  #define n_debug_tpost
-  #ifdef debug_tpost
+  #define n_debug_tensor_post
+  #ifdef debug_tensor_post
   DebugMsg dmsg(__func__, com_mod.cm.idcm());
   dmsg.banner();
   dmsg << "outGrp: " << outGrp;
@@ -1673,7 +1739,7 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
     nFn = 1;
   }
 
-  #ifdef debug_tpost
+  #ifdef debug_tensor_post
   dmsg << "i: " << i;
   dmsg << "j: " << j;
   dmsg << "k: " << k;
@@ -1700,18 +1766,17 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
     fs.nG    = lM.nG;
   }
 
-  #ifdef debug_tpost
+  #ifdef debug_tensor_post
   dmsg << "fs.eType: " << fs.eType;
   dmsg << "fs.eNoN: " << fs.eNoN;
   dmsg << "fs.nG: " << fs.nG;
   #endif
 
   int tnNo = com_mod.tnNo;
-  int nsd = com_mod.nsd;
   int tDof = com_mod.tDof;
   int nsymd = com_mod.nsymd;
 
-  #ifdef debug_tpost
+  #ifdef debug_tensor_post
   dmsg;
   dmsg << "tnNo: " << tnNo;
   dmsg << "tDof: " << tDof;
@@ -1731,14 +1796,13 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
   Array<double> Nx(nsd,fs.eNoN); 
   Vector<double> N(fs.eNoN);
 
-  double ya = 0.0;
-
   int insd = nsd;
   if (lM.lFib) {
     insd = 1;
   }
 
-  Array<double> Im(nsd, nsd);
+  Array<double> ksix(nsd, nsd);
+  const Matrix<nsd> Im = Matrix<nsd>::Identity();
   double Je = 0.0; 
 
   for (int e = 0; e < lM.nEl; e++) {
@@ -1755,8 +1819,8 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
     double w = 0.0; 
 
     if (cPhys == EquationType::phys_lElas) {
-      elM = eq.dmn[cDmn].prop[PhysicalProperyType::elasticity_modulus];
-      nu = eq.dmn[cDmn].prop[PhysicalProperyType::poisson_ratio];
+      elM = eq.dmn[cDmn].prop[PhysicalPropertyType::elasticity_modulus];
+      nu = eq.dmn[cDmn].prop[PhysicalPropertyType::poisson_ratio];
       lambda = elM*nu / (1.0 + nu) / (1.0 - 2.0*nu);
       mu = 0.5*elM / (1.0 + nu);
     }
@@ -1795,42 +1859,25 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
     for (int g = 0; g < fs.nG; g++) {
       if (g == 0  ||  !fs.lShpF) {
         auto Nx_g = fs.Nx.slice(g);
-        nn::gnn(fs.eNoN, nsd, insd, Nx_g, xl, Nx, Jac, Im);
+        nn::gnn(fs.eNoN, nsd, insd, Nx_g, xl, Nx, Jac, ksix);
       }
 
       w  = fs.w(g) * Jac;
       N  = fs.N.col(g);
       Je = Je + w;
 
-      auto Im = mat_fun::mat_id(nsd); 
-      auto F = Im;
+      const auto Nxm  = eigen_view<nsd>(Nx);          // grad(N_a)
+      const auto disp = eigen_view_rows<nsd>(dl, i);  // nodal displacements
 
-      for (int a = 0; a < fs.eNoN; a++) {
-        if (nsd == 3) {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(0,2) = F(0,2) + Nx(2,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-          F(1,2) = F(1,2) + Nx(2,a)*dl(j,a);
-          F(2,0) = F(2,0) + Nx(0,a)*dl(k,a);
-          F(2,1) = F(2,1) + Nx(1,a)*dl(k,a);
-          F(2,2) = F(2,2) + Nx(2,a)*dl(k,a);
-        } else {
-          F(0,0) = F(0,0) + Nx(0,a)*dl(i,a);
-          F(0,1) = F(0,1) + Nx(1,a)*dl(i,a);
-          F(1,0) = F(1,0) + Nx(0,a)*dl(j,a);
-          F(1,1) = F(1,1) + Nx(1,a)*dl(j,a);
-        }
-      }
-
-      double detF = mat_fun::mat_det(F, nsd);
+      // Deformation gradient: F = I + Grad(u)
+      const Matrix<nsd> F = Im + disp * Nxm.transpose();
+      const double detF = F.determinant();
 
       Vector<double> ed(com_mod.nsymd);
 
       if (cPhys == EquationType::phys_lElas) {
         for (int a = 0; a < fs.eNoN; a++) {
-          if (nsd ==  3) {
+          if (nsd == 3) {
             ed(0) = ed(0) + Nx(0,a)*dl(i,a);
             ed(1) = ed(1) + Nx(1,a)*dl(j,a);
             ed(2) = ed(2) + Nx(2,a)*dl(k,a);
@@ -1840,7 +1887,7 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
           } else { 
             ed(0) = ed(0) + Nx(0,a)*dl(i,a);
             ed(1) = ed(1) + Nx(1,a)*dl(j,a);
-            ed(2) = ed(2) + Nx(1,a)*dl(i,a) + Nx(1,a)*dl(j,a);
+            ed(2) = ed(2) + Nx(1,a)*dl(i,a) + Nx(0,a)*dl(j,a);
           }
         }
       }
@@ -1878,11 +1925,11 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
           if (cPhys == EquationType::phys_lElas) {
             resl = ed;
           } else { 
-            auto C = mat_fun::mat_mul(mat_fun::transpose(F), F);
-            auto Eg = 0.5 * (C - Im);
+            const Matrix<nsd> C = F.transpose() * F;
+            const Matrix<nsd> Eg = 0.5 * (C - Im);
 
             // resl is used to remap Eg
-            if (nsd  ==  3) {
+            if (nsd == 3) {
               resl(0) = Eg(0,0);
               resl(1) = Eg(1,1);
               resl(2) = Eg(2,2);
@@ -1900,8 +1947,23 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
         case OutputNameType::outGrp_stress:
         case OutputNameType::outGrp_cauchy: 
         case OutputNameType::outGrp_mises:
-          Array<double> sigma(nsd,nsd);
-          Array<double> S(nsd,nsd);
+          Matrix<nsd> sigma = Matrix<nsd>::Zero();
+          Matrix<nsd> S = Matrix<nsd>::Zero();
+
+          // Interpolate the active stress from active stress models to the
+          // current Gauss point so that the active contribution is included in
+          // the reported stress, consistently with the residual assembly.
+          double ya_g_f = 0.0;
+          double ya_g_s = 0.0;
+          double ya_g_n = 0.0;
+          if (eq.dmn[cDmn].active_stress != nullptr) {
+            for (int a = 0; a < fs.eNoN; a++) {
+              int Ac = lM.IEN(a,e);
+              ya_g_f = ya_g_f + N(a)*cep_mod.cem.Ya_f[Ac];
+              ya_g_s = ya_g_s + N(a)*cep_mod.cem.Ya_s[Ac];
+              ya_g_n = ya_g_n + N(a)*cep_mod.cem.Ya_n[Ac];
+            }
+          }
 
           if (cPhys == EquationType::phys_lElas) {
             if (nsd == 3) {
@@ -1928,37 +1990,36 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
           } else if (cPhys == EquationType::phys_ustruct) {
             double p = 0.0;
             for (int a = 0; a < fs.eNoN; a++) {
-              p = p + N(a)*yl(k+1,a);
+              p = p + N(a)*yl(i+nsd,a);
             }
             p = (-p) * detF;
 
-            Array<double> Dm(nsymd,nsymd);
+            Matrix<3*(nsd-1)> Dm;
             double Ja;
-            
-            mat_models::compute_pk2cc(com_mod, cep_mod, eq.dmn[cDmn], F, nFn, fN, ya, S, Dm, Ja);
+            mat_models::compute_pk2cc<nsd>(com_mod, cep_mod, eq.dmn[cDmn], F, nFn,
+                eigen_view<nsd>(fN), ya_g_f, ya_g_s, ya_g_n, S, Dm, Ja);
 
             // TODO: Add viscous stress
 
             // Add pressure
-            auto C = mat_mul(transpose(F), F);
-            S = S + p*mat_inv(C, nsd);
+            const Matrix<nsd> C = F.transpose() * F;
+            S += p * C.inverse();
 
-            auto P1 = mat_mul(F, S);
-            sigma = mat_mul(P1, transpose(F));
+            sigma = F * S * F.transpose();
 
             if (!utils::is_zero(detF)) {
               sigma = sigma / detF;
             }
 
           } else if (cPhys == EquationType::phys_struct) {
-            Array<double> Dm(nsymd,nsymd);
+            Matrix<3*(nsd-1)> Dm;
             double Ja;
-            mat_models::compute_pk2cc(com_mod, cep_mod, eq.dmn[cDmn], F, nFn, fN, ya, S, Dm, Ja);
+            mat_models::compute_pk2cc<nsd>(com_mod, cep_mod, eq.dmn[cDmn], F, nFn,
+                eigen_view<nsd>(fN), ya_g_f, ya_g_s, ya_g_n, S, Dm, Ja);
 
             // TODO: Add viscous stress
 
-            auto P1 = mat_mul(F, S);
-            sigma = mat_mul(P1, transpose(F));
+            sigma = F * S * F.transpose();
 
             if (!utils::is_zero(detF)) {
               sigma = sigma / detF;
@@ -1997,11 +2058,9 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
 
           // Von Mises stress
           } else if (outGrp == OutputNameType::outGrp_mises) {
-            double trS = mat_trace(sigma, nsd) / static_cast<double>(nsd);
-            for (int l = 0; l < nsd; l++) {
-              sigma(l,l) = sigma(l,l) - trS;
-            }
-            double vmises = sqrt(1.5 * mat_ddot(sigma, sigma, nsd));
+            const Matrix<nsd> s = sigma - (sigma.trace() / nsd) * Im;
+            const double vmises = sqrt(1.5 * s.squaredNorm());
+
             resl(0) = vmises;
             sE(e) = sE(e) + w*vmises;
           }
@@ -2081,7 +2140,7 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
       for (int g = 0; g < fs.nG; g++) {
         if (g == 0 || !fs.lShpF) {
           auto fsNx_g = fs.Nx.slice(g);
-          nn::gnn(fs.eNoN, nsd, insd, fsNx_g, xl, Nx, Jac, Im);
+          nn::gnn(fs.eNoN, nsd, insd, fsNx_g, xl, Nx, Jac, ksix);
         }
       Je = Je + fs.w(g)*Jac;
       }
@@ -2121,6 +2180,20 @@ void tpost(Simulation* simulation, const mshType& lM, const int m, Array<double>
         }
       }
     }
+  }
+}
+
+}  // namespace
+
+/// @brief Post-processing routine for stress tensors
+///
+void tensor_post(Simulation* simulation, const mshType& lM, const int m, Array<double>& res, Vector<double>& resE,
+    const SolutionStates& solutions, const int iEq, consts::OutputNameType outGrp)
+{
+  if (simulation->com_mod.nsd == 3) {
+    tensor_post_impl<3>(simulation, lM, m, res, resE, solutions, iEq, outGrp);
+  } else if (simulation->com_mod.nsd == 2) {
+    tensor_post_impl<2>(simulation, lM, m, res, resE, solutions, iEq, outGrp);
   }
 }
 

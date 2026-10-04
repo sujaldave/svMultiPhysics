@@ -12,6 +12,7 @@
 #include "set_bc.h"
 #include "utils.h"
 #include "svZeroD_interface.h"
+#include "svOneD_interface.h"
 
 #include "fsils_api.hpp"
 #include "fils_struct.hpp"
@@ -97,7 +98,7 @@ void baf_ini(Simulation* simulation, SolutionStates& solutions)
 
   // cplBC faces are initialized here
   //
-  int iEq = 0;
+  int iEq = com_mod.cplBC.equationIndex;
   com_mod.cplBC.fa.resize(com_mod.cplBC.nFa); 
   com_mod.cplBC.xn.resize(com_mod.cplBC.nX);
   
@@ -139,6 +140,9 @@ void baf_ini(Simulation* simulation, SolutionStates& solutions)
           com_mod.cplBC.fa[i].RCR.Rd = bc.RCR.Rd;
           com_mod.cplBC.fa[i].RCR.Pd = bc.RCR.Pd;
           com_mod.cplBC.fa[i].RCR.Xo = bc.RCR.Xo;
+          if (utils::btest(bc.bType, iBC_RCR)) {
+            com_mod.cplBC.fa[i].isRCR = true;
+          }
         } else { 
           throw std::runtime_error("Not a compatible cplBC_type");
         }
@@ -159,7 +163,11 @@ void baf_ini(Simulation* simulation, SolutionStates& solutions)
     }
 
     if (com_mod.cplBC.useSvZeroD) {
-      svZeroD::init_svZeroD(com_mod, cm_mod);
+      svZeroD::init_svZeroD(com_mod, cm_mod, simulation->get_chnl_mod().appPath);
+    }
+
+    if (com_mod.cplBC.useSvOneD) {
+      svOneD::init_svOneD(com_mod, cm_mod);
     }
 
     // Initialize cap integration for Coupled boundary conditions
@@ -297,8 +305,13 @@ void bc_ini(const ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, faceType& l
 
   int iM = lFa.iM;
   int iFa = lBc.iFa;
-  lBc.gx.resize(lFa.nNo);
-  //if (.NOT.ALLOCATED(lBc.gx)) ALLOCATE(lBc.gx(lFa.nNo))
+
+  // lBc.gx may have values set when for example when 
+  // reading in a user-defined profile.
+  if (lBc.gx.size() == 0) {
+    lBc.gx.resize(lFa.nNo);
+  }
+
   #ifdef debug_bc_ini
   dmsg << "iM: " << iM;
   dmsg << "iFa: " << iFa ;
@@ -329,7 +342,9 @@ void bc_ini(const ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, faceType& l
   } else if (btest(lBc.bType, iBC_para)) { 
     Vector<double> center(3);
     for (int i = 0; i < nsd; i++) {
-      center(i) = all_fun::integ(com_mod, cm_mod, lFa, com_mod.x, i, solutions, std::nullopt, false, consts::MechanicalConfigurationType::reference) / lFa.area;
+      center(i) = all_fun::integ(com_mod, cm_mod, lFa, com_mod.x, i, solutions,
+                                 std::nullopt, false) /
+                  lFa.area;
     }
 
     // gNodes is one if a node located on the boundary (beside iFa)
@@ -393,7 +408,7 @@ void bc_ini(const ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, faceType& l
        for (int i = 0; i < sV.nrows(); i++) {
          sV(i,a) = sV(i,a) - center(i);
        }
-       sVl.set_col(a, sV.col(a) / sqrt(norm(sV.col(a))));
+       sVl.set_col(a, sV.col(a) / norm(sV.col(a)));
      }
 
      // "s" is going to keep the ew.e value
@@ -401,16 +416,16 @@ void bc_ini(const ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, faceType& l
      for (int a = 0; a < lFa.nNo; a++) {
        int Ac = lFa.gN(a);
        auto nV = com_mod.x.col(Ac) - center;
-       double maxN = norm(nV, sVl.col(0));
+       double maxN = nV * sVl.rcol(0);
        int i = 0;
        for (int b = 1; b < j; b++) {
-         double tmp = norm(nV, sVl.col(b));
+         const double tmp = nV * sVl.rcol(b);
          if (tmp > maxN) {
            maxN = tmp;
            i = b;
          }
        }
-       s(Ac) = 1.0 - norm(nV) / norm(sV.col(i));
+       s(Ac) = 1.0 - norm_squared(nV) / norm_squared(sV.col(i));
      }
 
   } else if (btest(lBc.bType, enum_int(BoundaryConditionType::bType_ud))) { 
@@ -437,8 +452,8 @@ void bc_ini(const ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, faceType& l
   // Normalizing the profile for flux
   //
   double tmp = 1.0;
-  if (btest(lBc.bType, enum_int(BoundaryConditionType::bType_flx))) { 
-    tmp = all_fun::integ(com_mod, cm_mod, lFa, s, solutions, false, consts::MechanicalConfigurationType::reference);
+  if (btest(lBc.bType, enum_int(BoundaryConditionType::bType_flx))) {
+    tmp = all_fun::integ(com_mod, cm_mod, lFa, s, solutions, false);
     if (is_zero(tmp)) {
       tmp = 1.0;
       throw std::runtime_error("Face '" + lFa.name + "' used for a BC has no non-zero node.");
@@ -480,7 +495,7 @@ void face_ini(Simulation* simulation, mshType& lM, faceType& lFa, const Solution
   //
   Vector<double> sA(com_mod.tnNo);
   sA = 1.0;
-  double area = all_fun::integ(com_mod, cm_mod, lFa, sA, solutions, false, consts::MechanicalConfigurationType::reference);
+  double area = all_fun::integ(com_mod, cm_mod, lFa, sA, solutions, false);
   #ifdef debug_face_ini
   dmsg << "Face '" << lFa.name << "' area: " << area;
   #endif
@@ -512,7 +527,6 @@ void face_ini(Simulation* simulation, mshType& lM, faceType& lFa, const Solution
 
   // Compute integral of normal vector over surface element
   if (!flag) {
-    Vector<double> nV(nsd);
     for (int e = 0; e < lFa.nEl; e++) {
 
       if (lFa.eType == ElementType::NRB) {
@@ -522,7 +536,7 @@ void face_ini(Simulation* simulation, mshType& lM, faceType& lFa, const Solution
 
       for (int g = 0; g < lFa.nG; g++) {
         auto Nx = lFa.Nx.slice(g);
-        nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, lFa.eNoN, Nx, nV, solutions, consts::MechanicalConfigurationType::reference);
+        const Vector<double> nV = nn::gnnb(com_mod, lFa, e, g, Nx, solutions);
 
         for (int a = 0; a < lFa.eNoN; a++) { 
           int Ac = lFa.IEN(a,e);
@@ -621,9 +635,9 @@ void face_ini(Simulation* simulation, mshType& lM, faceType& lFa, const Solution
           v(i)  = xl(i,a) - xl(i,b);
         }
 
-        if (utils::norm(nV,v) < 0.0) {
+        if (nV * v < 0.0) {
           nV = -nV;
-         }
+        }
 
         for (int a = 0; a < fs.eNoN; a++) {
           int Ac = lFa.IEN(a,e);
@@ -681,7 +695,7 @@ void face_ini(Simulation* simulation, mshType& lM, faceType& lFa, const Solution
   for (int a = 0; a < lFa.nNo; a++) {
     int Ac = lFa.gN(a);
     auto sV_col = sV.col(Ac);
-    double sln = sqrt(utils::norm(sV_col));
+    double sln = utils::norm(sV_col);
 
     if (utils::is_zero(sln)) {
       if (flag) {
@@ -763,19 +777,29 @@ void fsi_ls_ini(ComMod& com_mod, const CmMod& cm_mod, bcType& lBc, const faceTyp
       }
       fsils_bc_create(com_mod.lhs, lsPtr, lFa.nNo, nsd, BcType::BC_TYPE_Dir, gNodes, sVl); 
     }
+    
+  } else if (btest(lBc.bType, iBC_Neu) || btest(lBc.bType, iBC_Coupled)) {
+    // For Coupled-DIR BCs: iBC_Dir was cleared in read_files but the face DOFs must still
+    // be excluded from the linear solve (Ax=b). Register as BC_TYPE_Dir so the
+    // preconditioner zeros out those rows/columns, preventing the solver from
+    // overwriting the velocity values set by set_bc_dir.
+    if (btest(lBc.bType, iBC_Coupled) &&
+        lBc.coupled_bc.get_bc_type() == consts::BoundaryConditionType::bType_Dir) {
+      lsPtr = lsPtr + 1;
+      lBc.lsPtr = lsPtr;
+      sVl = 0.0;
+      fsils_bc_create(com_mod.lhs, lsPtr, lFa.nNo, nsd, BcType::BC_TYPE_Dir, gNodes, sVl);
 
-  } else if (btest(lBc.bType, iBC_Neu)) {
-    // Compute integral of normal vector over the face (needed for resistance BC/0D-coupling)
-    if (btest(lBc.bType, iBC_res)) {
+    } else if (btest(lBc.bType, iBC_res)) {
+      // Compute integral of normal vector over the face (needed for resistance BC/0D-coupling)
       sV = 0.0;
       for (int e = 0; e < lFa.nEl; e++) {
         if (lFa.eType == ElementType::NRB) {
           // CALL NRBNNXB(msh(iM),lFa,e)
         }
         for (int g = 0; g < lFa.nG; g++) {
-          Vector<double> n(nsd);
           auto Nx = lFa.Nx.slice(g);
-          nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, lFa.eNoN, Nx, n, solutions, consts::MechanicalConfigurationType::reference);
+          const Vector<double> n = nn::gnnb(com_mod, lFa, e, g, Nx, solutions);
 
           for (int a = 0; a < lFa.eNoN; a++) {
             int Ac = lFa.IEN(a,e);
@@ -1014,7 +1038,7 @@ void shl_ini(const ComMod& com_mod, const CmMod& cm_mod, mshType& lM)
       Array<double> tmpR(nsd,nsd-1);
       auto Nxi = lM.Nx.slice(g);
       nn::gnns(nsd, eNoN, Nxi, xl, nV, tmpR, tmpR);
-      double Jac = sqrt(norm(nV));
+      double Jac = norm(nV);
 
       for (int a = 0; a < eNoN; a++) {
         int Ac = lM.IEN(a,e);
@@ -1032,7 +1056,7 @@ void shl_ini(const ComMod& com_mod, const CmMod& cm_mod, mshType& lM)
 
   for (int a = 0; a < nNo; a++) {
     int Ac = lM.gN(a);
-    double Jac = sqrt(norm(sV.col(Ac)));
+    double Jac = norm(sV.col(Ac));
 
     if (is_zero(Jac)) {
       if (flag) {

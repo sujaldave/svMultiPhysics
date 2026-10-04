@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <svMultiPhysicsFile version="0.1">
 
-<G_Na> 14.838 </G_Na>
-<G_CaL> 3.98E-5 </G_CaL>
-<G_Kr> 0.153 </G_Kr>
-<G_Ks> 0.392 </G_Ks>
-<G_to> 0.294 </G_to>
-
 <Isotropic_conductivity> 0.1 </Isotropic_conductivity>
 
 <Myocardial_zone> epicardium </Myocardial_zone>
 
-<TTP_initial_conditions>
+<Include_xml> ../ttp_parameters/ttp_epicardium_parameters.xml </Include_xml>
+
+<TTP>
     <Initial_states>
         <V>-11.612</V>
         <K_i>136.88</K_i>
@@ -22,7 +18,7 @@
         <R_bar>0.6875</R_bar>
     </Initial_states>
 
-    <Gating_variables>
+    <Initial_gating_variables>
         <x_r1_rectifier>9.882E-1</x_r1_rectifier>
         <x_r2_rectifier>3.707E-2</x_r2_rectifier>
         <x_s_rectifier>1.7887E-1</x_s_rectifier>
@@ -35,7 +31,7 @@
         <fcass_slow_in>0.9036</fcass_slow_in>
         <s_out>7.9355E-2</s_out>
         <r_out>1.0429E-2</r_out>
-    </Gating_variables>
-</TTP_initial_conditions>
+    </Initial_gating_variables>
+</TTP>
 
 </svMultiPhysicsFile>

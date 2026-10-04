@@ -10,6 +10,7 @@
 #include "nn.h"
 #include "utils.h"
 #include "ris.h"
+#include "uris.h"
 
 #include <array>
 #include <iomanip>
@@ -64,7 +65,7 @@ void b_fluid(ComMod& com_mod, const int eNoN, const double w, const Vector<doubl
     }
   }
   // Compute u dot n for backflow stabilization
-  udn = 0.50 * dmn.prop.at(PhysicalProperyType::backflow_stab) * dmn.prop.at(PhysicalProperyType::fluid_density) * (udn - fabs(udn));
+  udn = 0.50 * dmn.prop.at(PhysicalPropertyType::backflow_stab) * dmn.prop.at(PhysicalPropertyType::fluid_density) * (udn - fabs(udn));
   auto hc  = h*nV + udn*u;
   #ifdef debug_b_fluid
   dmsg << "udn: " << udn;
@@ -125,7 +126,7 @@ void bw_fluid_2d(ComMod& com_mod, const int eNoNw, const int eNoNq, const double
   auto& dmn = eq.dmn[cDmn];
   const double dt = com_mod.dt;
 
-  double rho = dmn.prop.at(PhysicalProperyType::fluid_density);
+  double rho = dmn.prop.at(PhysicalPropertyType::fluid_density);
   double tauT = tauB(0);
   double tauN = tauB(1);
 
@@ -282,7 +283,7 @@ void bw_fluid_3d(ComMod& com_mod, const int eNoNw, const int eNoNq, const double
   auto& dmn = eq.dmn[cDmn];
   const double dt = com_mod.dt;
 
-  double rho = dmn.prop.at(PhysicalProperyType::fluid_density);
+  double rho = dmn.prop.at(PhysicalPropertyType::fluid_density);
   double tauT = tauB(0);
   double tauN = tauB(1);
 
@@ -461,13 +462,13 @@ void bw_fluid_3d(ComMod& com_mod, const int eNoNw, const int eNoNq, const double
       double T1 = wl*Nq(a)*Nw(b);
 
       // dRc_a/du_b1
-      lK(12,a,b) = lK(13,a,b) - T1*nV(0);
+      lK(12, a, b) = lK(12, a, b) - T1 * nV(0);
 
       // dRc_a/du_b2
-      lK(13,a,b) = lK(14,a,b) - T1*nV(1);
+      lK(13, a, b) = lK(13, a, b) - T1 * nV(1);
 
       // dRc_a/du_b3
-      lK(14,a,b) = lK(15,a,b) - T1*nV(2);
+      lK(14, a, b) = lK(14, a, b) - T1 * nV(2);
     }
   }
 }
@@ -536,9 +537,7 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
   
   // local tangent matrix (for a single element)
   Array3<double> lK(dof*dof,eNoN,eNoN);
-
-  double DDir = 0.0;
-
+  
   // Loop over all elements of mesh
   //
   int num_c = lM.nEl / 10;
@@ -554,7 +553,7 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
       continue;
     }
     
-    double K_inverse_darcy_permeability = eq.dmn[cDmn].prop.at(PhysicalProperyType::inverse_darcy_permeability);
+    double brinkman_inverse_permeability = eq.dmn[cDmn].prop.at(PhysicalPropertyType::brinkman_inverse_permeability);
 
     //  Update shape functions for NURBS
     if (lM.eType == ElementType::NRB) {
@@ -620,6 +619,13 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
 
     double Jac{0.0};
     Array<double> ksix(nsd,nsd);
+    // Total resistance factor value of the RIS valves for the current element 
+    // at different quadrature points
+    Vector<double> urisFactorTotalEl;
+    Array<double> urisValveVelTermTotalEl;
+    if (com_mod.urisFlag) {
+      uris::eval_uris_ris_factors_quadrature(com_mod, lM, fs[0], e, urisFactorTotalEl, urisValveVelTermTotalEl);
+    }
 
     for (int g = 0; g < fs[0].nG; g++) {
       #ifdef debug_construct_fluid
@@ -650,49 +656,26 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
       dmsg << "w: " << w;
       #endif
 
-      // Plot the coordinates of the quad point in the current configuration
-      if (com_mod.urisFlag) {
-        Vector<double> distSrf(com_mod.nUris);
-        distSrf = 0.0;
-        for (int a = 0; a < eNoN; a++) {
-          int Ac = lM.IEN(a,e);
-          for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
-            distSrf(iUris) += fs[0].N(a,g) * std::fabs(com_mod.uris[iUris].sdf(Ac));
-          }
-        }
-
-        DDir = 0.0;
-        double DDirTmp = 0.0;
-        double sdf_deps_temp = 0.0;
-        for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
-          if (com_mod.uris[iUris].clsFlg) {
-            sdf_deps_temp = com_mod.uris[iUris].sdf_deps_close;
-          } else {
-            sdf_deps_temp = com_mod.uris[iUris].sdf_deps;
-          }
-          if (distSrf(iUris) <= sdf_deps_temp) {
-            DDirTmp = (1 + cos(pi*distSrf(iUris)/sdf_deps_temp))/
-                      (2*sdf_deps_temp*sdf_deps_temp);
-            if (DDirTmp > DDir) {DDir = DDirTmp;}
-          }
-        }
-
-        if (!com_mod.urisActFlag) {DDir = 0.0;}
-      }
-
       // Compute momentum residual and tangent matrix.
       //
       if (nsd == 3) {
         auto N0 = fs[0].N.rcol(g); 
         auto N1 = fs[1].N.rcol(g); 
+        double urisFactorTotal = 0.0;
+        Vector<double> urisValveVelTermTotal(nsd);
+        if (com_mod.urisFlag) {
+          urisFactorTotal = urisFactorTotalEl(g);
+          urisValveVelTermTotal = urisValveVelTermTotalEl.rcol(g);
+        }
         fluid_3d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, 
-            Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability, DDir);
+            Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability,
+            urisFactorTotal, urisValveVelTermTotal);
 
       } else if (nsd == 2) {
         auto N0 = fs[0].N.rcol(g); 
         auto N1 = fs[1].N.rcol(g); 
         fluid_2d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, 
-            Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability);
+            Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability);
       }
     } // g: loop
 
@@ -710,6 +693,14 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
     dmsg << "fs[2].nG: " << fs[1].nG;
     dmsg << "fs[2].lShpF: " << fs[1].lShpF;
     #endif
+
+    // If the number of quadrature points is different for the continuity and 
+    // momentum function spaces, recompute the RIS factor
+    if (com_mod.urisFlag) {
+      if (urisFactorTotalEl.size() != fs[1].nG) {
+        uris::eval_uris_ris_factors_quadrature(com_mod, lM, fs[1], e, urisFactorTotalEl, urisValveVelTermTotalEl);
+      }
+    }
 
     for (int g = 0; g < fs[1].nG; g++) {
       if (g == 0 || !fs[0].lShpF) {
@@ -736,12 +727,21 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
       if (nsd == 3) {
         auto N0 = fs[0].N.rcol(g); 
         auto N1 = fs[1].N.rcol(g); 
-        fluid_3d_c(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability, DDir);
+        double urisFactorTotal = 0.0;
+        Vector<double> urisValveVelTermTotal(nsd);
+        if (com_mod.urisFlag) {
+          urisFactorTotal = urisFactorTotalEl(g);
+          urisValveVelTermTotal = urisValveVelTermTotalEl.rcol(g);
+        }
+        fluid_3d_c(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, 
+              Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability,
+              urisFactorTotal, urisValveVelTermTotal);
 
       } else if (nsd == 2) {
         auto N0 = fs[0].N.rcol(g); 
         auto N1 = fs[1].N.rcol(g); 
-        fluid_2d_c(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability);
+        fluid_2d_c(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, 
+              Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability);
       }
 
     } // g: loop
@@ -766,7 +766,7 @@ void construct_fluid(ComMod& com_mod, const mshType& lM, const SolutionStates& s
 void fluid_2d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int eNoNq, const double w, 
     const Array<double>& Kxi, const Vector<double>& Nw, const Vector<double>& Nq, const Array<double>& Nwx, 
     const Array<double>& Nqx, const Array<double>& Nwxx, const Array<double>& al, const Array<double>& yl, 
-    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double K_inverse_darcy_permeability)
+    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double brinkman_inverse_permeability)
 {
   using namespace consts;
 
@@ -794,12 +794,12 @@ void fluid_2d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   const double ctM = 1.0;
   const double ctC = 36.0;
 
-  double rho = dmn.prop[PhysicalProperyType::fluid_density];
+  double rho = dmn.prop[PhysicalPropertyType::fluid_density];
   Vector<double> f(2);
   // f_x is internal force in x-direction; what is internal force?
-  f[0] = dmn.prop[PhysicalProperyType::f_x];
+  f[0] = dmn.prop[PhysicalPropertyType::f_x];
   
-  f[1] = dmn.prop[PhysicalProperyType::f_y];
+  f[1] = dmn.prop[PhysicalPropertyType::f_y];
 
   double T1 = eq.af * eq.gam * dt;
   double amd = eq.am / T1;
@@ -991,7 +991,7 @@ void fluid_2d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
     double kT = 4.0 * pow(ctM/dt,2.0);
     
     // If we consider the NSB model, we need to add an extra term inside the computation for the stab parameter 
-    kT = kT + pow(K_inverse_darcy_permeability*mu/rho, 2.0);  
+    kT = kT + pow(brinkman_inverse_permeability*mu/rho, 2.0);
     
     double kU = u(0)*u(0)*Kxi(0,0) + u(1)*u(0)*Kxi(1,0) + u(0)*u(1)*Kxi(0,1) + u(1)*u(1)*Kxi(1,1);
     double kS = Kxi(0,0)*Kxi(0,0) + Kxi(1,0)*Kxi(1,0) + Kxi(0,1)*Kxi(0,1) + Kxi(1,1)*Kxi(1,1);
@@ -1009,12 +1009,12 @@ void fluid_2d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
     rS(0) = mu_x(0)*es(0,0) + mu_x(1)*es(1,0) + mu*d2u2(0);
     rS(1) = mu_x(0)*es(0,1) + mu_x(1)*es(1,1) + mu*d2u2(1);
 
-    up(0) = -tauM*(rho*rV(0) + px(0) - rS(0) + mu*K_inverse_darcy_permeability*u(0));
-    up(1) = -tauM*(rho*rV(1) + px(1) - rS(1) + mu*K_inverse_darcy_permeability*u(1));
+    up(0) = -tauM*(rho*rV(0) + px(0) - rS(0) + mu*brinkman_inverse_permeability*u(0));
+    up(1) = -tauM*(rho*rV(1) + px(1) - rS(1) + mu*brinkman_inverse_permeability*u(1));
 
     for (int a = 0; a < eNoNw; a++) {
       double uNx = u(0)*Nwx(0,a) + u(1)*Nwx(1,a);
-      T1 = -rho*uNx + mu*(Nwxx(0,a) + Nwxx(1,a)) + mu_x(0)*Nwx(0,a) + mu_x(1)*Nwx(1,a) - mu*K_inverse_darcy_permeability*Nw(a);
+      T1 = -rho*uNx + mu*(Nwxx(0,a) + Nwxx(1,a)) + mu_x(0)*Nwx(0,a) + mu_x(1)*Nwx(1,a) - mu*brinkman_inverse_permeability*Nw(a);
 
       updu(0,0,a) = mu_x(0)*Nwx(0,a) + d2u2(0)*mu_g*esNx(0,a) + T1;
       updu(1,0,a) = mu_x(1)*Nwx(0,a) + d2u2(1)*mu_g*esNx(0,a);
@@ -1086,7 +1086,7 @@ void fluid_2d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
 void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int eNoNq, const double w, 
     const Array<double>& Kxi, const Vector<double>& Nw, const Vector<double>& Nq, const Array<double>& Nwx, 
     const Array<double>& Nqx, const Array<double>& Nwxx, const Array<double>& al, const Array<double>& yl, 
-    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double K_inverse_darcy_permeability)
+    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double brinkman_inverse_permeability)
 {
   using namespace consts;
 
@@ -1108,13 +1108,13 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   double ctM = 1.0;
   double ctC = 36.0;
 
-  double rho = dmn.prop[PhysicalProperyType::fluid_density];
+  double rho = dmn.prop[PhysicalPropertyType::fluid_density];
   Vector<double> f(2);
   
   // f_x is internal force in x-direction; what is internal force?
-  f[0] = dmn.prop[PhysicalProperyType::f_x];
+  f[0] = dmn.prop[PhysicalPropertyType::f_x];
   
-  f[1] = dmn.prop[PhysicalProperyType::f_y];
+  f[1] = dmn.prop[PhysicalPropertyType::f_y];
 
   double T1 = eq.af * eq.gam * dt;
   double amd = eq.am / T1;
@@ -1279,7 +1279,7 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   double kT = 4.0 * pow(ctM/dt,2.0);
   
   // If we consider the NSB model, we need to add an extra term inside the computation for the stab parameter 
-  kT = kT + pow(K_inverse_darcy_permeability*mu/rho, 2.0);
+  kT = kT + pow(brinkman_inverse_permeability*mu/rho, 2.0);
 
   double kU = u(0)*u(0)*Kxi(0,0) + u(1)*u(0)*Kxi(1,0) + u(0)*u(1)*Kxi(0,1) + u(1)*u(1)*Kxi(1,1);
   double kS = Kxi(0,0)*Kxi(0,0) + Kxi(1,0)*Kxi(1,0) + Kxi(0,1)*Kxi(0,1) + Kxi(1,1)*Kxi(1,1);
@@ -1301,8 +1301,8 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
 
   // up[i] = ith component of u_prime (where u_prime = fine-scale velocity in VMS) = -tau_M / rho * ith component of momentum PDE residual (not weak form residual)
   Vector<double> up(2);
-  up(0) = -tauM*(rho*rV(0) + px(0) - rS(0) + mu*K_inverse_darcy_permeability*u(0));
-  up(1) = -tauM*(rho*rV(1) + px(1) - rS(1) + mu*K_inverse_darcy_permeability*u(1));
+  up(0) = -tauM*(rho*rV(0) + px(0) - rS(0) + mu*brinkman_inverse_permeability*u(0));
+  up(1) = -tauM*(rho*rV(1) + px(1) - rS(1) + mu*brinkman_inverse_permeability*u(1));
   
   // tauC = rho * tau_C; tauB = rho * tau_bar; pa = pressure - rho * tau_C * divergence of velocity
   double tauC, tauB, pa;
@@ -1367,7 +1367,7 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       uaNx(a) = uNx(a);
     }
 
-    T1 = -rho*uNx(a) + mu*(Nwxx(0,a) + Nwxx(1,a)) + mu_x(0)*Nwx(0,a) + mu_x(1)*Nwx(1,a) - mu*K_inverse_darcy_permeability*Nw(a);
+    T1 = -rho*uNx(a) + mu*(Nwxx(0,a) + Nwxx(1,a)) + mu_x(0)*Nwx(0,a) + mu_x(1)*Nwx(1,a) - mu*brinkman_inverse_permeability*Nw(a);
 
     updu(0,0,a) = mu_x(0)*Nwx(0,a) + d2u2(0)*mu_g*esNx(0,a) + T1;
     updu(1,0,a) = mu_x(1)*Nwx(0,a) + d2u2(1)*mu_g*esNx(0,a);
@@ -1392,7 +1392,7 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       
       // dRm_a1/du_b1
       // derivative of x-component of momentum (weak form) residual with respect to the x-component of (the acceleration at the next time step)
-      lK(0,a,b) = lK(0,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a);
+      lK(0,a,b) = lK(0,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a);
 
       T2 = mu*rM(1,0) + tauC*rM(0,1) + esNx(0,a)*mu_g*esNx(1,b) - rho*tauM*uaNx(a)*updu(1,0,b);
       
@@ -1411,7 +1411,7 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       // dRm_a2/du_b2
       // derivative of y-component of momentum (weak form) residual with respect to the y-component of (the acceleration at the next time step)
       lK(4,a,b) = lK(4,a,b) + wl*(T2 + T1);
-      lK(4,a,b) = lK(4,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a);
+      lK(4,a,b) = lK(4,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a);
     }
   }
 
@@ -1432,8 +1432,8 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   // Residual contribution Birkman term 
   // Local residue
   for (int a = 0; a < eNoNw; a++) {
-      lR(0,a) = lR(0,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u(0)+up(0));
-      lR(1,a) = lR(1,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u(1)+up(1));
+      lR(0,a) = lR(0,a) + mu*brinkman_inverse_permeability*w*Nw(a)*(u(0)+up(0));
+      lR(1,a) = lR(1,a) + mu*brinkman_inverse_permeability*w*Nw(a)*(u(1)+up(1));
   }
 }
 
@@ -1443,7 +1443,8 @@ void fluid_2d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
 void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int eNoNq, const double w, 
     const Array<double>& Kxi, const Vector<double>& Nw, const Vector<double>& Nq, const Array<double>& Nwx, 
     const Array<double>& Nqx, const Array<double>& Nwxx, const Array<double>& al, const Array<double>& yl, 
-    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double K_inverse_darcy_permeability, double DDir)
+    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double brinkman_inverse_permeability,
+    const double urisFactorTotal, const Vector<double>& urisValveVelTermTotal)
 {
   #define n_debug_fluid3d_c
   #ifdef debug_fluid3d_c
@@ -1455,9 +1456,6 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   double start_time = utils::cput();
   #endif
   
-  // Maximum size of arrays sized by (3,eNoNw) -> (3,MAX_SIZE).
-  const int MAX_SIZE = 27;
-
   using namespace consts;
 
   int cEq = com_mod.cEq;
@@ -1469,19 +1467,11 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   const double ctM  = 1.0;
   const double ctC  = 36.0;
 
-  double Res;
-  if (!com_mod.urisFlag) {
-    Res = 0.0;
-  } else {
-    Res = com_mod.urisRes;
-    if (com_mod.uris[0].clsFlg) {Res = com_mod.urisResClose;}
-  }
-
-  double rho = dmn.prop[PhysicalProperyType::fluid_density];
+  double rho = dmn.prop[PhysicalPropertyType::fluid_density];
   double f[3];
-  f[0] = dmn.prop[PhysicalProperyType::f_x];
-  f[1] = dmn.prop[PhysicalProperyType::f_y];
-  f[2] = dmn.prop[PhysicalProperyType::f_z];
+  f[0] = dmn.prop[PhysicalPropertyType::f_x];
+  f[1] = dmn.prop[PhysicalPropertyType::f_y];
+  f[2] = dmn.prop[PhysicalPropertyType::f_z];
 
   double T1 = eq.af * eq.gam * dt;
   double amd = eq.am / T1;
@@ -1590,7 +1580,7 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   es[1][2] = es[2][1];
   es[2][0] = es[0][2];
 
-  double esNx[3][MAX_SIZE];
+  double esNx[3][maxNoN];
 
   for (int a = 0; a < eNoNw; a++) {
     esNx[0][a] = es[0][0]*Nwx(0,a) + es[1][0]*Nwx(1,a) + es[2][0]*Nwx(2,a);
@@ -1654,7 +1644,7 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   // Stabilization parameters
   //
   double up[3] = {};
-  double updu[3][3][MAX_SIZE] = {};
+  double updu[3][3][maxNoN] = {};
   double tauM = 0.0;
 
   if (vmsFlag) {
@@ -1662,11 +1652,11 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
     double kT = 4.0 * pow(ctM/dt,2.0);
     
     // If we consider the NSB model, we need to add an extra term inside the computation for the stab parameter 
-    kT = kT + pow(K_inverse_darcy_permeability*mu/rho, 2.0); 
+    kT = kT + pow(brinkman_inverse_permeability*mu/rho, 2.0);
     
     // In case of unfitted RIS, compute the delta function at the quad point,
     // add the additional value to the stabilization param 
-    kT = kT + pow(Res*DDir, 2.0);
+    kT = kT + pow(urisFactorTotal, 2.0);
 
     double kU = u[0]*u[0]*Kxi(0,0) + u[1]*u[0]*Kxi(1,0) + u[2]*u[0]*Kxi(2,0)
               + u[0]*u[1]*Kxi(0,1) + u[1]*u[1]*Kxi(1,1) + u[2]*u[1]*Kxi(2,1)
@@ -1689,25 +1679,25 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
     rS[1] = mu_x[0]*es[0][1] + mu_x[1]*es[1][1] + mu_x[2]*es[2][1] + mu*d2u2[1];
     rS[2] = mu_x[0]*es[0][2] + mu_x[1]*es[1][2] + mu_x[2]*es[2][2] + mu*d2u2[2];
 
-    // up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*K_inverse_darcy_permeability*u[0]);
-    // up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*K_inverse_darcy_permeability*u[1]);
-    // up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*K_inverse_darcy_permeability*u[2]);
+    // up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*brinkman_inverse_permeability*u[0]);
+    // up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*brinkman_inverse_permeability*u[1]);
+    // up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*brinkman_inverse_permeability*u[2]);
 
-    up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*K_inverse_darcy_permeability*u[0]
-                   + (Res*DDir)*u[0]);
-    up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*K_inverse_darcy_permeability*u[1]
-                   + (Res*DDir)*u[1]);
-    up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*K_inverse_darcy_permeability*u[2]
-                   + (Res*DDir)*u[2]);
+    up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*brinkman_inverse_permeability*u[0]
+                   + urisFactorTotal*u[0] - urisValveVelTermTotal[0]);
+    up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*brinkman_inverse_permeability*u[1]
+                   + urisFactorTotal*u[1] - urisValveVelTermTotal[1]);
+    up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*brinkman_inverse_permeability*u[2]
+                   + urisFactorTotal*u[2] - urisValveVelTermTotal[2]);
 
     for (int a = 0; a < eNoNw; a++) {
       double uNx = u[0]*Nwx(0,a) + u[1]*Nwx(1,a) + u[2]*Nwx(2,a);
-      // T1 = -rho*uNx + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) - mu*K_inverse_darcy_permeability*Nw(a);
+      // T1 = -rho*uNx + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) - mu*brinkman_inverse_permeability*Nw(a);
 
       T1 = -rho*uNx + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) 
            + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) 
-           - mu*K_inverse_darcy_permeability*Nw(a)
-           - (Res*DDir)*Nw(a);
+           - mu*brinkman_inverse_permeability*Nw(a)
+           - urisFactorTotal*Nw(a);
 
       updu[0][0][a] = mu_x[0]*Nwx(0,a) + d2u2[0]*mu_g*esNx[0][a] + T1;
       updu[1][0][a] = mu_x[1]*Nwx(0,a) + d2u2[1]*mu_g*esNx[0][a];
@@ -1775,7 +1765,8 @@ void fluid_3d_c(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
 void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int eNoNq, const double w,
     const Array<double>& Kxi, const Vector<double>& Nw, const Vector<double>& Nq, const Array<double>& Nwx,
     const Array<double>& Nqx, const Array<double>& Nwxx, const Array<double>& al, const Array<double>& yl,
-    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double K_inverse_darcy_permeability, double DDir)
+    const Array<double>& bfl, Array<double>& lR, Array3<double>& lK, double brinkman_inverse_permeability,
+    const double urisFactorTotal, const Vector<double>& urisValveVelTermTotal)
 {
   #define n_debug_fluid_3d_m
   #ifdef debug_fluid_3d_m
@@ -1788,9 +1779,6 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   double start_time = utils::cput();
   #endif
 
-  // Maximum size of arrays sized by (3,eNoNw) -> (3,MAX_SIZE).
-  const int MAX_SIZE = 27;
-
   using namespace consts;
 
   int cEq = com_mod.cEq;
@@ -1799,22 +1787,14 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   auto& dmn = eq.dmn[cDmn];
   const double dt = com_mod.dt;
 
-  double Res;
-  if (!com_mod.urisFlag) {
-    Res = 0.0;
-  } else {
-    Res = com_mod.urisRes;
-    if (com_mod.uris[0].clsFlg) {Res = com_mod.urisResClose;}
-  }
-
   double ctM  = 1.0;
   double ctC  = 36.0;
 
-  double rho = dmn.prop[PhysicalProperyType::fluid_density];
+  double rho = dmn.prop[PhysicalPropertyType::fluid_density];
   std::array<double,3> f;
-  f[0] = dmn.prop[PhysicalProperyType::f_x];
-  f[1] = dmn.prop[PhysicalProperyType::f_y];
-  f[2] = dmn.prop[PhysicalProperyType::f_z];
+  f[0] = dmn.prop[PhysicalPropertyType::f_x];
+  f[1] = dmn.prop[PhysicalPropertyType::f_y];
+  f[2] = dmn.prop[PhysicalPropertyType::f_z];
 
   double T1 = eq.af * eq.gam * dt;
   double amd = eq.am / T1;
@@ -1941,7 +1921,7 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   es[1][2] = es[2][1];
   es[2][0] = es[0][2];
 
-  double esNx[3][MAX_SIZE];
+  double esNx[3][maxNoN];
 
   for (int a = 0; a < eNoNw; a++) {
     esNx[0][a] = es[0][0]*Nwx(0,a) + es[1][0]*Nwx(1,a) + es[2][0]*Nwx(2,a);
@@ -2015,11 +1995,11 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   double kT = 4.0 * pow(ctM/dt,2.0);
   
   // If we consider the NSB model, we need to add an extra term inside the computation for the stab parameter 
-  kT = kT + pow(K_inverse_darcy_permeability*mu/rho, 2.0);   
+  kT = kT + pow(brinkman_inverse_permeability*mu/rho, 2.0);
 
   // In case of unfitted RIS, compute the delta function at the quad point,
   // add the additional value to the stabilization param 
-  kT = kT + pow(Res*DDir, 2.0);
+  kT = kT + pow(urisFactorTotal, 2.0);
 
   double kU = u[0]*u[0]*Kxi(0,0) + u[1]*u[0]*Kxi(1,0) + u[2]*u[0]*Kxi(2,0)
             + u[0]*u[1]*Kxi(0,1) + u[1]*u[1]*Kxi(1,1) + u[2]*u[1]*Kxi(2,1)
@@ -2049,16 +2029,16 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   rS[2] = mu_x[0]*es[0][2] + mu_x[1]*es[1][2] + mu_x[2]*es[2][2] + mu*d2u2[2];
 
   double up[3] = {};
-  // up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*K_inverse_darcy_permeability * u[0]);
-  // up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*K_inverse_darcy_permeability * u[1]);
-  // up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*K_inverse_darcy_permeability * u[2]);
+  // up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*brinkman_inverse_permeability * u[0]);
+  // up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*brinkman_inverse_permeability * u[1]);
+  // up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*brinkman_inverse_permeability * u[2]);
 
-  up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*K_inverse_darcy_permeability * u[0]
-                 + (Res*DDir)*u[0]);
-  up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*K_inverse_darcy_permeability * u[1]
-                 + (Res*DDir)*u[1]);
-  up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*K_inverse_darcy_permeability * u[2]
-                 + (Res*DDir)*u[2]);
+  up[0] = -tauM*(rho*rV[0] + px[0] - rS[0] + mu*brinkman_inverse_permeability * u[0]
+                 + urisFactorTotal * u[0] - urisValveVelTermTotal[0]);
+  up[1] = -tauM*(rho*rV[1] + px[1] - rS[1] + mu*brinkman_inverse_permeability * u[1]
+                 + urisFactorTotal * u[1] - urisValveVelTermTotal[1]);
+  up[2] = -tauM*(rho*rV[2] + px[2] - rS[2] + mu*brinkman_inverse_permeability * u[2]
+                 + urisFactorTotal * u[2] - urisValveVelTermTotal[2]);
 
   double tauC, tauB, pa;
   double eps = std::numeric_limits<double>::epsilon();
@@ -2114,10 +2094,10 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
 
   //  Local residual
   //
-  double updu[3][3][MAX_SIZE] = {};
-  double uNx[MAX_SIZE] = {};
-  double upNx[MAX_SIZE] = {}; 
-  double uaNx[MAX_SIZE] = {}; 
+  double updu[3][3][maxNoN] = {};
+  double uNx[maxNoN] = {};
+  double upNx[maxNoN] = {}; 
+  double uaNx[maxNoN] = {}; 
 
   for (int a = 0; a < eNoNw; a++) {
     lR(0,a) = lR(0,a) + wr*Nw(a)*rV[0] + w*(Nwx(0,a)*rM[0][0] + Nwx(1,a)*rM[1][0] + Nwx(2,a)*rM[2][0]);
@@ -2135,12 +2115,12 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
        uaNx[a] = uNx[a];
     }
 
-    // T1 = -rho*uNx[a] + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) - mu*K_inverse_darcy_permeability*Nw(a);
+    // T1 = -rho*uNx[a] + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) - mu*brinkman_inverse_permeability*Nw(a);
 
     T1 = -rho*uNx[a] + mu*(Nwxx(0,a) + Nwxx(1,a) + Nwxx(2,a)) 
          + mu_x[0]*Nwx(0,a) + mu_x[1]*Nwx(1,a) + mu_x[2]*Nwx(2,a) 
-         - mu*K_inverse_darcy_permeability*Nw(a)
-         - (Res*DDir)*Nw(a);
+         - mu*brinkman_inverse_permeability*Nw(a)
+         - urisFactorTotal*Nw(a);
 
     updu[0][0][a] = mu_x[0]*Nwx(0,a) + d2u2[0]*mu_g*esNx[0][a] + T1;
     updu[1][0][a] = mu_x[1]*Nwx(0,a) + d2u2[1]*mu_g*esNx[0][a];
@@ -2175,9 +2155,9 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       // dRm_a1/du_b1
       double T2 = (mu + tauC)*rM[0][0] + esNx[0][a]*mu_g*esNx[0][b] - rho*tauM*uaNx[a]*updu[0][0][b];
       lK(0,a,b)  = lK(0,a,b)  + wl*(T2 + T1);
-      // lK(0,a,b)  = lK(0,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a);
-      lK(0,a,b)  = lK(0,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a)
-                              + (Res*DDir)*wl*Nw(b)*Nw(a);
+      // lK(0,a,b)  = lK(0,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a);
+      lK(0,a,b)  = lK(0,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a)
+                              + urisFactorTotal*wl*Nw(b)*Nw(a);
 
       // dRm_a1/du_b2
       T2 = mu*rM[1][0] + tauC*rM[0][1] + esNx[0][a]*mu_g*esNx[1][b] - rho*tauM*uaNx[a]*updu[1][0][b];
@@ -2194,9 +2174,9 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       // dRm_a2/du_b2
       T2 = (mu + tauC)*rM[1][1] + esNx[1][a]*mu_g*esNx[1][b] - rho*tauM*uaNx[a]*updu[1][1][b];
       lK(5,a,b)  = lK(5,a,b)  + wl*(T2 + T1);
-      // lK(5,a,b)  = lK(5,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a);
-      lK(5,a,b)  = lK(5,a,b)  + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a)
-                              + (Res*DDir)*wl*Nw(b)*Nw(a);
+      // lK(5,a,b)  = lK(5,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a);
+      lK(5,a,b)  = lK(5,a,b)  + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a)
+                              + urisFactorTotal*wl*Nw(b)*Nw(a);
 
       // dRm_a2/du_b3
       T2 = mu*rM[2][1] + tauC*rM[1][2] + esNx[1][a]*mu_g*esNx[2][b] - rho*tauM*uaNx[a]*updu[2][1][b];
@@ -2213,9 +2193,9 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
       // dRm_a3/du_b3;
       T2 = (mu + tauC)*rM[2][2] + esNx[2][a]*mu_g*esNx[2][b] - rho*tauM*uaNx[a]*updu[2][2][b];
       lK(10,a,b) = lK(10,a,b) + wl*(T2 + T1);
-      // lK(10,a,b) = lK(10,a,b) + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a);
-      lK(10,a,b) = lK(10,a,b) + mu*K_inverse_darcy_permeability*wl*Nw(b)*Nw(a)
-                              + (Res*DDir)*wl*Nw(b)*Nw(a);
+      // lK(10,a,b) = lK(10,a,b) + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a);
+      lK(10,a,b) = lK(10,a,b) + mu*brinkman_inverse_permeability*wl*Nw(b)*Nw(a)
+                              + urisFactorTotal*wl*Nw(b)*Nw(a);
       //dmsg << "lK(10,a,b): " << lK(10,a,b);
     }
   }
@@ -2240,12 +2220,12 @@ void fluid_3d_m(ComMod& com_mod, const int vmsFlag, const int eNoNw, const int e
   // Residual contribution Birkman term 
   // Local residue
   for (int a = 0; a < eNoNw; a++) {
-      lR(0,a) = lR(0,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[0]+up[0])
-                        + Res*DDir*w*Nw(a)*u[0];
-      lR(1,a) = lR(1,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[1]+up[1])
-                        + Res*DDir*w*Nw(a)*u[1];
-      lR(2,a) = lR(2,a) + mu*K_inverse_darcy_permeability*w*Nw(a)*(u[2]+up[2])
-                        + Res*DDir*w*Nw(a)*u[2];
+      lR(0,a) = lR(0,a) + mu*brinkman_inverse_permeability*w*Nw(a)*(u[0]+up[0])
+                        + w*Nw(a)*(urisFactorTotal*u[0] - urisValveVelTermTotal[0]);
+      lR(1,a) = lR(1,a) + mu*brinkman_inverse_permeability*w*Nw(a)*(u[1]+up[1])
+                        + w*Nw(a)*(urisFactorTotal*u[1] - urisValveVelTermTotal[1]);
+      lR(2,a) = lR(2,a) + mu*brinkman_inverse_permeability*w*Nw(a)*(u[2]+up[2])
+                        + w*Nw(a)*(urisFactorTotal*u[2] - urisValveVelTermTotal[2]);
   }
 
 }

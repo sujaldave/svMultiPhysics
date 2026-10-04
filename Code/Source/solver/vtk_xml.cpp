@@ -183,7 +183,9 @@ void int_msh_data(const ComMod& com_mod, const CmMod& cm_mod, const mshType& lM,
   //
   int m = nOute;
 
-  if (!com_mod.savedOnce || com_mod.nMsh > 1) {
+  // This condition selects the same xe columns as the one in write_vtus that
+  // reads them back. The two must agree.
+  if (!com_mod.savedOnce || com_mod.nMsh > 1 || com_mod.alwaysSaveDomainID) {
     if (com_mod.savedOnce) {
       m = m + 1;
     } else { 
@@ -230,7 +232,7 @@ void int_msh_data(const ComMod& com_mod, const CmMod& cm_mod, const mshType& lM,
 
   // If files have not been written or there are multiple meshes.
   // 
-  if (!com_mod.savedOnce || com_mod.nMsh > 1) {
+  if (!com_mod.savedOnce || com_mod.nMsh > 1 || com_mod.alwaysSaveDomainID) {
     #ifdef debug_int_msh_data
     dmsg << "!com_mod.savedOnce || com_mod.nMsh > 1 ";
     dmsg << "com_mod.dmnId.size(): " << com_mod.dmnId.size();
@@ -579,8 +581,8 @@ void read_vtu(const std::string& file_name, mshType& mesh)
   #define n_read_vtu_use_VtkData 
   #ifdef read_vtu_use_VtkData 
   auto vtk_data = VtkData::create_reader(file_name);
-  int num_elems = vtk_data->num_elems(); 
-  int np_elem = vtk_data->np_elem(); 
+  int num_elems = vtk_data->num_elems();
+  int np_elem = vtk_data->num_points_per_elem();
   int elem_type = vtk_data->elem_type(); 
 
   // Set mesh data.
@@ -627,7 +629,7 @@ void read_precomputed_solution_vtu(const std::string& file_name, const std::stri
   #ifdef read_vtu_use_VtkData
   auto vtk_data = VtkData::create_reader(file_name);
   int num_elems = vtk_data->num_elems();
-  int np_elem = vtk_data->np_elem();
+  int np_elem = vtk_data->num_points_per_elem();
 
   // Set mesh data.
   mesh.nEl = num_elems;
@@ -839,7 +841,7 @@ void write_vtp(ComMod& com_mod, faceType& lFa, const std::string& fName)
   }
 
   if (lFa.gE.size() != 0) {
-    vtk_writer->set_point_data("GlobalElementID", lFa.gE);
+    vtk_writer->set_element_data("GlobalElementID", lFa.gE);
   }
 
   vtk_writer->write();
@@ -1005,6 +1007,16 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
   if (com_mod.urisFlag) {
     nOut = nOut + com_mod.nUris;
     outDof = outDof + com_mod.nUris;
+    for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+      if (com_mod.uris[iUris].scaffold_flag) {
+        nOut = nOut + 1;
+        outDof = outDof + 1;
+      }
+      if (com_mod.uris[iUris].include_uris_velocity) {
+        nOut = nOut + 1;
+        outDof = outDof + nsd;
+      }
+    }
   }
 
   std::vector<std::string> outNames(nOut); 
@@ -1130,6 +1142,13 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
             }
           break;
 
+          case OutputNameType::outGrp_ionicState:
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = cep_mod.Xion(eq.output[iOut].o, Ac);
+            }
+            break;
+
           case OutputNameType::outGrp_WSS:
           case OutputNameType::outGrp_trac:
             post::bpost(simulation, msh, tmpV, solutions, oGrp);
@@ -1146,7 +1165,8 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
           case OutputNameType::outGrp_hFlx: 
           case OutputNameType::outGrp_stInv: 
           case OutputNameType::outGrp_vortex: 
-          case OutputNameType::outGrp_Visc: 
+          case OutputNameType::outGrp_Visc:
+          case OutputNameType::outGrp_darcyFlux: 
             post::post(simulation, msh, tmpV, solutions, oGrp, iEq);
             for (int a = 0; a < msh.nNo; a++) {
               int Ac = msh.gN(a);
@@ -1221,7 +1241,7 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
               //CALL SHLPOST(msh(iM), l, tmpV, tmpVe, lD, iEq,oGrp)
             } else { 
               if (!com_mod.cmmInit) {
-                post::tpost(simulation, msh, l, tmpV, tmpVe, solutions, iEq, oGrp);
+                post::tensor_post(simulation, msh, l, tmpV, tmpVe, solutions, iEq, oGrp);
               }
             }
 
@@ -1257,7 +1277,7 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
               post::shl_post(simulation, msh, l, tmpV, tmpVe, solutions, iEq, oGrp);
               //CALL SHLPOST(msh(iM), l, tmpV, tmpVe, lD, iEq,oGrp)
             } else {
-              post::tpost(simulation, msh, l, tmpV, tmpVe, solutions, iEq, oGrp);
+              post::tensor_post(simulation, msh, l, tmpV, tmpVe, solutions, iEq, oGrp);
             }
 
             for (int a = 0; a < msh.nNo; a++) {
@@ -1286,13 +1306,54 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
           break;
 
           case OutputNameType::outGrp_divV:
-            tmpV.resize(l,msh.nNo); 
+            tmpV.resize(l,msh.nNo);
             post::div_post(simulation, msh, tmpV, solutions, iEq);
             for (int a = 0; a < msh.nNo; a++) {
               d[iM].x(is,a) = tmpV(0,a);
             }
             tmpV.resize(consts::maxNSD,msh.nNo);
           break;
+
+          case OutputNameType::outGrp_fibStretch: {
+            Vector<double> res(msh.nNo);
+            if (msh.nFn != 0) {
+              post::fib_stretch(simulation->com_mod, iEq, msh, solutions.current.get_displacement(), res);
+            }
+            for (int a = 0; a < msh.nNo; a++) {
+              d[iM].x(is,a) = res(a);
+            }
+          } break;
+
+          case OutputNameType::outGrp_fibStretchRate: {
+            Vector<double> res(msh.nNo);
+            if (msh.nFn != 0) {
+              post::fib_stretch_rate(simulation->com_mod, iEq, msh, solutions, res);
+            }
+            for (int a = 0; a < msh.nNo; a++) {
+              d[iM].x(is,a) = res(a);
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionFibers: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_f[Ac];
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionSheets: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_s[Ac];
+            }
+          } break;
+
+          case OutputNameType::outGrp_activeTensionNormal: {
+            for (int a = 0; a < msh.nNo; a++) {
+              int Ac = msh.gN(a);
+              d[iM].x(is, a) = simulation->cep_mod.cem.Ya_n[Ac];
+            }
+          } break;
 
           default:
             throw std::runtime_error("Undefined output");
@@ -1320,20 +1381,53 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
     } 
 
     if (com_mod.urisFlag) {
+      // SDF for each URIS
       for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
         cOut = cOut + 1;
-        // std::cout << "uris cOut:" << cOut << std::endl;
         int is = outS[cOut];
         int ie = is;
         outS[cOut+1] = ie + 1;
         outNames[cOut] = "URIS_SDF_" + com_mod.uris[iUris].name;
-        
+
         for (int a = 0; a < msh.nNo; a++) {
           int Ac = msh.gN(a);
           d[iM].x(is,a) = static_cast<double>(com_mod.uris[iUris].sdf(Ac));
         }
-      } 
-    } 
+      }
+      // SDF for scaffold
+      for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+        if (com_mod.uris[iUris].scaffold_flag) {
+          cOut = cOut + 1;
+          int is = outS[cOut];
+          int ie = is;
+          outS[cOut+1] = ie + 1;
+          outNames[cOut] = "URIS_SCAF_UDF_" + com_mod.uris[iUris].name;
+
+          for (int a = 0; a < msh.nNo; a++) {
+            int Ac = msh.gN(a);
+            d[iM].x(is,a) = static_cast<double>(com_mod.uris[iUris].scaffold_udf(Ac));
+          }
+        }
+      }
+      // Valve velocity for each URIS
+      for (int iUris = 0; iUris < com_mod.nUris; iUris++) {
+        if (com_mod.uris[iUris].include_uris_velocity) {
+          cOut = cOut + 1;
+          int is = outS[cOut];
+          int ie = is + nsd - 1;
+          outS[cOut+1] = ie + 1;
+          outNames[cOut] = "URIS_VEL_" + com_mod.uris[iUris].name;
+
+          for (int a = 0; a < msh.nNo; a++) {
+            int Ac = msh.gN(a);
+            for (int b = is; b <= ie; b++) {
+              d[iM].x(b,a) = static_cast<double>(com_mod.uris[iUris].valve_velocity_fluid(b-is, Ac));
+            }
+          }
+        }
+      }
+
+    }
 
   } // iM for loop 
 
@@ -1375,6 +1469,11 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
 
   fName = com_mod.saveName + "_" + fName + ".vtu";
   auto vtk_writer = VtkData::create_writer(fName);
+
+  // No time field is assigned for time-averaged output.
+  if (!lAve) {
+    vtk_writer->set_time_value(com_mod.time);
+  }
 
   // Writing the position data
   //
@@ -1442,7 +1541,7 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
   //
   int ne = -1;
 
-  if (!com_mod.savedOnce || nMsh > 1) {
+  if (!com_mod.savedOnce || nMsh > 1 || com_mod.alwaysSaveDomainID) {
     Array<int> tmpI(1,nEl);
 
     // Write the domain ID
@@ -1526,4 +1625,3 @@ void write_vtus(Simulation* simulation, const SolutionStates& solutions, const b
 }
 
 };
-

@@ -145,11 +145,7 @@ C++ functions are defined within a `namespace` defined for each Fortran file. Fo
          - [<b>fsi_linear_solver::fsils_commu_create(communicator, cm.com())</b>](#fsils_commu_create) -
          - [<b>fsi_linear_solver::fsils_lhs_create(com_mod.lhs, communicator, com_mod.gtnNo, com_mod.tnNo, nnz,com_mod.ltg, com_mod.rowPtr, com_mod.colPtr, nFacesLS)</b>](#fsils_lhs_create) - Initialize FSILS structures
          - [<b>cep_ion::cep_init(simulation)</b>](#cep_init) - 
-           - [<b>cep_ion::cep_init_l(CepMod& cep_mod, cepModelType& cep, int nX, int nG, Vector<double>& X, Vector<double>& Xg)</b>](#cep_init_l) -
-             - [<b>cep_mod.ap.init(nX, X)</b>]() - 
-             - [<b>cep_mod.bo.init(nX, X)</b>]() -
-             - [<b>cep_mod.bfn.init(nX, X)</b>]() -
-             - [<b>cep_mod.ttp.init(cep.imyo, nX, nG, X, Xg)</b>]() -
+           - [<b>IonicModel::init(Vector<double>& X, Vector<double>& Xg) const</b>](#ionic_model_init) -
          - [<b>fs::init_fs_msh(com_mod, mesh)</b>](#init_fs_msh) -
          - [<b>fs::init_fs_face(com_mod, mesh, mesh.fa[iFa])</b>](#init_fs_face) -
          - [<b>all_fun::integ(com_mod, cm_mod, i, s, 0, 0)</b>](#integ) - Calculating the volume of each domain
@@ -182,8 +178,8 @@ C++ functions are defined within a `namespace` defined for each Fortran file. Fo
              - [<b> fs::get_thood_fs(com_mod, fs, lM, vmsStab, 1) </b>](#)
              - [<b> nn::gnn(fs[1].eNoN, nsd, nsd, Nx, xql, Nqx, Jac, ksix) </b>](#)
              - [<b> nn::gn_nxx(l, fs[0].eNoN, nsd, nsd, Nx, Nxx, xwl, Nwx, Nwxx) </b>](#)
-             - [<b> fluid_3d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability)</b>](#) - If nsd=3
-             - [<b> fluid_2d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability)</b>](#) - If nsd=2
+             - [<b> fluid_3d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability)</b>](#) - If nsd=3
+             - [<b> fluid_2d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability)</b>](#) - If nsd=2
              - [<b> trilinos_doassem_(const_cast<int&>(eNoN), ptr.data(), lK.data(), lR.data())</b>](#) - If using Trilinos
              - [<b> lhsa_ns::do_assem(com_mod, eNoN, ptr, lK, lR)</b>](#do_assem) - If not using Trilinos
          - [<b> set_bc::set_bc_neu(com_mod, cm_mod, Yg, Dg) </b>](#set_bc_neu)
@@ -605,7 +601,7 @@ A map type used to set element properties.
 
 Computes shape functions and derivatives at given natural coords.
 
-- `set_face_shape_data[face.eType](gaus_pt, face)`
+- FE Basis face evaluation for supported mapped face elements.
 
 
 <!-- ============= -->
@@ -1208,7 +1204,7 @@ Modifies:
  cep_mod.Xion
  ```
  
- - `cep_init_l(cep_mod, eq.dmn[iDmn].cep, nX, nG, Xl, Xgl)`
+ - `IonicModel::init(Xl, Xgl)`
  
  - `all_fun::commu(com_mod, sA)`
  - `all_fun::commu(com_mod, sF)`
@@ -1496,9 +1492,9 @@ strongly or weakly.
  
  - `nn::gn_nxx(l, fs[0].eNoN, nsd, nsd, Nx, Nxx, xwl, Nwx, Nwxx)`
  
- - `fluid_3d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability)` - If nsd=3
+ - `fluid_3d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability)` - If nsd=3
  
- - `fluid_2d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, K_inverse_darcy_permeability)` - If nsd=2
+ - `fluid_2d_m(com_mod, vmsStab, fs[0].eNoN, fs[1].eNoN, w, ksix, N0, N1, Nwx, Nqx, Nwxx, al, yl, bfl, lR, lK, brinkman_inverse_permeability)` - If nsd=2
  
  - `trilinos_doassem_(const_cast<int&>(eNoN), ptr.data(), lK.data(), lR.data())` - If using Trilinos
  
