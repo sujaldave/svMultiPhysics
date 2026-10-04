@@ -391,7 +391,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int iM, const Array<dou
         if (msh.lShl) {
           Vector<double> nV(nsd);
           nn::gnns(nsd, eNoN, Nxi, xl, nV, tmps, tmps);
-          Jac  = sqrt(utils::norm(nV));
+          Jac  = utils::norm(nV);
         } else { 
           nn::gnn(eNoN, nsd, insd, Nxi, xl, Nx, Jac, tmp);
         }
@@ -572,7 +572,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             sl(a) = s(l,Ac);
           } else { 
             auto rows = s.col(Ac, {l,u});
-            sl(a) = sqrt(utils::norm(rows));
+            sl(a) = utils::norm(rows);
           }
           ibl = ibl + com_mod.iblank(Ac);
         }
@@ -590,7 +590,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             if (msh.lShl) {
               Vector<double> nV(nsd);
               nn::gnns(nsd, eNoN, Nxi, xl, nV, tmps, tmps);
-              Jac  = sqrt(utils::norm(nV));
+              Jac  = utils::norm(nV);
             } else { 
               nn::gnn(eNoN, nsd, insd, Nxi, xl, Nx, Jac, tmp);
             }
@@ -646,7 +646,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
             sl(a) = s(l,Ac);
           } else { 
             auto rows = s.col(Ac, {l,u});
-            sl(a) = sqrt(utils::norm(rows));
+            sl(a) = utils::norm(rows);
           }
         }
 
@@ -676,18 +676,10 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, int dId, const Array<do
   return result;
 }
 
-/// @brief This routine integrate a scalar field s over the face lFa.
-///
-/// Reproduces 'FUNCTION IntegS(lFa, s, pflag)'.
-///
-/// @param lFa face type, representing a face on the computational mesh
-/// @param s an array containing a scalar value for each node in the mesh
-/// @param pFlag flag for using Taylor-Hood function space for pressure
-/// @param cfg denotes which mechanical configuration (reference/timestep 0, old/timestep n, or new/timestep n+1). Default reference.
-//
-double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, const Vector<double>& s,
-    const SolutionStates& solutions, bool pFlag, MechanicalConfigurationType cfg)
-{
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Vector<double> &s, const SolutionStates &solutions,
+             bool pFlag, MechanicalConfigurationType cfg,
+             const unsigned int displacement_index) {
   using namespace consts;
   #define n_debug_integ_s
   #ifdef debug_integ_s
@@ -811,11 +803,11 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, co
       if (!isIB) {
         // Get normal vector in cfg configuration
         auto Nx = fs.Nx.slice(g);
-        nn::gnnb(com_mod, lFa, e, g, nsd, insd, fs.eNoN, Nx, n, solutions, cfg);
+        n = nn::gnnb(com_mod, lFa, e, g, Nx, solutions, cfg, displacement_index);
       }
 
       // Calculating the Jacobian (encodes area of face element)
-      double Jac = sqrt(utils::norm(n));
+      double Jac = utils::norm(n);
 
       // Calculating the function value at Gauss point
       double sHat = 0.0;
@@ -835,23 +827,23 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, co
   }
 
   result = com_mod.cm.reduce(cm_mod, result);
-  return result; 
+  return result;
 }
 
-/// @brief This routine integrates vector field s dotted with the face normal n
-/// over the face lFa. For example, if s contains the velocity at each node on 
-/// the face, this function computed the velocity flux through the face.
-///
-/// Reproduces 'FUNCTION IntegV(lFa, s)'
-///
-/// @param lFa face type, representing a face on the computational mesh
-/// @param s an array containing a vector value for each node in the mesh
-/// @param pFlag flag for using Taylor-Hood function space for pressure
-/// @param cfg denotes which configuration (reference/timestep 0, old/timestep n, or new/timestep n+1). Default reference.
-//
-double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, 
-            const Array<double>& s, const SolutionStates& solutions, MechanicalConfigurationType cfg)
-{
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Vector<double> &s, const SolutionStates &solutions,
+             bool pFlag) {
+  // The displacement index is not used in the reference configuration.
+  constexpr unsigned int unused_displacement_index = 0;
+  return integ(com_mod, cm_mod, lFa, s, solutions, pFlag,
+               consts::MechanicalConfigurationType::reference,
+               unused_displacement_index);
+}
+
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Array<double> &s, const SolutionStates &solutions,
+             MechanicalConfigurationType cfg,
+             const unsigned int displacement_index) {
   using namespace consts;
 
   #define n_debug_integ_V
@@ -931,7 +923,7 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa,
       if (!isIB) {
         // Get normal vector in cfg configuration
         auto Nx = lFa.Nx.slice(g);
-        nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, lFa.eNoN, Nx, n, solutions, cfg);
+        n = nn::gnnb(com_mod, lFa, e, g, Nx, solutions, cfg, displacement_index);
         //CALL GNNB(lFa, e, g, nsd-1, lFa.eNoN, lFa.Nx(:,:,g), n)
       } else {
         //CALL GNNIB(lFa, e, g, n)
@@ -963,29 +955,23 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa,
 
   result = cm.reduce(cm_mod, result);
 
-  return result; 
+  return result;
 }
 
-/// @brief This routine integrate s(l:u,:) over the surface faId, where s is an
-/// array of scalars or an array of nsd-vectors. This routine calls overloaded
-/// functions to integrate scalars, if s is scalar (i.e. l=u), or vectors if s 
-/// is vector (i.e. l<u).
-///
-/// Note that 'l' and 'u' should be 0-based and are used to index into 's'.
-///
-/// Reproduces 'FUNCTION IntegG(lFa, s, l, uo, THflag)'.
-///
-/// @param lFa face type, representing a face on the computational mesh.
-/// @param s an array containing a vector value for each node in the mesh.
-/// @param l lower index of s
-/// @param uo optional: upper index of s. Default u = l.
-/// @param THlag flag for using Taylor-Hood function space for pressure.
-/// @param cfg denotes which configuration (reference/timestep 0, old/timestep n, or new/timestep n+1). Default reference.
-///
-//
-double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa, 
-    const Array<double>& s, const int l, const SolutionStates& solutions, std::optional<int> uo, bool THflag, MechanicalConfigurationType cfg)
-{
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Array<double> &s, const SolutionStates &solutions) {
+  // The displacement index is not used in the reference configuration.
+  constexpr unsigned int unused_displacement_index = 0;
+  return integ(com_mod, cm_mod, lFa, s, solutions,
+               consts::MechanicalConfigurationType::reference,
+               unused_displacement_index);
+}
+
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Array<double> &s, const int l,
+             const SolutionStates &solutions, std::optional<int> uo,
+             bool THflag, MechanicalConfigurationType cfg,
+             const unsigned int displacement_index) {
   using namespace consts;
 
   #define n_debug_integ_g
@@ -1040,21 +1026,33 @@ double integ(const ComMod& com_mod, const CmMod& cm_mod, const faceType& lFa,
          vec(n,a) = s(i,a);                 
        }
      }
-     result = integ(com_mod, cm_mod, lFa, vec, solutions, cfg);
-  // If s scalar, integrate as scalar
+     result =
+         integ(com_mod, cm_mod, lFa, vec, solutions, cfg, displacement_index);
+     // If s scalar, integrate as scalar
   } else if (l == u) {
      Vector<double> sclr(nNo);
      for (int a = 0; a < nNo; a++) {
         sclr(a) = s(l,a);
      }
-     result = integ(com_mod, cm_mod, lFa, sclr, solutions, flag, cfg);
+     result = integ(com_mod, cm_mod, lFa, sclr, solutions, flag, cfg,
+                    displacement_index);
   } else {
     throw std::runtime_error("Unexpected dof in integ");
   }
 
-  return result; 
+  return result;
 }
 
+double integ(const ComMod &com_mod, const CmMod &cm_mod, const faceType &lFa,
+             const Array<double> &s, const int l,
+             const SolutionStates &solutions, std::optional<int> uo,
+             bool THflag) {
+  // The displacement index is not used in the reference configuration.
+  constexpr unsigned int unused_displacement_index = 0;
+  return integ(com_mod, cm_mod, lFa, s, l, solutions, uo, THflag,
+               consts::MechanicalConfigurationType::reference,
+               unused_displacement_index);
+}
 
 bool is_domain(const ComMod& com_mod, const eqType& eq, const int node, const consts::EquationType phys)
 {
@@ -1704,5 +1702,28 @@ void split_jobs(int tid, int m, int n, Array<double>& A, Vector<double>& b)
   #endif
 }
 
+void igbc(const ComMod &com_mod, const MBType &gm, Array<double> &Y,
+          Array<double> &dY) {
+  double t = fmod(com_mod.time, gm.period);
+  int i = 0;
 
+  for (int ii = 0; ii < gm.nTP - 1; ii++) {
+    if (gm.t(ii + 1) >= t) {
+      Y = 0.0;
+      dY = 0.0;
+      i = ii;
+      break;
+    }
+  }
+
+  double delT = gm.t(i + 1) - gm.t(i);
+  double tmp = (t - gm.t(i)) / delT;
+
+  for (int a = 0; a < gm.d.ncols(); a++) {
+    for (int j = 0; j < gm.dof; j++) {
+      Y(j, a) = tmp * gm.d(j, a, i + 1) + gm.d(j, a, i) * (1.0 - tmp);
+      dY(j, a) = (gm.d(j, a, i + 1) - gm.d(j, a, i)) / delT;
+    }
+  }
+}
 };

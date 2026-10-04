@@ -217,7 +217,7 @@ void accumulate_inner_solve(
     fsi_linear_solver::FSILS_subLsType& fields,
     const BelosSolveStats& stats)
 {
-  fields.suc = fields.suc && stats.converged;
+  fields.success = fields.success && stats.converged;
   fields.itr += stats.iterations;
   fields.callD += stats.elapsed;
   fields.iNorm = stats.initial_norm;
@@ -423,9 +423,9 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   }
 
   auto& linear_solver = equation.FSILS;
-  linear_solver.RI.suc = false;
-  linear_solver.GM.suc = true;
-  linear_solver.CG.suc = true;
+  linear_solver.RI.success = false;
+  linear_solver.GM.success = true;
+  linear_solver.CG.success = true;
   linear_solver.GM.itr = 0;
   linear_solver.CG.itr = 0;
   linear_solver.GM.callD = 0.0;
@@ -519,7 +519,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
     block_topology_cache_->scatter(
         zero_velocity, zero_pressure, trilinos_->X);
     copy_solution_to_host(trilinos_, solution);
-    linear_solver.RI.suc = true;
+    linear_solver.RI.success = true;
     reset_trilinos_state_after_solve(trilinos_);
     return;
   }
@@ -681,7 +681,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         active_basis);
 
     if (ri_norm_squared < tolerance_squared) {
-      linear_solver.RI.suc = true;
+      linear_solver.RI.success = true;
       break;
     }
   }

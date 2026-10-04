@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "Integrator.h"
+#include "Core/Exception.h"
 #include "all_fun.h"
 #include "bf.h"
 #include "cep_ion.h"
@@ -11,6 +12,7 @@
 #include "ls.h"
 #include "nn.h"
 #include "output.h"
+#include "post.h"
 #include "ris.h"
 #include "set_bc.h"
 #include "ustruct.h"
@@ -56,11 +58,7 @@ void Integrator::initialize_arrays() {
   solutions_.current.get_velocity() = solutions_.old.get_velocity();
 }
 
-//------------------------
-// step
-//------------------------
-/// @brief Execute one Newton iteration loop for the current time step
-bool Integrator::step() {
+bool Integrator::step(bool save_results) {
   using namespace consts;
 
   auto& com_mod = simulation_->com_mod;
@@ -90,7 +88,7 @@ bool Integrator::step() {
     iEqOld = cEq;
     auto& eq = com_mod.eq[cEq];
 
-    if (com_mod.cplBC.coupled && cEq == 0) {
+    if (cEq == com_mod.cplBC.equationIndex && com_mod.cplBC.coupled) {
       #ifdef debug_integrator_step
       dmsg << "Set coupled BCs " << std::endl;
       #endif
@@ -157,6 +155,13 @@ bool Integrator::step() {
     // Solution is obtained, now updating (Corrector) and check for convergence
     bool all_converged = corrector_and_check_convergence();
 
+    // Writing out the time passed, residual, and etc. The converged iteration
+    // is flagged with an 's' when the results of this time step are saved to a
+    // file.
+    output::output_result(simulation_, com_mod.timeP,
+                          /* save_results = */ all_converged && save_results,
+                          iEqOld);
+
     // Check if all equations converged
     if (all_converged) {
       #ifdef debug_integrator_step
@@ -166,7 +171,6 @@ bool Integrator::step() {
       return true;
     }
 
-    output::output_result(simulation_, com_mod.timeP, 2, iEqOld);
     newton_count_ += 1;
   } // End of Newton iteration loop
 }
@@ -393,6 +397,7 @@ void Integrator::predictor()
   using namespace consts;
 
   auto& com_mod = simulation_->com_mod;
+  auto& cep_mod = simulation_->cep_mod;
 
   #define n_debug_picp
   #ifdef debug_picp
@@ -457,6 +462,82 @@ void Integrator::predictor()
   dmsg << "dFlag: " << com_mod.dFlag;
   #endif
 
+  Vector<double> fiber_stretch;
+  Vector<double> fiber_stretch_rate;
+
+  // Determine if we need to compute fiber stretch and stretch rate, by going
+  // through all domains of all equations until we find one for which active
+  // stress is enabled and the active stress model needs the stretch or stretch rate.
+  //
+  // have_active_stress is tracked separately from need_fiber_stretch because
+  // advance_time_step() indexes both vectors for every node whether or not the
+  // model reads the values, so they must be allocated either way.
+  bool have_active_stress = false;
+  bool need_fiber_stretch = false;
+  bool need_fiber_stretch_rate = false;
+  int fiber_stretch_eq_index = -1;
+  for (int iEq = 0; iEq < com_mod.nEq; ++iEq) {
+    const auto &eq = com_mod.eq[iEq];
+
+    if (supports_active_stress(eq.phys)) {
+      fiber_stretch_eq_index = iEq;
+
+      for (const auto &dmn : eq.dmn) {
+        if (dmn.active_stress != nullptr) {
+          have_active_stress = true;
+          need_fiber_stretch |= dmn.active_stress->needs_fiber_stretch();
+          need_fiber_stretch_rate |=
+              dmn.active_stress->needs_fiber_stretch_rate();
+        }
+      }
+    }
+
+    else if (eq.phys == Equation_CEP) {
+      need_fiber_stretch = true;
+    }
+  }
+
+  // If we need to compute fiber stretch, we iterate through all meshes, compute
+  // the stretch for each mesh, and then copy the mesh-local resulting vector
+  // into the global vector.
+  if (have_active_stress || need_fiber_stretch) {
+    fiber_stretch.resize(com_mod.tnNo);
+
+    if (need_fiber_stretch && fiber_stretch_eq_index >= 0) {
+      for (const auto &mesh : com_mod.msh) {
+        Vector<double> tmp(mesh.nNo);
+
+        post::fib_stretch(com_mod, fiber_stretch_eq_index, mesh, Dn, tmp);
+        for (int a = 0; a < mesh.nNo; ++a)
+          fiber_stretch[mesh.gN[a]] = tmp[a];
+      }
+    } else {
+      // No domain solves for the displacement, or no model reads the stretch:
+      // set the fiber stretch to 1, corresponding to no stretch.
+      fiber_stretch = 1.0;
+    }
+  }
+
+  // Same for fiber stretch rate.
+  if (have_active_stress) {
+    fiber_stretch_rate.resize(com_mod.tnNo);
+
+    if (need_fiber_stretch_rate && fiber_stretch_eq_index >= 0) {
+      for (const auto &mesh : com_mod.msh) {
+        Vector<double> tmp(mesh.nNo);
+
+        post::fib_stretch_rate(com_mod, fiber_stretch_eq_index, mesh,
+                               solutions_, tmp);
+        for (int a = 0; a < mesh.nNo; ++a)
+          fiber_stretch_rate[mesh.gN[a]] = tmp[a];
+      }
+    } else {
+      // No domain solves for displacement, or no model reads stretch rate:
+      // Set the fiber stretch rate to 0, corresponding to no movement.
+      fiber_stretch_rate = 0.0;
+    }
+  }
+
   for (int iEq = 0; iEq < com_mod.nEq; iEq++) {
     auto& eq = com_mod.eq[iEq];
     int s = eq.s; // start row
@@ -481,7 +562,63 @@ void Integrator::predictor()
 
     // electrophysiology
     if (eq.phys == Equation_CEP) {
-      cep_ion::cep_integ(simulation_, iEq, e, solutions_);
+      if (fiber_stretch.size() != com_mod.tnNo)
+        svmp::raise<svmp::InternalErrorException>(
+            "Fiber stretch vector is not initialized correctly.");
+
+      cep_ion::cep_integ(simulation_, iEq, e, solutions_, fiber_stretch);
+    }
+
+    // active stress
+    if (supports_active_stress(eq.phys)) {
+      for (auto &dmn : eq.dmn) {
+        if (dmn.active_stress != nullptr) {
+          dmn.active_stress->advance_time_step(com_mod.time, com_mod.dt,
+                                               cep_mod.calcium, fiber_stretch,
+                                               fiber_stretch_rate);
+        }
+      }
+
+      // Fill in the active tension vector.
+      // We go through all mesh nodes, find the domain they are associated with,
+      // and get the active stress from that domain. If a point is associated to
+      // multiple domains (which happens for points on domain interfaces), we
+      // average the active stresses from the domains.
+      for (int Ac = 0; Ac < com_mod.tnNo; Ac++) {
+        double Ta_f = 0.0;
+        double Ta_s = 0.0;
+        double Ta_n = 0.0;
+        unsigned int n_domains = 0;
+
+        for (auto &dmn : eq.dmn) {
+          // Domains whose equations do not allow for active stress (e.g. fluid
+          // domains) do not contribute to the average, but domains that do
+          // allow for active stress (e.g. struct) for which active stress is
+          // not enabled contribute a zero value to the average.
+          if (!supports_active_stress(dmn.phys))
+            continue;
+
+          // Only domains that node Ac actually belongs to contribute to its
+          // average. Note that if there is only one domain dmnId may not be
+          // populated, so we only check domain membership if eq.nDmn > 1.
+          if (eq.nDmn > 1 && !utils::btest(com_mod.dmnId(Ac), dmn.Id))
+            continue;
+
+          if (dmn.active_stress != nullptr) {
+            Ta_f += dmn.active_stress->get_tension_fibers(Ac);
+            Ta_s += dmn.active_stress->get_tension_sheets(Ac);
+            Ta_n += dmn.active_stress->get_tension_sheet_normals(Ac);
+          }
+
+          n_domains++;
+        }
+
+        if (n_domains > 0) {
+          cep_mod.cem.Ya_f[Ac] = Ta_f / n_domains;
+          cep_mod.cem.Ya_s[Ac] = Ta_s / n_domains;
+          cep_mod.cem.Ya_n[Ac] = Ta_n / n_domains;
+        }
+      }
     }
 
     // eqn 86 of Bazilevs 2007

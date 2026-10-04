@@ -22,6 +22,17 @@ CoupledBoundaryCondition::CoupledBoundaryCondition(const CoupledBoundaryConditio
     , bc_type_(other.bc_type_)
     , block_name_(other.block_name_)
     , face_name_(other.face_name_)
+    , oned_input_file_(other.oned_input_file_)
+    , oned_ramp_steps_(other.oned_ramp_steps_)
+    , oned_ramp_ref_pressure_(other.oned_ramp_ref_pressure_)
+    , oned_relax_factor_(other.oned_relax_factor_)
+    , ramp_step_count_(other.ramp_step_count_)
+    , P_prev_sent_old_(other.P_prev_sent_old_)
+    , P_prev_sent_new_(other.P_prev_sent_new_)
+    , Q_prev_sent_(other.Q_prev_sent_)
+    , P_neu_prev_(other.P_neu_prev_)
+    , Q_input_prev_old_(other.Q_input_prev_old_)
+    , Q_input_prev_new_(other.Q_input_prev_new_)
     , Qo_(other.Qo_)
     , Qn_(other.Qn_)
     , Po_(other.Po_)
@@ -53,6 +64,17 @@ CoupledBoundaryCondition& CoupledBoundaryCondition::operator=(const CoupledBound
         bc_type_ = other.bc_type_;
         block_name_ = other.block_name_;
         face_name_ = other.face_name_;
+        oned_input_file_ = other.oned_input_file_;
+        oned_ramp_steps_ = other.oned_ramp_steps_;
+        oned_ramp_ref_pressure_ = other.oned_ramp_ref_pressure_;
+        oned_relax_factor_ = other.oned_relax_factor_;
+        ramp_step_count_ = other.ramp_step_count_;
+        P_prev_sent_old_ = other.P_prev_sent_old_;
+        P_prev_sent_new_ = other.P_prev_sent_new_;
+        Q_prev_sent_ = other.Q_prev_sent_;
+        P_neu_prev_ = other.P_neu_prev_;
+        Q_input_prev_old_ = other.Q_input_prev_old_;
+        Q_input_prev_new_ = other.Q_input_prev_new_;
         Qo_ = other.Qo_;
         Qn_ = other.Qn_;
         Po_ = other.Po_;
@@ -83,6 +105,17 @@ CoupledBoundaryCondition::CoupledBoundaryCondition(CoupledBoundaryCondition&& ot
     , bc_type_(other.bc_type_)
     , block_name_(std::move(other.block_name_))
     , face_name_(std::move(other.face_name_))
+    , oned_input_file_(std::move(other.oned_input_file_))
+    , oned_ramp_steps_(other.oned_ramp_steps_)
+    , oned_ramp_ref_pressure_(other.oned_ramp_ref_pressure_)
+    , oned_relax_factor_(other.oned_relax_factor_)
+    , ramp_step_count_(other.ramp_step_count_)
+    , P_prev_sent_old_(other.P_prev_sent_old_)
+    , P_prev_sent_new_(other.P_prev_sent_new_)
+    , Q_prev_sent_(other.Q_prev_sent_)
+    , P_neu_prev_(other.P_neu_prev_)
+    , Q_input_prev_old_(other.Q_input_prev_old_)
+    , Q_input_prev_new_(other.Q_input_prev_new_)
     , Qo_(other.Qo_)
     , Qn_(other.Qn_)
     , Po_(other.Po_)
@@ -129,6 +162,17 @@ CoupledBoundaryCondition& CoupledBoundaryCondition::operator=(CoupledBoundaryCon
         bc_type_ = other.bc_type_;
         block_name_ = std::move(other.block_name_);
         face_name_ = std::move(other.face_name_);
+        oned_input_file_ = std::move(other.oned_input_file_);
+        oned_ramp_steps_ = other.oned_ramp_steps_;
+        oned_ramp_ref_pressure_ = other.oned_ramp_ref_pressure_;
+        oned_relax_factor_ = other.oned_relax_factor_;
+        ramp_step_count_ = other.ramp_step_count_;
+        P_prev_sent_old_ = other.P_prev_sent_old_;
+        P_prev_sent_new_ = other.P_prev_sent_new_;
+        Q_prev_sent_ = other.Q_prev_sent_;
+        P_neu_prev_ = other.P_neu_prev_;
+        Q_input_prev_old_ = other.Q_input_prev_old_;
+        Q_input_prev_new_ = other.Q_input_prev_new_;
         Qo_ = other.Qo_;
         Qn_ = other.Qn_;
         Po_ = other.Po_;
@@ -208,6 +252,16 @@ const std::string& CoupledBoundaryCondition::get_block_name() const
     return block_name_;
 }
 
+const std::string& CoupledBoundaryCondition::get_oned_input_file() const
+{
+    return oned_input_file_;
+}
+
+void CoupledBoundaryCondition::set_oned_input_file(const std::string& path)
+{
+    oned_input_file_ = path;
+}
+
 void CoupledBoundaryCondition::set_solution_ids(int flow_id, int pressure_id, double in_out_sign)
 {
     flow_sol_id_ = flow_id;
@@ -264,12 +318,16 @@ void CoupledBoundaryCondition::compute_flowrates(ComMod& com_mod, const CmMod& c
     int nsd = com_mod.nsd;
     const auto& Yo = solutions.old.get_velocity();
     const auto& Yn = solutions.current.get_velocity();
-    
-    Qo_ = all_fun::integ(com_mod, cm_mod, *face_, Yo, 0, solutions,
-                         std::optional<int>(nsd - 1), false, flowrate_cfg_o_);
-    Qn_ = all_fun::integ(com_mod, cm_mod, *face_, Yn, 0, solutions,
-                         std::optional<int>(nsd - 1), false, flowrate_cfg_n_);
-    
+    const unsigned int equation_offset =
+        com_mod.eq[com_mod.cplBC.equationIndex].s;
+
+    Qo_ = all_fun::integ(com_mod, cm_mod, *face_, Yo, equation_offset,
+                         solutions, equation_offset + nsd - 1, false,
+                         flowrate_cfg_o_, equation_offset);
+    Qn_ = all_fun::integ(com_mod, cm_mod, *face_, Yn, equation_offset,
+                         solutions, equation_offset + nsd - 1, false,
+                         flowrate_cfg_n_, equation_offset);
+
     if (has_cap_) {
         const auto [Qo_cap, Qn_cap] =
             calculate_cap_contribution(com_mod, cm_mod, solutions, flowrate_cfg_o_, flowrate_cfg_n_);
@@ -293,12 +351,17 @@ void CoupledBoundaryCondition::compute_pressures(ComMod& com_mod, const CmMod& c
     double area = face_->area;
     const auto& Yo = solutions.old.get_velocity();
     const auto& Yn = solutions.current.get_velocity();
-    
-    Po_ = all_fun::integ(com_mod, cm_mod, *face_, Yo, nsd, solutions,
-                         std::nullopt, false, flowrate_cfg_o_) / area;
-    Pn_ = all_fun::integ(com_mod, cm_mod, *face_, Yn, nsd, solutions,
-                         std::nullopt, false, flowrate_cfg_n_) / area;
-    
+    const unsigned int equation_offset =
+        com_mod.eq[com_mod.cplBC.equationIndex].s;
+
+    Po_ = all_fun::integ(com_mod, cm_mod, *face_, Yo, equation_offset + nsd,
+                         solutions, std::nullopt, false, flowrate_cfg_o_,
+                         equation_offset) /
+          area;
+    Pn_ = all_fun::integ(com_mod, cm_mod, *face_, Yn, equation_offset + nsd,
+                         solutions, std::nullopt, false, flowrate_cfg_n_,
+                         equation_offset) /
+          area;
 }
 
 double CoupledBoundaryCondition::get_Qo() const
@@ -401,6 +464,14 @@ void CoupledBoundaryCondition::distribute(const ComMod& com_mod, const CmMod& cm
     // Distribute block name
     cm.bcast(cm_mod, block_name_);
     
+    // Distribute 1D input file path
+    cm.bcast(cm_mod, oned_input_file_);
+
+    // Distribute 1D ramp and relaxation parameters
+    cm.bcast(cm_mod, &oned_ramp_steps_);
+    cm.bcast(cm_mod, &oned_ramp_ref_pressure_);
+    cm.bcast(cm_mod, &oned_relax_factor_);
+
     // Distribute face name
     cm.bcast(cm_mod, face_name_);
     
@@ -521,7 +592,8 @@ void CoupledBoundaryCondition::initialize_cap(ComMod& com_mod)
 namespace {
 
 /// @brief Gathers cap-node mesh state on the serial rank (columns 0..n_cap-1 match \p cap_gn order).
-void gather_global_mesh_state_serial(ComMod& com_mod, const SolutionStates& solutions, bool gather_Y, int nsd, int tnNo,
+void gather_global_mesh_state_serial(ComMod& com_mod, const SolutionStates& solutions, bool gather_Y,
+                                     int equation_offset, int nsd, int tnNo,
                                      const Vector<int>& cap_gn, CapGlobalMeshState& out)
 {
     const auto& Do = solutions.old.get_displacement();
@@ -548,14 +620,16 @@ void gather_global_mesh_state_serial(ComMod& com_mod, const SolutionStates& solu
                 continue;
             }
             for (int i = 0; i < nsd; i++) {
+                // x is geometry (rows 0..nsd-1); Do/Dn are solution rows of the
+                // coupled equation, hence the equation_offset shift.
                 out.x(i, a) = com_mod.x(i, Ac);
-                out.Do(i, a) = Do(i, Ac);
-                out.Dn(i, a) = Dn(i, Ac);
+                out.Do(i, a) = Do(equation_offset + i, Ac);
+                out.Dn(i, a) = Dn(equation_offset + i, Ac);
             }
             if (gather_Y) {
                 for (int i = 0; i < nsd; i++) {
-                    out.Yo(i, a) = Yo(i, Ac);
-                    out.Yn(i, a) = Yn(i, Ac);
+                    out.Yo(i, a) = Yo(equation_offset + i, Ac);
+                    out.Yn(i, a) = Yn(equation_offset + i, Ac);
                 }
             }
             break;
@@ -566,7 +640,8 @@ void gather_global_mesh_state_serial(ComMod& com_mod, const SolutionStates& solu
 
 /// @brief Gathers cap-node mesh state on the MPI root (columns 0..n_cap-1 match \p cap_gn order).
 void gather_global_mesh_state_parallel(ComMod& com_mod, const CmMod& cm_mod, cmType& cm, const SolutionStates& solutions,
-                                        bool gather_Y, int nsd, int tnNo, int root, int nProcs, const Vector<int>& cap_gn,
+                                        bool gather_Y, int equation_offset, int nsd, int tnNo, int root, int nProcs,
+                                        const Vector<int>& cap_gn,
                                         const std::unordered_map<int, int>& g_to_cap_col,
                                         CapGlobalMeshState& out)
 {
@@ -602,21 +677,23 @@ void gather_global_mesh_state_parallel(ComMod& com_mod, const CmMod& cm_mod, cmT
             continue;
         }
         send_buf(idx++) = static_cast<double>(g);
+        // x is geometry (rows 0..nsd-1); Do/Dn/Yo/Yn are solution rows of the
+        // coupled equation, hence the equation_offset shift.
         for (int i = 0; i < nsd; i++) {
             send_buf(idx++) = com_mod.x(i, Ac);
         }
         for (int i = 0; i < nsd; i++) {
-            send_buf(idx++) = Do(i, Ac);
+            send_buf(idx++) = Do(equation_offset + i, Ac);
         }
         for (int i = 0; i < nsd; i++) {
-            send_buf(idx++) = Dn(i, Ac);
+            send_buf(idx++) = Dn(equation_offset + i, Ac);
         }
         if (gather_Y) {
             for (int i = 0; i < nsd; i++) {
-                send_buf(idx++) = Yo(i, Ac);
+                send_buf(idx++) = Yo(equation_offset + i, Ac);
             }
             for (int i = 0; i < nsd; i++) {
-                send_buf(idx++) = Yn(i, Ac);
+                send_buf(idx++) = Yn(equation_offset + i, Ac);
             }
         }
     }
@@ -698,13 +775,19 @@ void CoupledBoundaryCondition::gather_global_mesh_state(ComMod& com_mod, const C
     const int root = cm_mod.master;
     const int nProcs = cm.np();
 
+    // The coupled equation's velocity and displacement occupy solution rows
+    // starting at this offset. The gather must read them there rather than
+    // assuming the coupled equation is the first one (offset 0). This mirrors
+    // the offset used by compute_flowrates / compute_pressures.
+    const int equation_offset = com_mod.eq[com_mod.cplBC.equationIndex].s;
+
     if (cm.seq()) {
-        gather_global_mesh_state_serial(com_mod, solutions, gather_Y, nsd, tnNo, cap_mesh_global_node_ids_,
-                                        cap_global_mesh_state_);
+        gather_global_mesh_state_serial(com_mod, solutions, gather_Y, equation_offset, nsd, tnNo,
+                                        cap_mesh_global_node_ids_, cap_global_mesh_state_);
         return;
     }
 
-    gather_global_mesh_state_parallel(com_mod, cm_mod, cm, solutions, gather_Y, nsd, tnNo, root, nProcs,
+    gather_global_mesh_state_parallel(com_mod, cm_mod, cm, solutions, gather_Y, equation_offset, nsd, tnNo, root, nProcs,
                                         cap_mesh_global_node_ids_, cap_g_to_cap_col_, cap_global_mesh_state_);
 }
 
@@ -931,7 +1014,7 @@ void CappingSurface::load_from_vtp(const std::string& vtp_file_path, const faceT
     int vtk_cell_type = 0;
     try {
         conn = vtp_data.get_connectivity();
-        eNoN = vtp_data.np_elem();
+        eNoN = vtp_data.num_points_per_elem();
         vtk_cell_type = vtp_data.elem_type();
     } catch (const std::exception& e) {
         throw CappingSurfaceVtpException("Failed to get connectivity from VTP file '" + vtp_file_path + "': " +
@@ -986,7 +1069,7 @@ void CappingSurface::init_cap_face_quadrature(const ComMod& com_mod)
 
     try {
         if (nsd != cap_nsd_) {
-            throw CappingSurfaceBaseException("[CappingSurface::init_cap_face_quadrature] Cap surface requires nsd=3.");
+            throw CappingSurfaceGeometryException("[CappingSurface::init_cap_face_quadrature] Cap surface requires nsd=3.");
         }
         face_->nG = 1;
 
@@ -1081,10 +1164,10 @@ std::pair<double, Vector<double>> CappingSurface::compute_jacobian_and_normal(co
     double Jac = 0.0;
     Vector<double> n(cap_nsd_);
     n = utils::cross(xXi);
-    Jac = sqrt(utils::norm(n));
+    Jac = utils::norm(n);
 
     if (utils::is_zero(Jac)) {
-        throw CappingSurfaceBaseException("[CappingSurface::compute_jacobian_and_normal] Zero Jacobian at Gauss point " +
+        throw CappingSurfaceGeometryException("[CappingSurface::compute_jacobian_and_normal] Zero Jacobian at Gauss point " +
                                               std::to_string(g));
     }
 
@@ -1098,7 +1181,7 @@ std::pair<double, Vector<double>> CappingSurface::compute_jacobian_and_normal(co
             n0(i) = normals_(i, e);
         }
 
-        double n0_norm = sqrt(utils::norm(n0));
+        double n0_norm = utils::norm(n0);
         if (!utils::is_zero(n0_norm)) {
             n0 = n0 / n0_norm;
 
@@ -1310,4 +1393,24 @@ void CoupledBoundaryCondition::bcast_coupled_neumann_pressure(const CmMod& cm_mo
     }
     cm.bcast(cm_mod, &pr);
     set_pressure(pr);
+}
+
+void CoupledBoundaryCondition::bcast_coupled_dir_flowrate(const CmMod& cm_mod, cmType& cm)
+{
+    if (cm.seq()) {
+        return;
+    }
+    using namespace consts;
+    if (get_bc_type() != BoundaryConditionType::bType_Dir) {
+        return;
+    }
+    double Qo = 0.0;
+    double Qn = 0.0;
+    if (cm.mas(cm_mod)) {
+        Qo = get_Qo();
+        Qn = get_Qn();
+    }
+    cm.bcast(cm_mod, &Qo);
+    cm.bcast(cm_mod, &Qn);
+    set_flowrates(Qo, Qn);
 }

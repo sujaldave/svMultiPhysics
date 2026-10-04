@@ -37,10 +37,10 @@ void cmm_3d(ComMod& com_mod, const int eNoN, const double w, const Vector<double
   const double ctM = 1.0;
   const double ctC = 36.0;
 
-  double rho = dmn.prop.at(PhysicalProperyType::fluid_density);
-  Vector<double> f({dmn.prop.at(PhysicalProperyType::f_x), 
-                    dmn.prop.at(PhysicalProperyType::f_y), 
-                    dmn.prop.at(PhysicalProperyType::f_z)});
+  double rho = dmn.prop.at(PhysicalPropertyType::fluid_density);
+  Vector<double> f({dmn.prop.at(PhysicalPropertyType::f_x), 
+                    dmn.prop.at(PhysicalPropertyType::f_y), 
+                    dmn.prop.at(PhysicalPropertyType::f_z)});
 
   double T1 = eq.af * eq.gam * dt;
   double amd = eq.am/T1;
@@ -280,10 +280,9 @@ void cmm_b(ComMod& com_mod, const faceType& lFa, const int e, const Array<double
   // Inertia and body forces (mass) contribution
   //
   for (int g = 0; g < lFa.nG; g++) {
-    Vector<double> nV(nsd);
     auto Nx = lFa.Nx.slice(g);
-    nn::gnnb(com_mod, lFa, e, g, nsd, nsd-1, 3, Nx, nV, solutions, consts::MechanicalConfigurationType::reference);
-    double Jac = sqrt(utils::norm(nV));
+    Vector<double> nV = nn::gnnb(com_mod, lFa, e, g, Nx, solutions);
+    double Jac = utils::norm(nV);
     nV = nV / Jac;
     double w = lFa.w(g)*Jac;
     auto N = lFa.N.col(g);
@@ -334,7 +333,7 @@ void bcmmi(ComMod& com_mod, const int eNoN, const int idof, const double w, cons
     }
 
   } else {
-    double wl = w * sqrt(utils::norm(nV));
+    double wl = w * utils::norm(nV);
     for (int a = 0; a < eNoN; a++) {
       lR(0,a) = lR(0,a) - wl*N(a)*tfn(0);
       lR(1,a) = lR(1,a) - wl*N(a)*tfn(1);
@@ -375,7 +374,7 @@ void cmmi(ComMod& com_mod, const mshType& lM, const Array<double>& al, const Arr
   }
 
   auto nV = utils::cross(xXi);
-  auto Jac = sqrt(utils::norm(nV));
+  auto Jac = utils::norm(nV);
   nV = nV / Jac;
 
   Array<double> lR(dof,3); 
@@ -430,10 +429,10 @@ void cmm_mass(ComMod& com_mod, const double w, const Vector<double>& N, const Ar
   #endif
 
   Vector<double> f(3);
-  double rho = eq.dmn[cDmn].prop.at(PhysicalProperyType::solid_density);
-  f(0) = eq.dmn[cDmn].prop.at(PhysicalProperyType::f_x);
-  f(1) = eq.dmn[cDmn].prop.at(PhysicalProperyType::f_y);
-  f(2) = eq.dmn[cDmn].prop.at(PhysicalProperyType::f_z);
+  double rho = eq.dmn[cDmn].prop.at(PhysicalPropertyType::solid_density);
+  f(0) = eq.dmn[cDmn].prop.at(PhysicalPropertyType::f_x);
+  f(1) = eq.dmn[cDmn].prop.at(PhysicalPropertyType::f_y);
+  f(2) = eq.dmn[cDmn].prop.at(PhysicalPropertyType::f_z);
   #ifdef debug_cmm_mass
   dmsg << "rho: " << rho ;
   dmsg << "f: " << f ;
@@ -445,7 +444,7 @@ void cmm_mass(ComMod& com_mod, const double w, const Vector<double>& N, const Ar
   if (com_mod.cmmVarWall) { 
     ht = vwp(0);
   } else { 
-    ht = eq.dmn[cDmn].prop.at(PhysicalProperyType::shell_thickness);
+    ht = eq.dmn[cDmn].prop.at(PhysicalPropertyType::shell_thickness);
   }
 
   double wl = w * ht * rho;
@@ -498,7 +497,7 @@ void cmm_stiffness(ComMod& com_mod, const Array<double>& Nxi, const Array<double
   const double dt = com_mod.dt;
   const auto cDmn = com_mod.cDmn;
 
-  double nu = eq.dmn[cDmn].prop.at(PhysicalProperyType::poisson_ratio);
+  double nu = eq.dmn[cDmn].prop.at(PhysicalPropertyType::poisson_ratio);
   double ht, elM; 
 
   if (com_mod.cmmVarWall) {
@@ -508,8 +507,8 @@ void cmm_stiffness(ComMod& com_mod, const Array<double>& Nxi, const Array<double
     // elasticity modulus
     elM = vwp[1];
   } else { 
-    ht = eq.dmn[cDmn].prop.at(PhysicalProperyType::shell_thickness);
-    elM = eq.dmn[cDmn].prop.at(PhysicalProperyType::elasticity_modulus);
+    ht = eq.dmn[cDmn].prop.at(PhysicalPropertyType::shell_thickness);
+    elM = eq.dmn[cDmn].prop.at(PhysicalPropertyType::elasticity_modulus);
   }
 
   double lam = elM /(1.0 - nu*nu);
@@ -540,13 +539,13 @@ void cmm_stiffness(ComMod& com_mod, const Array<double>& Nxi, const Array<double
   }
 
   auto nV = utils::cross(xXi);
-  double Jac = sqrt(utils::norm(nV));
+  double Jac = utils::norm(nV);
   nV = nV / Jac;
 
   //  Rotation matrix
   //
   Array<double> thet(3,3);
-  thet.set_row(0, xXi.col(0) / sqrt(utils::norm(xXi.col(0))));
+  thet.set_row(0, xXi.col(0) / utils::norm(xXi.col(0)));
   thet.set_row(2, nV);
 
   thet(1,0) = thet(2,1)*thet(0,2) - thet(2,2)*thet(0,1);
