@@ -12,6 +12,7 @@
 #ifdef WITH_TRILINOS
 
 #include "trilinos_impl.h"
+#include "TrilinosLowRankUpdate.h"
 
 #include <vector>
 
@@ -93,7 +94,11 @@ class TrilinosResistanceOperator final : public Tpetra_Operator
     /// @brief Return the Tpetra range map supplied at construction.
     Teuchos::RCP<const Tpetra_Map> getRangeMap() const override;
 
+    const trilinos_bipartition::LowRankUpdate& low_rank_update() const { return *low_rank_; }
+
   private:
+    std::unique_ptr<trilinos_bipartition::LowRankUpdate> low_rank_;
+
     Teuchos::RCP<const Tpetra_Map> map_; ///< Shared domain and range map.
     std::vector<Teuchos::RCP<Tpetra_MultiVector>> boundary_vectors_; ///< Scaled face vectors.
     std::vector<Teuchos::RCP<Tpetra_MultiVector>> boundary_cap_vectors_; ///< Projection-only cap vectors.

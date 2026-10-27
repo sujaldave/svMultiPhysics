@@ -37,6 +37,7 @@ enum class SolverRole
   pressure_cg     ///< Pressure-space Schur CG solve.
 };
 
+class SchurMatrixStorage;
 class PreconditionerHandle;
 struct PreconditionerReuseContext;
 
@@ -47,11 +48,17 @@ struct PreconditionerReuseContext;
  * A cache is dedicated to one BIPN block role. The first use in a time step
  * builds a hierarchy; later uses in that same time step refresh it with
  * MueLu's RAP reuse policy. A time-step or topology-generation change forces
- * a complete rebuild.
+ * a complete rebuild for the original trilinos-ml policy. Schur AMG instead
+ * uses RP transfer reuse across time steps, refreshing all numerical levels;
+ * full graph/map, topology, and damping checks guard that cache.
  */
 class MueLuReuseCache
 {
   public:
+    Teuchos::RCP<Tpetra_CrsMatrix> schur_matrix(
+        const Teuchos::RCP<Tpetra_CrsMatrix>& L,
+        const Teuchos::RCP<Tpetra_CrsMatrix>& B, std::size_t generation);
+
     /// @brief Release the hierarchy and reset all reuse metadata and counters.
     void clear();
 
@@ -67,7 +74,7 @@ class MueLuReuseCache
     /// @brief Return the number of complete hierarchy builds.
     std::size_t build_count() const;
 
-    /// @brief Return the number of RAP hierarchy refreshes.
+    /// @brief Return the number of hierarchy refreshes (RP for Schur AMG).
     std::size_t reuse_count() const;
 
   private:
@@ -81,6 +88,10 @@ class MueLuReuseCache
         const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
         const PreconditionerReuseContext& reuse);
 
+    std::shared_ptr<SchurMatrixStorage> schur_storage_;
+    bool schur_ = false;
+    double damping_bound_ = 0.0;
+    Teuchos::RCP<const Tpetra_CrsGraph> schur_graph_;
     bool initialized_ = false;
     SolverRole role_ = SolverRole::momentum_gmres;
     int time_step_ = -1;

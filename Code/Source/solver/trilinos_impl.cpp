@@ -727,41 +727,21 @@ void constructJacobiScaling(const Teuchos::RCP<Trilinos> &trilinos_, const doubl
   // Start from the Dirichlet mask W_D supplied by svMultiPhysics.  Entries on
   // constrained rows/columns are zeroed in the same spirit as FSILS
   // precond_diag(), while unconstrained entries remain one.
-  { // New scope to ensure any local variables die before later Tpetra operations
-  for (int i = 0; i < localNodes; ++i) {
-    for (int j = 0; j < dof; ++j) {
-      GO gid = localToGlobalSorted[i] * dof + j;
-      if (map->isNodeGlobalElement(gid)) {
-        size_t lid = map->getLocalElement(gid);
-        diagonal.replaceLocalValue(lid, dirW[i * dof + j]);
-      } else {
-        std::cerr << "[ERROR] Setting Dirichlet diagonal scaling value failed at GID " 
-                  << gid << std::endl;
-        exit(1);
-      }
+  {
+    auto mask=diagonal.getLocalViewHost(Tpetra::Access::OverwriteAll);
+    for (int i=0; i<localNodes; ++i) for (int j=0; j<dof; ++j) {
+      const LO lid=map->getLocalElement(localToGlobalSorted[i]*dof+j);
+      if (lid==Teuchos::OrdinalTraits<LO>::invalid())
+        throw std::runtime_error("Dirichlet scaling DOF absent from owned map");
+      mask(lid,0)=dirW[i*dof+j];
     }
   }
-} // host writes to 'diagonal' (local replaceLocalValue) are now done
 
   // Extract diag(K) and compute the Jacobi factor:
   //   W_J(i) = 1 / sqrt(abs(K_ii)).
   // The Kokkos kernel keeps this large diagonal operation on the active device.
   Tpetra_Vector Kdiag(trilinos_->K->getRowMap());
   trilinos_->K->getLocalDiagCopy(Kdiag);
-
-  // Not compatible with GPU builds
-  // auto KdiagView = Kdiag.getLocalViewDevice(Tpetra::Access::ReadWrite);
-  // using execution_space = typename Node::execution_space;
-  // Kokkos::parallel_for("svmp_trilinos_jacobi_scaling",
-  //     Kokkos::RangePolicy<execution_space>(0, KdiagView.extent(0)),
-  //     KOKKOS_LAMBDA(const int i) {
-  //       double diag = KdiagView(i, 0);
-  //       if (diag == 0.0) {
-  //         diag = 1.0;
-  //       }
-  //       KdiagView(i, 0) = 1.0 / sqrt(fabs(diag));
-  //     });
-  // Kokkos::fence();
 
   { // New scope to ensure KdiagView dies before any later Tpetra operations
 
@@ -860,25 +840,29 @@ void trilinos_bc_create_(const Teuchos::RCP<Trilinos> &trilinos_,
     // with ADD globally sums shared face contributions onto the unique Tpetra
     // map.  This is what makes the later dot products and norms independent of
     // the number of MPI ranks.
-    Tpetra::Export<LO, GO, Node> exporter(
-        topology.ghost_map(), topology.map());
+    const auto& exporter=*topology.assembly_exporter();
+    if (trilinos_->ghost_boundary==Teuchos::null ||
+        !trilinos_->ghost_boundary->getMap()->isSameAs(*topology.ghost_map())) {
+      trilinos_->ghost_boundary=Teuchos::rcp(new Tpetra_MultiVector(topology.ghost_map(),1));
+      trilinos_->ghost_boundary_cap=Teuchos::rcp(new Tpetra_MultiVector(topology.ghost_map(),1));
+    }
 
     for (int k = 0; k < v_list.size(); ++k) {
       const double* v = v_list[k].data();
       const double* vcap = vcap_list[k].data();
 
-      Tpetra_MultiVector ghostBdryVec(topology.ghost_map(), 1);
-      Tpetra_MultiVector ghostBdryCapVec(topology.ghost_map(), 1);
-      ghostBdryVec.putScalar(0.0);
-      ghostBdryCapVec.putScalar(0.0);
-
-      for (int i = 0; i < ghostAndLocalNodes; ++i) {
-        auto globalRow = static_cast<GO>(localToGlobalSorted[i]);
-
-        for (int j = 0; j < dof; ++j)
-        {
-          ghostBdryVec.replaceGlobalValue(globalRow * dof + j, 0, v[i * dof + j]);
-          ghostBdryCapVec.replaceGlobalValue(globalRow * dof + j, 0, vcap[i * dof + j]);
+      // Inactive faces remain zero from system reset and need no upload/export.
+      if (k<static_cast<int>(trilinos_->resistanceFaces.size()) &&
+          trilinos_->resistanceFaces[k].resistance==0.0) continue;
+      auto& ghostBdryVec=*trilinos_->ghost_boundary;
+      auto& ghostBdryCapVec=*trilinos_->ghost_boundary_cap;
+      {
+        auto face=ghostBdryVec.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        auto cap=ghostBdryCapVec.getLocalViewHost(Tpetra::Access::OverwriteAll);
+        for (int i=0; i<ghostAndLocalNodes; ++i) for (int j=0; j<dof; ++j) {
+          const LO lid=topology.ghost_map()->getLocalElement(localToGlobalSorted[i]*dof+j);
+          face(lid,0)=v[i*dof+j];
+          cap(lid,0)=vcap[i*dof+j];
         }
       }
 
@@ -1024,6 +1008,7 @@ class TrilinosLinearAlgebra::TrilinosImpl {
 
     /// @brief Residual
     Array<double> R_;
+    std::vector<Array<double>> boundary_values_,cap_values_;
   
   private:
     Teuchos::RCP<Trilinos> trilinos_;
@@ -1091,6 +1076,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::assemble(ComMod& com_mod, const int nu
 /// @brief Set data for Dirichlet and coupled Neumann boundary conditions.
 void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod, const Vector<int>& incL, const Vector<double>& res)
 {
+  const double boundary_start=MPI_Wtime();
   using namespace consts;
   using namespace fsi_linear_solver;
 
@@ -1145,8 +1131,9 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
     }
   }
 
-  std::vector<Array<double>> v_list;
-  std::vector<Array<double>> vcap_list;
+  auto& v_list=boundary_values_;
+  auto& vcap_list=cap_values_;
+  v_list.resize(lhs.nFaces);vcap_list.resize(lhs.nFaces);
   bool isCoupledBC = false;
   trilinos_->resistanceFaces.clear();
 
@@ -1155,10 +1142,11 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
     auto& face = lhs.face[faIn]; 
 
     // Create a new array for each face and add it to the list
-    v_list.push_back(Array<double>(dof,tnNo));
-    auto& v = v_list.back();
-    vcap_list.push_back(Array<double>(dof,tnNo));
-    auto& vcap = vcap_list.back();
+    auto& v=v_list[faIn];
+    auto& vcap=vcap_list[faIn];
+    if (v.nrows()!=dof || v.ncols()!=tnNo) v.resize(dof,tnNo);
+    if (vcap.nrows()!=dof || vcap.ncols()!=tnNo) vcap.resize(dof,tnNo);
+    v=0.0;vcap=0.0;
 
     Trilinos::ResistanceFaceData face_data;
     face_data.face_id = faIn;
@@ -1201,6 +1189,13 @@ void TrilinosLinearAlgebra::TrilinosImpl::init_dir_and_coup_neu(ComMod& com_mod,
 
   // Add the v vectors to global bdryVec_list
   trilinos_bc_create_(trilinos_, v_list, vcap_list, isCoupledBC);
+  if (std::getenv("SV_TRILINOS_BIPN_STATS")) {
+    Kokkos::fence("boundary_setup_timing");
+    const double local=MPI_Wtime()-boundary_start;
+    double global=0.0;
+    Teuchos::reduceAll(*trilinos_->comm,Teuchos::REDUCE_MAX,1,&local,&global);
+    if (trilinos_->comm->getRank()==0) std::cout << "BOUNDARY_SETUP_STATS total_s=" << global << std::endl;
+  }
 
 }
 
@@ -1219,6 +1214,10 @@ void TrilinosLinearAlgebra::TrilinosImpl::initialize(ComMod& com_mod)
     }
     ++trilinos_runtime_users();
     runtime_registered_ = true;
+    if (std::getenv("SV_TRILINOS_RUNTIME_DETAILS") && com_mod.cm.idcm()==0) {
+      std::cout << "TRILINOS_RUNTIME KOKKOS_VERSION=" << KOKKOS_VERSION << std::endl;
+      Kokkos::print_configuration(std::cout,true);
+    }
   }
 
   ltg_.resize(com_mod.tnNo);
@@ -1244,6 +1243,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   trilinos_->ghostF = Teuchos::null;
   trilinos_->X = Teuchos::null;
   trilinos_->ghostX = Teuchos::null;
+  trilinos_->ghost_boundary=Teuchos::null;
+  trilinos_->ghost_boundary_cap=Teuchos::null;
   trilinos_->bdryVec_list.clear();
   trilinos_->bdryCapVec_list.clear();
   trilinos_->resistanceFaces.clear();
@@ -1253,6 +1254,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   momentum_muelu_cache_ = Teuchos::null;
   pressure_muelu_cache_ = Teuchos::null;
   block_topology_cache_ = Teuchos::null;
+  boundary_values_.clear();
+  cap_values_.clear();
   fluid_assembly_.clear();
   trilinos_->local_assembly.clear();
   trilinos_->topology.clear();

@@ -68,6 +68,13 @@ void TrilinosResistanceOperator::compute()
     face.alpha = -resistance / denominator;
   }
 
+  std::vector<double> coefficients(boundary_vectors_.size(),0.0);
+  for (size_t i=0; i<num_faces; ++i) {
+    const auto& face=resistance_faces_[i];
+    if (face.resistance!=0.0 && boundary_vectors_[i]!=Teuchos::null)
+      coefficients[i]=-(face.resistance>0.0 ? 1.0 : -1.0)/(1.0+face.resistance*face.s_tilde_norm2);
+  }
+  low_rank_.reset(new trilinos_bipartition::LowRankUpdate(map_,boundary_vectors_,boundary_cap_vectors_,coefficients));
   computed_ = true;
 }
 
@@ -112,42 +119,7 @@ void TrilinosResistanceOperator::apply(const Tpetra_MultiVector& X,
 
   Y.update(alpha, X, beta);
 
-  const size_t num_faces = std::min(boundary_vectors_.size(), resistance_faces_.size());
-  for (size_t i = 0; i < num_faces; ++i) {
-    const auto& face = resistance_faces_[i];
-    if (face.resistance == 0.0 || boundary_vectors_[i] == Teuchos::null) {
-      continue;
-    }
-
-    const auto face_vector = boundary_vectors_[i]->getVector(0);
-    Teuchos::RCP<const Tpetra_Vector> cap_vector = Teuchos::null;
-    if (i < boundary_cap_vectors_.size() &&
-        boundary_cap_vectors_[i] != Teuchos::null) {
-      if (!boundary_cap_vectors_[i]->getMap()->isSameAs(*map_)) {
-        throw std::runtime_error(
-            "[TrilinosResistanceOperator] ERROR: boundary cap vector map does not match operator map.");
-      }
-      if (boundary_cap_vectors_[i]->getNumVectors() != 1) {
-        throw std::runtime_error(
-            "[TrilinosResistanceOperator] ERROR: boundary cap vectors must have one column.");
-      }
-      cap_vector = boundary_cap_vectors_[i]->getVector(0);
-    }
-
-    const double denominator = 1.0 + face.resistance * face.s_tilde_norm2;
-    const double sign_resistance = face.resistance > 0.0 ? 1.0 : -1.0;
-    const double scaled_alpha = -sign_resistance / denominator;
-
-    for (size_t column = 0; column < X.getNumVectors(); ++column) {
-      const auto x_column = X.getVector(column);
-      auto y_column = Y.getVectorNonConst(column);
-      const Scalar_d dot_face = x_column->dot(*face_vector);
-      const Scalar_d dot_cap = cap_vector == Teuchos::null ? 0.0 :
-        x_column->dot(*cap_vector);
-      y_column->update(alpha * scaled_alpha * (dot_face + dot_cap),
-          *face_vector, 1.0);
-    }
-  }
+  if (low_rank_) low_rank_->add(X,Y,alpha);
 }
 
 Teuchos::RCP<const Tpetra_Map> TrilinosResistanceOperator::getDomainMap() const

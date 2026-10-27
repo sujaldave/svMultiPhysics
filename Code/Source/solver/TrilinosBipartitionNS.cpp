@@ -452,13 +452,17 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       rhs_exporter,
       rhs_needs_add_export ? Tpetra::ADD : Tpetra::REPLACE);
 
+  const double scaling_start=MPI_Wtime();
   auto diagonal = Teuchos::rcp(
       new Tpetra_Vector(trilinos_->topology.map()));
   constructJacobiScaling(trilinos_, dirichlet_weights, *diagonal);
 
+  const double scaling_seconds=MPI_Wtime()-scaling_start;
+  const double block_start=MPI_Wtime();
   auto blocks = build_trilinos_ns_block_system(
       trilinos_, nsd_, dof_, trilinos_->topology.generation(),
       *block_topology_cache_);
+  const double block_seconds=MPI_Wtime()-block_start;
   auto momentum = Teuchos::rcp(new MomentumOperator(
       blocks.A, blocks.boundary_vectors, blocks.boundary_cap_vectors));
   auto resistance = Teuchos::rcp(new TrilinosResistanceOperator(
@@ -469,7 +473,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   resistance->compute();
   auto resistance_operator =
       Teuchos::rcp_implicit_cast<Tpetra_Operator>(resistance);
-  auto pressure = Teuchos::rcp(new PressureSchurOperator(
+  Teuchos::RCP<Tpetra_Operator> pressure = Teuchos::rcp(new PressureSchurOperator(
       blocks.L, blocks.B, resistance_operator));
 
   Teuchos::RCP<Tpetra_Operator> momentum_resistance = Teuchos::null;
@@ -500,10 +504,21 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
       consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG) {
     Teuchos::Time timer("Schur matrix setup");
     timer.start();
-    pressure_setup_matrix = preconditioners::build_schur_preconditioning_matrix(
-        blocks.L, blocks.B);
+    pressure_setup_matrix = pressure_muelu_cache_->schur_matrix(
+        blocks.L, blocks.B,trilinos_->topology.generation());
+    Kokkos::fence("schur_matrix_refresh_complete");
     timer.stop();
     schur_seconds = timer.totalElapsedTime();
+  }
+  const std::string schur_operator=std::getenv("SV_TRILINOS_SCHUR_OPERATOR") ? std::getenv("SV_TRILINOS_SCHUR_OPERATOR") : "explicit";
+  if (schur_operator!="explicit" && schur_operator!="factored")
+    throw std::runtime_error("SV_TRILINOS_SCHUR_OPERATOR must be explicit or factored");
+  double operator_seconds=0.0;
+  if (schur_operator=="explicit" && equation.linear_algebra_cg_preconditioner==consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG) {
+    const double start=MPI_Wtime();
+    pressure=Teuchos::rcp(new ExplicitPressureSchurOperator(pressure_setup_matrix,*blocks.B,resistance->low_rank_update()));
+    Kokkos::fence("explicit_schur_ready");
+    operator_seconds=MPI_Wtime()-start;
   }
   Teuchos::Time pressure_setup_timer("Pressure preconditioner setup");
   pressure_setup_timer.start();
@@ -781,13 +796,18 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   total_timer.stop();
   if (std::getenv("SV_TRILINOS_BIPN_STATS")) {
     const double local_times[] = {total_timer.totalElapsedTime(), schur_seconds,
-        amg_seconds, linear_solver.CG.callD, linear_solver.GM.callD};
-    double times[5];
+        amg_seconds, linear_solver.CG.callD, linear_solver.GM.callD,
+        operator_seconds,scaling_seconds,block_seconds};
+    double times[8];
     Teuchos::reduceAll(*blocks.pressure_map->getComm(), Teuchos::REDUCE_MAX,
-        5, local_times, times);
+        8, local_times, times);
     if (blocks.pressure_map->getComm()->getRank() == 0) {
       std::cout << "BIPN_STATS " << std::setprecision(12)
           << "total_s=" << times[0] << " schur_setup_s=" << times[1]
+          << " operator_setup_s=" << times[5]
+          << " scaling_s=" << times[6] << " block_setup_s=" << times[7]
+          << " amg_builds=" << pressure_muelu_cache_->build_count()
+          << " amg_refreshes=" << pressure_muelu_cache_->reuse_count()
           << " pressure_setup_s=" << times[2] << " cg_s=" << times[3]
           << " gmres_s=" << times[4] << " cg_iterations=" << linear_solver.CG.itr
           << " cg_calls=" << cg_calls << " cg_failures=" << cg_failures

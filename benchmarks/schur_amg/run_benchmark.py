@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the iliac artery CPU comparison without modifying the source case.
+"""Run an isolated iliac artery CPU/GPU comparison without modifying the source case.
 
 Each run gets its own directory, solver XML, full log, and JSON timings.
 The mesh is reused by symlink. Timed runs must be run sequentially.
@@ -28,6 +28,10 @@ def main():
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--assembly', choices=['auto','legacy','kokkos'], default='auto')
     parser.add_argument('--assembly-stats', action='store_true')
+    parser.add_argument('--schur-reuse', choices=['transfers','fresh'], default='transfers')
+    parser.add_argument('--schur-operator', choices=['explicit','factored'], default='explicit')
+    parser.add_argument('--runtime-details', action='store_true')
+    parser.add_argument('--profile', choices=['nsys'], help='Profile a separate short run; not a timing benchmark.')
     parser.add_argument('--stats', action='store_true', help='Enable per-Jacobian stats (new executable only).')
     args = parser.parse_args()
     if min(args.steps, args.ranks, args.repeat, args.threads) < 1:
@@ -63,6 +67,9 @@ def main():
             ET.SubElement(la, 'CG_Preconditioner').text = 'trilinos-' + args.preconditioner
         tree.write(run / 'solver.xml', encoding='utf-8', xml_declaration=True)
         command = [str(exe), 'solver.xml']
+        if args.profile == 'nsys':
+            command = ['nsys','profile','--trace=cuda,nvtx,osrt','--sample=none',
+                       '--stats=true','--output='+str(run/'trace')] + command
         if args.launcher == 'srun':
             prefix = ['srun','--ntasks',str(args.ranks),'--cpus-per-task',str(args.threads)]
             if args.gpus_per_task:
@@ -77,6 +84,13 @@ def main():
         env['VECLIB_MAXIMUM_THREADS'] = '1'
         env.pop('SV_TRILINOS_BIPN_STATS', None)
         env['SV_TRILINOS_ASSEMBLY'] = args.assembly
+        env['SV_TRILINOS_SCHUR_REUSE'] = args.schur_reuse
+        env['SV_TRILINOS_SCHUR_OPERATOR'] = args.schur_operator
+        env.pop('SV_TRILINOS_RUNTIME_DETAILS',None)
+        env.pop('SV_TRILINOS_AMG_DETAILS',None)
+        if args.runtime_details:
+            env['SV_TRILINOS_RUNTIME_DETAILS']='1'
+            env['SV_TRILINOS_AMG_DETAILS']='1'
         env.pop('SV_TRILINOS_ASSEMBLY_STATS',None)
         if args.assembly_stats:
             env['SV_TRILINOS_ASSEMBLY_STATS'] = '1'
@@ -101,7 +115,11 @@ def main():
             if line.startswith(('ASSEMBLY_STATS ', 'ASSEMBLY_EXPORT_STATS ', 'ASSEMBLY_ALLOC_STATS ')):
                 item = dict(re.findall(r'(\w+)=([^\s]+)', line))
                 assembly_stats.append(dict(kind=line.split()[0], **item))
-        record = dict(executable=str(exe), preconditioner=args.preconditioner,
+        boundary_stats = [dict(re.findall(r'(\w+)=([^\s]+)', line))
+                          for line in log.splitlines() if line.startswith('BOUNDARY_SETUP_STATS ')]
+        record = dict(schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
+                      profiled=bool(args.profile), boundary_stats=boundary_stats,
+                      executable=str(exe), preconditioner=args.preconditioner,
                       assembly_mode=args.assembly, assembly_stats=assembly_stats,
                       steps=args.steps, ranks=args.ranks, threads=args.threads, command=command,
                       wall_seconds=elapsed, returncode=result.returncode,

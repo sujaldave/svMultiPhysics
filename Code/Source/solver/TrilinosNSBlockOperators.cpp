@@ -457,14 +457,18 @@ TrilinosNSBlockSystem TrilinosNSBlockTopologyCache::create_system(
   Kokkos::fence("svmp_ns_block_value_refresh");
 
   system.boundary_vectors.reserve(trilinos->bdryVec_list.size());
-  for (const auto& vector : trilinos->bdryVec_list) {
+  for (std::size_t i=0; i<trilinos->bdryVec_list.size(); ++i) {
+    const auto& vector=trilinos->bdryVec_list[i];
+    const bool active=i>=trilinos->resistanceFaces.size() || trilinos->resistanceFaces[i].resistance!=0.0;
     system.boundary_vectors.push_back(
-        vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
+        !active || vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
   }
   system.boundary_cap_vectors.reserve(trilinos->bdryCapVec_list.size());
-  for (const auto& vector : trilinos->bdryCapVec_list) {
+  for (std::size_t i=0; i<trilinos->bdryCapVec_list.size(); ++i) {
+    const auto& vector=trilinos->bdryCapVec_list[i];
+    const bool active=i>=trilinos->resistanceFaces.size() || trilinos->resistanceFaces[i].resistance!=0.0;
     system.boundary_cap_vectors.push_back(
-        vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
+        !active || vector == Teuchos::null ? Teuchos::null : extract_velocity(*vector));
   }
   return system;
 }
@@ -559,6 +563,8 @@ MomentumOperator::MomentumOperator(
           "[MomentumOperator] ERROR: boundary cap vectors must have one column on the velocity map.");
     }
   }
+  low_rank_.reset(new LowRankUpdate(A_->getRangeMap(),boundary_vectors_,boundary_cap_vectors_,
+      std::vector<double>(boundary_vectors_.size(),1.0)));
 }
 
 void MomentumOperator::apply(const Tpetra_MultiVector& X,
@@ -579,27 +585,7 @@ void MomentumOperator::apply(const Tpetra_MultiVector& X,
     return;
   }
 
-  for (size_t i = 0; i < boundary_vectors_.size(); ++i) {
-    if (boundary_vectors_[i] == Teuchos::null) {
-      continue;
-    }
-
-    const auto face = boundary_vectors_[i]->getVector(0);
-    Teuchos::RCP<const Tpetra_Vector> cap = Teuchos::null;
-    if (i < boundary_cap_vectors_.size() &&
-        boundary_cap_vectors_[i] != Teuchos::null) {
-      cap = boundary_cap_vectors_[i]->getVector(0);
-    }
-
-    for (size_t column = 0; column < X.getNumVectors(); ++column) {
-      const auto x_column = X.getVector(column);
-      auto y_column = Y.getVectorNonConst(column);
-      const Scalar_d dot_face = x_column->dot(*face);
-      const Scalar_d dot_cap = cap == Teuchos::null ? 0.0 :
-        x_column->dot(*cap);
-      y_column->update(alpha * (dot_face + dot_cap), *face, 1.0);
-    }
-  }
+  low_rank_->add(X,Y,alpha);
 }
 
 Teuchos::RCP<const Tpetra_Map> MomentumOperator::getDomainMap() const

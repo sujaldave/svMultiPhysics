@@ -18,11 +18,20 @@
 #include <limits>
 
 #include <stdexcept>
+#include <cstdlib>
+#include "Teuchos_FancyOStream.hpp"
 
 namespace trilinos_bipartition {
 namespace preconditioners {
 
 namespace {
+
+bool same_local_map(const Tpetra_Map& a,const Tpetra_Map& b) {
+  const auto x=a.getLocalElementList(),y=b.getLocalElementList();
+  return a.getGlobalNumElements()==b.getGlobalNumElements() &&
+      a.getIndexBase()==b.getIndexBase() && x.size()==y.size() &&
+      std::equal(x.begin(),x.end(),y.begin());
+}
 
 std::string preconditioner_name(consts::PreconditionerType type)
 {
@@ -185,7 +194,7 @@ Teuchos::RCP<Tpetra_Operator> create_muelu_preconditioner(
 // Scale Jacobi damping using a fine-level Gershgorin spectral bound instead
 // of a mesh-specific constant (a fixed 0.8 diverged in the CUDA experiment).
 // The V-cycle uses matching pre/post sweeps for pressure CG.
-Teuchos::RCP<Tpetra_Operator> create_schur_amg(
+double schur_spectral_bound(
     const Teuchos::RCP<Tpetra_CrsMatrix>& matrix)
 {
   Tpetra_Vector diagonal(matrix->getRowMap());
@@ -214,6 +223,12 @@ Teuchos::RCP<Tpetra_Operator> create_schur_amg(
     throw std::runtime_error("[SchurAMG] Expected a finite positive Schur diagonal.");
   }
 
+  return bound;
+}
+
+Teuchos::RCP<Tpetra_Operator> create_schur_amg(
+    const Teuchos::RCP<Tpetra_CrsMatrix>& matrix, double bound, bool reuse_transfers)
+{
   Teuchos::ParameterList parameters;
   parameters.set("verbosity", "none");
   parameters.set("max levels", 10);
@@ -231,10 +246,16 @@ Teuchos::RCP<Tpetra_Operator> create_schur_amg(
   smoother.set("relaxation: damping factor", 1.8 / bound);
   parameters.set("coarse: type", "KLU");
   parameters.set("coarse: max size", 200);
-  // Fresh numeric hierarchy per Jacobian; never reuse stale coarse operators.
-  parameters.set("reuse: type", "none");
-  return MueLu::CreateTpetraPreconditioner(
+  // RP retains transfers, but recomputes every coarse matrix and smoother.
+  // RAP would retain coarse numerical matrices and is unsuitable here.
+  parameters.set("reuse: type", reuse_transfers ? "RP" : "none");
+  auto result=MueLu::CreateTpetraPreconditioner(
       Teuchos::rcp_static_cast<Tpetra_Operator>(matrix), parameters);
+  if (std::getenv("SV_TRILINOS_AMG_DETAILS")) {
+    auto stream=Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
+    result->GetHierarchy()->describe(*stream,Teuchos::VERB_HIGH);
+  }
+  return result;
 }
 
 } // namespace
@@ -254,12 +275,82 @@ Teuchos::RCP<Tpetra_CrsMatrix> build_schur_preconditioning_matrix(
       *product, L->getDomainMap(), L->getRangeMap());
 }
 
+// The block topology cache supplies stable input graphs. Numeric SpGEMM
+// reuses the product graph; the union graph and scatter plans are built once.
+class SchurMatrixStorage {
+public:
+  using Device=typename Tpetra_CrsMatrix::local_matrix_device_type::device_type;
+  using Plan=Kokkos::View<std::size_t*,Device>;
+  std::size_t generation=0;
+  Teuchos::RCP<const Tpetra_CrsGraph> L_graph,B_graph;
+  Teuchos::RCP<Tpetra_CrsMatrix> product,schur;
+  Plan L_plan,product_plan;
+
+  static Plan plan(const Tpetra_CrsMatrix& source,const Tpetra_CrsMatrix& target) {
+    const auto a=source.getCrsGraph()->getLocalGraphHost();
+    const auto b=target.getCrsGraph()->getLocalGraphHost();
+    Plan result("schur_value_offsets",a.entries.extent(0));
+    auto host=Kokkos::create_mirror_view(result);
+    for (std::size_t row=0;row<source.getLocalNumRows();++row) {
+      for (auto k=a.row_map(row);k<a.row_map(row+1);++k) {
+        const GO gid=source.getColMap()->getGlobalElement(a.entries(k));
+        const LO col=target.getColMap()->getLocalElement(gid);
+        auto j=b.row_map(row);
+        while (j<b.row_map(row+1) && b.entries(j)!=col) ++j;
+        if (j==b.row_map(row+1)) throw std::runtime_error("Schur union graph missing an entry");
+        host(k)=j;
+      }
+    }
+    Kokkos::deep_copy(result,host);
+    return result;
+  }
+  static void add_values(const Tpetra_CrsMatrix& source,Tpetra_CrsMatrix& target,const Plan& offsets) {
+    const auto a=source.getLocalMatrixDevice();
+    const auto b=target.getLocalMatrixDevice();
+    Kokkos::parallel_for("schur_refresh_values",Kokkos::RangePolicy<typename Node::execution_space>(0,offsets.extent(0)),
+      KOKKOS_LAMBDA(const int i) { b.values(offsets(i))+=a.values(i); });
+  }
+};
+
+Teuchos::RCP<Tpetra_CrsMatrix> MueLuReuseCache::schur_matrix(
+    const Teuchos::RCP<Tpetra_CrsMatrix>& L,
+    const Teuchos::RCP<Tpetra_CrsMatrix>& B,std::size_t generation) {
+  validate_matrix(consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG,L);
+  if (B==Teuchos::null || !B->isFillComplete() || !B->getDomainMap()->isSameAs(*L->getDomainMap()))
+    throw std::runtime_error("Schur matrix: incompatible coupling block");
+  int changed=!schur_storage_ || schur_storage_->generation!=generation ||
+    schur_storage_->L_graph.getRawPtr()!=L->getCrsGraph().getRawPtr() ||
+    schur_storage_->B_graph.getRawPtr()!=B->getCrsGraph().getRawPtr();
+  int global_changed=0;
+  Teuchos::reduceAll(*L->getComm(),Teuchos::REDUCE_MAX,1,&changed,&global_changed);
+  if (global_changed) {
+    auto storage=std::make_shared<SchurMatrixStorage>();
+    storage->generation=generation;
+    storage->L_graph=L->getCrsGraph();
+    storage->B_graph=B->getCrsGraph();
+    storage->product=Teuchos::rcp(new Tpetra_CrsMatrix(L->getRowMap(),0));
+    Tpetra::MatrixMatrix::Multiply(*B,true,*B,false,*storage->product);
+    storage->schur=Tpetra::MatrixMatrix::add(1.0,false,*L,1.0,false,
+      *storage->product,L->getDomainMap(),L->getRangeMap());
+    storage->L_plan=SchurMatrixStorage::plan(*L,*storage->schur);
+    storage->product_plan=SchurMatrixStorage::plan(*storage->product,*storage->schur);
+    schur_storage_=storage;
+  } else {
+    // Multiply overwrites the product values on its existing graph.
+    Tpetra::MatrixMatrix::Multiply(*B,true,*B,false,*schur_storage_->product);
+    schur_storage_->schur->setAllToScalar(0.0);
+    SchurMatrixStorage::add_values(*L,*schur_storage_->schur,schur_storage_->L_plan);
+    SchurMatrixStorage::add_values(*schur_storage_->product,*schur_storage_->schur,schur_storage_->product_plan);
+  }
+  return schur_storage_->schur;
+}
+
 bool MueLuReuseCache::matches(
     SolverRole role,
     const Tpetra_CrsMatrix& matrix,
     const PreconditionerReuseContext& reuse) const
 {
-  return initialized_ && hierarchy_ != Teuchos::null && role_ == role &&
+  return !schur_ && initialized_ && hierarchy_ != Teuchos::null && role_ == role &&
       time_step_ == reuse.time_step &&
       topology_generation_ == reuse.topology_generation &&
       domain_map_ != Teuchos::null && range_map_ != Teuchos::null &&
@@ -277,6 +368,7 @@ void MueLuReuseCache::store_signature(
     const Teuchos::RCP<Tpetra_CrsMatrix>& matrix,
     const PreconditionerReuseContext& reuse)
 {
+  schur_=false;
   initialized_ = true;
   role_ = role;
   time_step_ = reuse.time_step;
@@ -292,6 +384,10 @@ void MueLuReuseCache::store_signature(
 
 void MueLuReuseCache::clear()
 {
+  schur_storage_.reset();
+  schur_=false;
+  damping_bound_=0.0;
+  schur_graph_=Teuchos::null;
   initialized_ = false;
   role_ = SolverRole::momentum_gmres;
   time_step_ = -1;
@@ -430,7 +526,61 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
       throw std::runtime_error("[SchurAMG] Only valid for pressure CG.");
     }
     handle->setup_matrix_ = matrix;
-    handle->muelu_operator_ = create_schur_amg(matrix);
+    const std::string policy=std::getenv("SV_TRILINOS_SCHUR_REUSE") ? std::getenv("SV_TRILINOS_SCHUR_REUSE") : "transfers";
+    if (policy!="transfers" && policy!="fresh")
+      throw std::runtime_error("SV_TRILINOS_SCHUR_REUSE must be transfers or fresh");
+    const double bound=schur_spectral_bound(matrix);
+    if (policy=="fresh" || reuse.muelu_cache==Teuchos::null) {
+      handle->muelu_operator_=create_schur_amg(matrix,bound*1.05,false);
+    } else {
+      if (reuse.topology_generation==0)
+        throw std::runtime_error("Schur reuse requires a valid topology generation");
+      auto& cache=*reuse.muelu_cache;
+      // Check complete local CSR and maps on device, not just dimensions/nnz.
+      // Rebuild collectively if any rank detects a changed graph or unsafe
+      // damping bound. Transfer reuse is valid across time steps on fixed mesh.
+      int mismatch=1;
+      if (cache.schur_ && cache.hierarchy_!=Teuchos::null &&
+          cache.topology_generation_==reuse.topology_generation &&
+          cache.schur_graph_!=Teuchos::null && bound<=cache.damping_bound_ &&
+          same_local_map(*matrix->getDomainMap(),*cache.domain_map_) &&
+          same_local_map(*matrix->getRangeMap(),*cache.range_map_) &&
+          same_local_map(*matrix->getColMap(),*cache.schur_graph_->getColMap())) {
+        const auto old_graph=cache.schur_graph_->getLocalGraphDevice();
+        const auto graph=matrix->getCrsGraph()->getLocalGraphDevice();
+        if (graph.entries.extent(0)==old_graph.entries.extent(0) &&
+            graph.row_map.extent(0)==old_graph.row_map.extent(0)) {
+          mismatch=0;
+          int entries_changed=0,rows_changed=0;
+          Kokkos::parallel_reduce("schur_graph_entries_match",Kokkos::RangePolicy<typename Node::execution_space>(0,graph.entries.extent(0)),
+            KOKKOS_LAMBDA(const int i,int& count) { if (graph.entries(i)!=old_graph.entries(i)) ++count; },entries_changed);
+          Kokkos::parallel_reduce("schur_graph_rows_match",Kokkos::RangePolicy<typename Node::execution_space>(0,graph.row_map.extent(0)),
+            KOKKOS_LAMBDA(const int i,int& count) { if (graph.row_map(i)!=old_graph.row_map(i)) ++count; },rows_changed);
+          mismatch=(entries_changed!=0 || rows_changed!=0);
+        }
+      }
+      int global_mismatch=0;
+      Teuchos::reduceAll(*matrix->getComm(),Teuchos::REDUCE_MAX,1,&mismatch,&global_mismatch);
+      if (global_mismatch) {
+        cache.hierarchy_=Teuchos::null;
+        cache.damping_bound_=bound*1.05;
+        cache.hierarchy_=create_schur_amg(matrix,cache.damping_bound_,true);
+        cache.store_signature(role,matrix,reuse);
+        cache.schur_=true;
+        cache.schur_graph_=matrix->getCrsGraph();
+        ++cache.build_count_;
+      } else {
+        auto muelu=Teuchos::rcp_dynamic_cast<MueLu::TpetraOperator<Scalar_d,LO,GO,Node>>(cache.hierarchy_,true);
+        // Mark invalid until numeric refresh completes; an exception must not
+        // leave a partly refreshed hierarchy eligible for future reuse.
+        cache.schur_=false;
+        MueLu::ReuseTpetraPreconditioner(matrix,*muelu);
+        cache.schur_=true;
+        cache.time_step_=reuse.time_step;
+        ++cache.reuse_count_;
+      }
+      handle->muelu_operator_=cache.hierarchy_;
+    }
     handle->left_operator_ = handle->muelu_operator_;
     return handle;
   }

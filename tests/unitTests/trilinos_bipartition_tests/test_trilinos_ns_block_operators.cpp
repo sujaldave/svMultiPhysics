@@ -388,8 +388,13 @@ TEST(TrilinosSchurAMG, DistributedProductIncludesOffRankContributions)
   }
   b->fillComplete();
   l->fillComplete();
-  const auto matrix = trilinos_bipartition::preconditioners::
-      build_schur_preconditioning_matrix(l, b);
+  trilinos_bipartition::preconditioners::MueLuReuseCache cache;
+  const auto matrix=cache.schur_matrix(l,b,1);
+  const auto graph=matrix->getCrsGraph();
+  b->scale(0.8);l->scale(1.2);
+  const auto refreshed=cache.schur_matrix(l,b,1);
+  EXPECT_EQ(matrix.getRawPtr(),refreshed.getRawPtr());
+  EXPECT_EQ(graph.getRawPtr(),refreshed->getCrsGraph().getRawPtr());
   trilinos_bipartition::PressureSchurOperator reference(l, b);
   Tpetra_MultiVector x(map, 1), expected(map, 1), actual(map, 1);
   x.randomize();
@@ -846,6 +851,136 @@ TEST(TrilinosLocalAssembly, ResetDiscardsPreviousJacobianValues)
   EXPECT_DOUBLE_EQ(matrix_value(*owned_matrix, 0, 0), second_matrix);
   const auto rhs = ghost_rhs.getLocalViewHost(Tpetra::Access::ReadOnly);
   EXPECT_DOUBLE_EQ(rhs(0, 0), second_rhs);
+}
+
+TEST(TrilinosSchurAMG, TransferReuseRefreshesEveryNumericLevelAcrossTimeSteps)
+{
+  namespace factory=trilinos_bipartition::preconditioners;
+  make_serial_map(1);
+  auto comm=Teuchos::rcp(new Teuchos::MpiComm<int>(Teuchos::opaqueWrapper(MPI_COMM_SELF)));
+  auto map=Teuchos::rcp(new Tpetra_Map(256,0,comm));
+  auto matrix=Teuchos::rcp(new Tpetra_CrsMatrix(map,3));
+  for (GO row=0;row<256;++row) {
+    Teuchos::Array<GO> cols;
+    Teuchos::Array<double> vals;
+    for (GO col=std::max(0,row-1);col<=std::min(255,row+1);++col) {
+      cols.push_back(col); vals.push_back(col==row ? 2.1 : -1.0);
+    }
+    matrix->insertGlobalValues(row,cols(),vals());
+  }
+  matrix->fillComplete();
+  factory::PreconditionerReuseContext context;
+  context.muelu_cache=Teuchos::rcp(new factory::MueLuReuseCache());
+  context.time_step=1;context.topology_generation=1;
+  const auto type=consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG;
+  auto first=factory::create_preconditioner(type,factory::SolverRole::pressure_cg,matrix,Teuchos::null,context);
+  Tpetra_MultiVector x(map,1),before(map,1),after(map,1);
+  x.randomize(); first->left_operator()->apply(x,before);
+  // With all numerical levels refreshed, doubling A must halve M^-1 x.
+  // This fails if reuse retains stale coarse matrices or factors.
+  matrix->scale(2.0);context.time_step=2;
+  auto second=factory::create_preconditioner(type,factory::SolverRole::pressure_cg,matrix,Teuchos::null,context);
+  EXPECT_EQ(first->muelu_operator().getRawPtr(),second->muelu_operator().getRawPtr());
+  EXPECT_EQ(context.muelu_cache->build_count(),1u);
+  EXPECT_EQ(context.muelu_cache->reuse_count(),1u);
+  second->left_operator()->apply(x,after);
+  after.update(-0.5,before,1.0);
+  Teuchos::Array<double> errors(1); after.norm2(errors());
+  EXPECT_LT(errors[0],1.e-10);
+  context.topology_generation=2;
+  factory::create_preconditioner(type,factory::SolverRole::pressure_cg,matrix,Teuchos::null,context);
+  EXPECT_EQ(context.muelu_cache->build_count(),2u);
+  // Same dimensions and nnz, but a permuted graph: dimensions alone cannot
+  // authorize reuse of the old aggregation/communication plans.
+  auto changed=Teuchos::rcp(new Tpetra_CrsMatrix(map,3));
+  auto permutation=[](GO gid) {return gid==1 ? 2 : (gid==2 ? 1 : gid);};
+  for (GO row=0;row<256;++row) {
+    Teuchos::Array<GO> cols;Teuchos::Array<double> vals;
+    for (GO col=std::max(0,row-1);col<=std::min(255,row+1);++col) {
+      cols.push_back(permutation(col));vals.push_back(col==row ? 4.2 : -2.0);
+    }
+    changed->insertGlobalValues(permutation(row),cols(),vals());
+  }
+  changed->fillComplete();
+  ASSERT_EQ(changed->getGlobalNumEntries(),matrix->getGlobalNumEntries());
+  factory::create_preconditioner(type,factory::SolverRole::pressure_cg,changed,Teuchos::null,context);
+  EXPECT_EQ(context.muelu_cache->build_count(),3u);
+  // SPD congruence scaling can increase the row-sum bound. Rebuild with safe
+  // damping rather than silently retaining an unsafe relaxation parameter.
+  auto scaling=Teuchos::rcp(new Tpetra_Vector(map));scaling->putScalar(1.0);
+  scaling->replaceLocalValue(0,10.0);
+  changed->leftScale(*scaling);changed->rightScale(*scaling);
+  factory::create_preconditioner(type,factory::SolverRole::pressure_cg,changed,Teuchos::null,context);
+  EXPECT_EQ(context.muelu_cache->build_count(),4u);
+  context.muelu_cache->clear();
+  EXPECT_EQ(context.muelu_cache->hierarchy(),Teuchos::null);
+}
+
+TEST(TrilinosSchurAMG, CachedSchurGraphRefreshesNumericValues)
+{
+  const auto map=make_serial_map(3);
+  auto L=make_diagonal_matrix(map,{1,2,3});
+  auto B=make_dense_matrix(map,3);
+  trilinos_bipartition::preconditioners::MueLuReuseCache cache;
+  auto first=cache.schur_matrix(L,B,1);
+  const auto graph=first->getCrsGraph();
+  B->scale(0.5);L->scale(3.0);
+  auto second=cache.schur_matrix(L,B,1);
+  EXPECT_EQ(first.getRawPtr(),second.getRawPtr());
+  EXPECT_EQ(graph.getRawPtr(),second->getCrsGraph().getRawPtr());
+  trilinos_bipartition::PressureSchurOperator reference(L,B);
+  Tpetra_MultiVector x(map,2),expected(map,2),actual(map,2);
+  x.randomize();reference.apply(x,expected);second->apply(x,actual);
+  actual.update(-1.0,expected,1.0);
+  Teuchos::Array<double> error(2);actual.norm2(error());
+  for (double value:error) EXPECT_LT(value,1.e-9);
+}
+
+TEST(TrilinosSchurAMG, ExplicitCorrectionsMatchFactoredWithDistributedCapsAndMultipleRHS)
+{
+  make_serial_map(1);
+  auto comm=Tpetra::getDefaultComm();
+  const GO n=4*comm->getSize();
+  auto map=Teuchos::rcp(new Tpetra_Map(n,0,comm));
+  auto B=Teuchos::rcp(new Tpetra_CrsMatrix(map,2));
+  auto L=Teuchos::rcp(new Tpetra_CrsMatrix(map,1));
+  for (LO i=0;i<static_cast<LO>(map->getLocalNumElements());++i) {
+    const GO row=map->getGlobalElement(i);
+    B->insertGlobalValues(row,Teuchos::tuple(row,(row+1)%n),Teuchos::tuple(2.0,-1.0));
+    L->insertGlobalValues(row,Teuchos::tuple(row),Teuchos::tuple(0.5));
+  }
+  B->fillComplete();L->fillComplete();
+  std::vector<Teuchos::RCP<Tpetra_MultiVector>> faces,caps;
+  std::vector<Trilinos::ResistanceFaceData> data(2);
+  for (int face=0;face<2;++face) {
+    auto v=Teuchos::rcp(new Tpetra_MultiVector(map,1));
+    auto c=Teuchos::rcp(new Tpetra_MultiVector(map,1));
+    v->putScalar(0.0);c->putScalar(0.0);
+    // Face 0 exists only on rank 0; all ranks must still join the projection.
+    {auto vh=v->getLocalViewHost(Tpetra::Access::ReadWrite);
+     auto ch=c->getLocalViewHost(Tpetra::Access::ReadWrite);
+     for (LO i=0;i<static_cast<LO>(map->getLocalNumElements());++i) {
+       const auto gid=map->getGlobalElement(i);
+       vh(i,0)=face==0 ? (gid==0 ? 0.3 : 0.0) : 0.1*(gid+1);
+       ch(i,0)=0.01*(gid+face);
+     }}
+    data[face].resistance=face==0 ? 2.0 : -0.1;
+    faces.push_back(v);caps.push_back(c);
+  }
+  auto resistance=Teuchos::rcp(new TrilinosResistanceOperator(map,faces,caps,data));
+  resistance->compute();
+  auto S=trilinos_bipartition::preconditioners::build_schur_preconditioning_matrix(L,B);
+  trilinos_bipartition::ExplicitPressureSchurOperator explicit_op(S,*B,resistance->low_rank_update());
+  trilinos_bipartition::PressureSchurOperator reference(L,B,resistance);
+  for (const int columns:{2,1,3}) {
+    Tpetra_MultiVector x(map,columns),expected(map,columns),actual(map,columns);
+    x.randomize();expected.putScalar(2.0);actual.putScalar(2.0);
+    reference.apply(x,expected,Teuchos::NO_TRANS,0.7,0.3);
+    explicit_op.apply(x,actual,Teuchos::NO_TRANS,0.7,0.3);
+    actual.update(-1.0,expected,1.0);
+    Teuchos::Array<double> errors(columns);actual.norm2(errors());
+    for (double error:errors) EXPECT_LT(error,1.e-11);
+  }
 }
 
 #endif

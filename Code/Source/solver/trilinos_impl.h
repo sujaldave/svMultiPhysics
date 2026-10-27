@@ -350,6 +350,7 @@ struct Trilinos
   Teuchos::RCP<Tpetra_CrsMatrix> K;
   Teuchos::RCP<Tpetra_Vector> X;
   Teuchos::RCP<Tpetra_Vector> ghostX;
+  Teuchos::RCP<Tpetra_MultiVector> ghost_boundary, ghost_boundary_cap;
 
   // One pair of vectors per coupled outlet face.  After construction and
   // Jacobi scaling, bdryVec_list[f] stores sqrt(abs(R_f)) * S_f, where S_f is

@@ -13,6 +13,7 @@
 #ifdef WITH_TRILINOS
 
 #include "trilinos_impl.h"
+#include "TrilinosLowRankUpdate.h"
 
 #include <memory>
 #include <vector>
@@ -186,9 +187,29 @@ class MomentumOperator final : public Tpetra_Operator
     Teuchos::RCP<const Tpetra_Map> getRangeMap() const override;
 
   private:
+    std::unique_ptr<LowRankUpdate> low_rank_;
     Teuchos::RCP<Tpetra_CrsMatrix> A_; ///< Materialized momentum block.
     std::vector<Teuchos::RCP<Tpetra_MultiVector>> boundary_vectors_; ///< Outlet updates.
     std::vector<Teuchos::RCP<Tpetra_MultiVector>> boundary_cap_vectors_; ///< Cap projections.
+};
+
+// Explicit L+B^T B with exact B^T(Q_R-I)B outlet corrections.
+class ExplicitPressureSchurOperator final : public Tpetra_Operator {
+public:
+  ExplicitPressureSchurOperator(const Teuchos::RCP<Tpetra_CrsMatrix>& S,
+      const Tpetra_CrsMatrix& B, const LowRankUpdate& velocity_correction)
+    : S_(S), correction_(B,velocity_correction) {}
+  void apply(const Tpetra_MultiVector& X, Tpetra_MultiVector& Y,
+      Teuchos::ETransp mode=Teuchos::NO_TRANS, Scalar_d alpha=1.0, Scalar_d beta=0.0) const override {
+    if (mode!=Teuchos::NO_TRANS) throw std::runtime_error("Explicit Schur: transpose unsupported");
+    S_->apply(X,Y,mode,alpha,beta);
+    correction_.add(X,Y,alpha);
+  }
+  Teuchos::RCP<const Tpetra_Map> getDomainMap() const override { return S_->getDomainMap(); }
+  Teuchos::RCP<const Tpetra_Map> getRangeMap() const override { return S_->getRangeMap(); }
+private:
+  Teuchos::RCP<Tpetra_CrsMatrix> S_;
+  LowRankUpdate correction_;
 };
 
 /**
