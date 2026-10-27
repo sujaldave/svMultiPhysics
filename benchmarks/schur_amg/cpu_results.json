@@ -1,0 +1,153 @@
+{
+  "date": "2026-10-26",
+  "cpu": "Apple M4 Pro (10 performance + 4 efficiency cores), 48 GB RAM",
+  "platform": "macOS 26.6.2 arm64",
+  "compiler": "AppleClang 21.0.0.21000101",
+  "build_type": "RelWithDebInfo (-O2 -g -DNDEBUG)",
+  "trilinos": "16.2.0, Kokkos SERIAL",
+  "baseline_commit": "a06b122a7166e9e76912f6a441cc12d8c32a2400",
+  "ranks": 10,
+  "time_steps": 20,
+  "nodes": 15334,
+  "tetrahedra": 75819,
+  "runs": {
+    "baseline": [
+      {
+        "wall_seconds": 52.97245154199845,
+        "simulation_seconds": 51.88,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0
+      },
+      {
+        "wall_seconds": 53.68903766600124,
+        "simulation_seconds": 52.55,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0
+      }
+    ],
+    "schur_amg": [
+      {
+        "wall_seconds": 46.63495949999924,
+        "simulation_seconds": 44.72,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "phase_totals": {
+          "total_s": 36.181441,
+          "schur_setup_s": 2.16085900000001,
+          "pressure_setup_s": 0.927511000000044,
+          "cg_s": 25.393573,
+          "gmres_s": 2.904663000000007,
+          "cg_iterations": 50260.0,
+          "cg_calls": 717.0,
+          "cg_failures": 0.0,
+          "cg_true_residual_failures": 0.0,
+          "gmres_iterations": 12060.0
+        }
+      },
+      {
+        "wall_seconds": 47.20881333299985,
+        "simulation_seconds": 46.09,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "phase_totals": {
+          "total_s": 37.410016,
+          "schur_setup_s": 2.20883800000005,
+          "pressure_setup_s": 0.950528000000012,
+          "cg_s": 26.378091000000012,
+          "gmres_s": 2.960006000000087,
+          "cg_iterations": 50260.0,
+          "cg_calls": 717.0,
+          "cg_failures": 0.0,
+          "cg_true_residual_failures": 0.0,
+          "gmres_iterations": 12060.0
+        }
+      }
+    ]
+  },
+  "baseline_median_wall_seconds": 53.33074460399985,
+  "schur_amg_median_wall_seconds": 46.92188641649955,
+  "wall_speedup": 1.1365856890452448,
+  "diagonal_path_profile": {
+    "wall_seconds": 54.53970620900145,
+    "nonlinear_iterations": 184,
+    "completed": true,
+    "returncode": 0,
+    "phase_totals": {
+      "total_s": 45.23534,
+      "cg_s": 36.95851800000001,
+      "gmres_s": 3.525822000000144,
+      "cg_iterations": 259246.0,
+      "cg_calls": 869.0,
+      "cg_failures": 858.0,
+      "cg_true_residual_failures": 858.0,
+      "gmres_iterations": 14140.0
+    }
+  },
+  "validation": {
+    "ten_rank_fields": {
+      "Velocity": {
+        "relative_l2": 3.490695800189747e-14,
+        "maximum_absolute": 1.1610268302320037e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 2.080126703168302e-15,
+        "maximum_absolute": 2.7939677238464355e-09,
+        "passed": true
+      }
+    },
+    "ten_rank_fields_repeat2": {
+      "Velocity": {
+        "relative_l2": 3.490695800189747e-14,
+        "maximum_absolute": 1.1610268302320037e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 2.080126703168302e-15,
+        "maximum_absolute": 2.7939677238464355e-09,
+        "passed": true
+      }
+    },
+    "one_rank_fields": {
+      "Velocity": {
+        "relative_l2": 3.1598531568315735e-14,
+        "maximum_absolute": 9.904965736495797e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 6.304832746028743e-15,
+        "maximum_absolute": 7.101334631443024e-09,
+        "passed": true
+      }
+    },
+    "one_vs_ten_rank_baseline": {
+      "Velocity": {
+        "relative_l2": 2.8056932669037357e-14,
+        "maximum_absolute": 4.779954210221149e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 4.395968343239131e-15,
+        "maximum_absolute": 5.3551048040390015e-09,
+        "passed": true
+      }
+    },
+    "unchanged_diagonal_path": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    }
+  },
+  "excluded_launch": "One ancillary diagonal-profile launch crashed in ParMETIS Match_Global before BIPN. Retry completed successfully; failed launch excluded from timings."
+}

@@ -291,6 +291,116 @@ TEST(TrilinosNSBlockOperators, AppliesMomentumAndResistanceSchurOperators)
   EXPECT_NEAR(vector_value(pressure_output, 2), 6.5, 1.0e-13);
 }
 
+TEST(TrilinosSchurAMG, AssembledMatrixMatchesMatrixFreeAction)
+{
+  const auto map = make_serial_map(6);
+  const auto blocks = trilinos_bipartition::build_trilinos_ns_block_system(
+      make_block_test_state(make_dense_matrix(map, 6)), 2, 3);
+  const auto matrix = trilinos_bipartition::preconditioners::
+      build_schur_preconditioning_matrix(blocks.L, blocks.B);
+  trilinos_bipartition::PressureSchurOperator reference(blocks.L, blocks.B);
+  Tpetra_MultiVector input(blocks.pressure_map, 2);
+  input.randomize();
+  Tpetra_MultiVector expected(blocks.pressure_map, 2);
+  Tpetra_MultiVector actual(blocks.pressure_map, 2);
+  reference.apply(input, expected);
+  matrix->apply(input, actual);
+  actual.update(-1.0, expected, 1.0);
+  Teuchos::Array<double> errors(2);
+  actual.norm2(errors());
+  EXPECT_LT(errors[0], 1.e-8);
+  EXPECT_LT(errors[1], 1.e-8);
+}
+
+TEST(TrilinosSchurAMG, VCycleReducesResidualAndIsSymmetric)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  make_serial_map(1);
+  // MueLu 16.2 describe() assumes an MpiComm in an MPI-enabled build.
+  const auto comm = Teuchos::rcp(new Teuchos::MpiComm<int>(
+      Teuchos::opaqueWrapper(MPI_COMM_SELF)));
+  const auto map = Teuchos::rcp(new Tpetra_Map(256, 0, comm));
+  auto matrix = Teuchos::rcp(new Tpetra_CrsMatrix(map, 3));
+  for (GO row = 0; row < 256; ++row) {
+    Teuchos::Array<GO> cols;
+    Teuchos::Array<double> vals;
+    for (GO col = std::max(0, row - 1); col <= std::min(255, row + 1); ++col) {
+      cols.push_back(col);
+      vals.push_back(col == row ? 2.0 : -1.0);
+    }
+    matrix->insertGlobalValues(row, cols(), vals());
+  }
+  matrix->fillComplete();
+  const auto handle = factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG,
+      factory::SolverRole::pressure_cg, matrix);
+  Tpetra_MultiVector x(map, 1), y(map, 1), mx(map, 1), my(map, 1), residual(map, 1);
+  x.randomize();
+  y.randomize();
+  handle->left_operator()->apply(x, mx);
+  handle->left_operator()->apply(y, my);
+  Teuchos::Array<double> lhs(1), rhs(1), energy(1), before(1), after(1);
+  x.dot(my, lhs());
+  mx.dot(y, rhs());
+  x.dot(mx, energy());
+  EXPECT_NEAR(lhs[0], rhs[0], 1.e-9 * std::max(1.0, std::abs(lhs[0])));
+  EXPECT_GT(energy[0], 0.0);
+  matrix->apply(mx, residual);
+  residual.update(1.0, x, -1.0);
+  x.norm2(before());
+  residual.norm2(after());
+  EXPECT_LT(after[0], before[0]);
+  EXPECT_THROW(factory::create_preconditioner(
+      consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG,
+      factory::SolverRole::momentum_gmres, matrix), std::runtime_error);
+}
+
+TEST(TrilinosSchurAMG, RejectsInvalidSetupWithoutRepairingTheSolveMatrix)
+{
+  namespace factory = trilinos_bipartition::preconditioners;
+  const auto map = make_serial_map(2);
+  for (const double diagonal : {0.0, -1.0,
+       std::numeric_limits<double>::quiet_NaN()}) {
+    const auto matrix = make_diagonal_matrix(map, {diagonal, 2.0});
+    EXPECT_THROW(factory::create_preconditioner(
+        consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG,
+        factory::SolverRole::pressure_cg, matrix), std::runtime_error);
+  }
+  EXPECT_THROW(factory::build_schur_preconditioning_matrix(
+      Teuchos::null, Teuchos::null), std::runtime_error);
+}
+
+TEST(TrilinosSchurAMG, DistributedProductIncludesOffRankContributions)
+{
+  // Initialize MPI/Kokkos through the same process-lifetime guard as serial tests.
+  make_serial_map(1);
+  const auto comm = Tpetra::getDefaultComm();
+  const GO n = 4 * comm->getSize();
+  auto map = Teuchos::rcp(new Tpetra_Map(n, 0, comm));
+  auto b = Teuchos::rcp(new Tpetra_CrsMatrix(map, 2));
+  auto l = Teuchos::rcp(new Tpetra_CrsMatrix(map, 1));
+  for (LO i = 0; i < static_cast<LO>(map->getLocalNumElements()); ++i) {
+    const GO row = map->getGlobalElement(i);
+    Teuchos::Array<GO> cols = {row, (row + 1) % n};
+    Teuchos::Array<double> vals = {2.0, -1.0};
+    b->insertGlobalValues(row, cols(), vals());
+    l->insertGlobalValues(row, Teuchos::tuple(row), Teuchos::tuple(0.5));
+  }
+  b->fillComplete();
+  l->fillComplete();
+  const auto matrix = trilinos_bipartition::preconditioners::
+      build_schur_preconditioning_matrix(l, b);
+  trilinos_bipartition::PressureSchurOperator reference(l, b);
+  Tpetra_MultiVector x(map, 1), expected(map, 1), actual(map, 1);
+  x.randomize();
+  reference.apply(x, expected);
+  matrix->apply(x, actual);
+  actual.update(-1.0, expected, 1.0);
+  Teuchos::Array<double> error(1);
+  actual.norm2(error());
+  EXPECT_LT(error[0], 1.e-12);
+}
+
 TEST(TrilinosNSBlockOperators, ResizesSchurWorkspaceForMultipleVectors)
 {
   const auto map = make_serial_map(3);

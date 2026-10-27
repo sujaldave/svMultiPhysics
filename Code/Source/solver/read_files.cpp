@@ -2207,6 +2207,14 @@ void read_ls(Simulation* simulation, EquationParameters* eq_params, consts::Solv
         "for NS + Trilinos because the resistance transform acts on the "
         "velocity space. Select a pressure-space CG preconditioner.");
   }
+  if ((gmres_prec_type == consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG ||
+       prec_type == consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG) ||
+      (cg_prec_type == consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG &&
+       (solver_type != SolverType::lSolver_NS ||
+        lEq.linear_algebra_type != consts::LinearAlgebraType::trilinos))) {
+    throw std::runtime_error("[svMultiPhysics] ERROR: trilinos-schur-amg is "
+        "valid only as CG_Preconditioner for NS + Trilinos.");
+  }
   if (!linear_algebra.preconditioner.defined() &&
       lEq.linear_algebra_type == consts::LinearAlgebraType::trilinos) {
     prec_type = gmres_prec_type;

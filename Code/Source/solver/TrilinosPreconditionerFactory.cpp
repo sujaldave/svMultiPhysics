@@ -11,6 +11,10 @@
 #ifdef WITH_TRILINOS
 
 #include "Teuchos_CommHelpers.hpp"
+#include "TpetraExt_MatrixMatrix.hpp"
+
+#include <cmath>
+#include <algorithm>
 
 #include <stdexcept>
 
@@ -177,7 +181,82 @@ Teuchos::RCP<Tpetra_Operator> create_muelu_preconditioner(
       Teuchos::rcp_static_cast<Tpetra_Operator>(matrix), parameters);
 }
 
+// Scale Jacobi damping using a fine-level Gershgorin spectral bound instead
+// of a mesh-specific constant (a fixed 0.8 diverged in the CUDA experiment).
+// The V-cycle uses matching pre/post sweeps for pressure CG.
+Teuchos::RCP<Tpetra_Operator> create_schur_amg(
+    const Teuchos::RCP<Tpetra_CrsMatrix>& matrix)
+{
+  Tpetra_Vector diagonal(matrix->getRowMap());
+  matrix->getLocalDiagCopy(diagonal);
+  double local_bound = 1.0;
+  int local_invalid = 0;
+  {
+    const auto d = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
+    const auto a = matrix->getLocalMatrixHost();
+    for (size_t row = 0; row < matrix->getLocalNumRows(); ++row) {
+      if (!(d(row, 0) > 0.0) || !std::isfinite(d(row, 0))) {
+        local_invalid = 1;
+        continue;
+      }
+      double sum = 0.0;
+      for (auto k = a.graph.row_map(row); k < a.graph.row_map(row + 1); ++k) {
+        sum += std::abs(a.values(k));
+      }
+      if (!std::isfinite(sum)) {
+        local_invalid = 1;
+      }
+      local_bound = std::max(local_bound, sum / d(row, 0));
+    }
+  }
+  double bound = 0.0;
+  int invalid = 0;
+  const auto comm = matrix->getRowMap()->getComm();
+  Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &local_bound, &bound);
+  Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &local_invalid, &invalid);
+  if (invalid || !std::isfinite(bound)) {
+    throw std::runtime_error("[SchurAMG] Expected a finite positive Schur diagonal.");
+  }
+
+  Teuchos::ParameterList parameters;
+  parameters.set("verbosity", "none");
+  parameters.set("max levels", 10);
+  parameters.set("cycle type", "V");
+  parameters.set("number of equations", 1);
+  parameters.set("multigrid algorithm", "unsmoothed");
+  parameters.set("aggregation: type", "uncoupled");
+  parameters.set("aggregation: min agg size", 3);
+  parameters.set("aggregation: max agg size", 12);
+  parameters.set("smoother: type", "RELAXATION");
+  parameters.set("smoother: pre or post", "both");
+  auto& smoother = parameters.sublist("smoother: params");
+  smoother.set("relaxation: type", "Jacobi");
+  smoother.set("relaxation: sweeps", 2);
+  smoother.set("relaxation: damping factor", 1.8 / bound);
+  parameters.set("coarse: type", "KLU");
+  parameters.set("coarse: max size", 200);
+  // Fresh numeric hierarchy per Jacobian; never reuse stale coarse operators.
+  parameters.set("reuse: type", "none");
+  return MueLu::CreateTpetraPreconditioner(
+      Teuchos::rcp_static_cast<Tpetra_Operator>(matrix), parameters);
+}
+
 } // namespace
+
+Teuchos::RCP<Tpetra_CrsMatrix> build_schur_preconditioning_matrix(
+    const Teuchos::RCP<Tpetra_CrsMatrix>& L,
+    const Teuchos::RCP<Tpetra_CrsMatrix>& B)
+{
+  validate_matrix(consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG, L);
+  if (B == Teuchos::null || !B->isFillComplete() ||
+      !B->getDomainMap()->isSameAs(*L->getDomainMap())) {
+    throw std::runtime_error("[SchurAMG] Incompatible pressure maps of L and B.");
+  }
+  auto product = Teuchos::rcp(new Tpetra_CrsMatrix(L->getRowMap(), 0));
+  Tpetra::MatrixMatrix::Multiply(*B, true, *B, false, *product);
+  return Tpetra::MatrixMatrix::add(1.0, false, *L, 1.0, false,
+      *product, L->getDomainMap(), L->getRangeMap());
+}
 
 bool MueLuReuseCache::matches(
     SolverRole role,
@@ -350,8 +429,17 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
   }
 
   validate_matrix(type, matrix);
-  handle->setup_matrix_ =
-    copy_with_repaired_diagonal(matrix);
+  if (type == consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG) {
+    if (role != SolverRole::pressure_cg) {
+      throw std::runtime_error("[SchurAMG] Only valid for pressure CG.");
+    }
+    handle->setup_matrix_ = matrix;
+    handle->muelu_operator_ = create_schur_amg(matrix);
+    handle->left_operator_ = handle->muelu_operator_;
+    return handle;
+  }
+
+  handle->setup_matrix_ = copy_with_repaired_diagonal(matrix);
 
   if (type == consts::PreconditionerType::PREC_TRILINOS_ML) {
     if (reuse.muelu_cache != Teuchos::null) {

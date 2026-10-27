@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -422,6 +424,13 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         "[TrilinosBipartitionNS] ERROR: assembled Tpetra system is incomplete.");
   }
 
+  Teuchos::Time total_timer("BIPN total");
+  total_timer.start();
+  double schur_seconds = 0.0;
+  double amg_seconds = 0.0;
+  int cg_calls = 0;
+  int cg_failures = 0;
+  int cg_true_residual_failures = 0;
   auto& linear_solver = equation.FSILS;
   linear_solver.RI.success = false;
   linear_solver.GM.success = true;
@@ -488,12 +497,26 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   pressure_reuse.muelu_cache = pressure_muelu_cache_;
   pressure_reuse.time_step = time_step_;
   pressure_reuse.topology_generation = trilinos_->topology.generation();
+  auto pressure_setup_matrix = blocks.L;
+  if (equation.linear_algebra_cg_preconditioner ==
+      consts::PreconditionerType::PREC_TRILINOS_SCHUR_AMG) {
+    Teuchos::Time timer("Schur matrix setup");
+    timer.start();
+    pressure_setup_matrix = preconditioners::build_schur_preconditioning_matrix(
+        blocks.L, blocks.B);
+    timer.stop();
+    schur_seconds = timer.totalElapsedTime();
+  }
+  Teuchos::Time pressure_setup_timer("Pressure preconditioner setup");
+  pressure_setup_timer.start();
   auto pressure_preconditioner = preconditioners::create_preconditioner(
       equation.linear_algebra_cg_preconditioner,
       preconditioners::SolverRole::pressure_cg,
-      blocks.L,
+      pressure_setup_matrix,
       Teuchos::null,
       pressure_reuse);
+  pressure_setup_timer.stop();
+  amg_seconds = pressure_setup_timer.totalElapsedTime();
 
   auto initial_momentum = block_topology_cache_->extract_velocity(*trilinos_->F);
   auto initial_continuity = block_topology_cache_->extract_pressure(*trilinos_->F);
@@ -594,6 +617,12 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
         linear_solver.CG.mItr,
         linear_solver.CG.sD);
     accumulate_inner_solve(linear_solver.CG, cg);
+    ++cg_calls;
+    cg_failures += !cg.converged;
+    const double cg_target = std::max(
+        linear_solver.CG.absTol, linear_solver.CG.relTol * cg.initial_norm);
+    cg_true_residual_failures += !std::isfinite(cg.final_norm) ||
+        cg.final_norm > cg_target * (1.0 + 1.e-6);
 
     momentum_images[pressure_index] = Teuchos::rcp(
         new Tpetra_MultiVector(blocks.velocity_map, 1));
@@ -751,6 +780,27 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   trilinos_->X->elementWiseMultiply(
       1.0, *trilinos_->X, *diagonal, 0.0);
   copy_solution_to_host(trilinos_, solution);
+  total_timer.stop();
+  if (std::getenv("SV_TRILINOS_BIPN_STATS")) {
+    const double local_times[] = {total_timer.totalElapsedTime(), schur_seconds,
+        amg_seconds, linear_solver.CG.callD, linear_solver.GM.callD};
+    double times[5];
+    Teuchos::reduceAll(*blocks.pressure_map->getComm(), Teuchos::REDUCE_MAX,
+        5, local_times, times);
+    if (blocks.pressure_map->getComm()->getRank() == 0) {
+      std::cout << "BIPN_STATS " << std::setprecision(12)
+          << "total_s=" << times[0] << " schur_setup_s=" << times[1]
+          << " pressure_setup_s=" << times[2] << " cg_s=" << times[3]
+          << " gmres_s=" << times[4] << " cg_iterations=" << linear_solver.CG.itr
+          << " cg_calls=" << cg_calls << " cg_failures=" << cg_failures
+          << " cg_true_residual_failures=" << cg_true_residual_failures
+          << " gmres_iterations=" << linear_solver.GM.itr
+          << " cg_success=" << linear_solver.CG.success
+          << " ri_success=" << linear_solver.RI.success
+          << " initial_norm=" << linear_solver.RI.iNorm
+          << " final_norm=" << linear_solver.RI.fNorm << std::endl;
+    }
+  }
   reset_trilinos_state_after_solve(trilinos_);
 }
 

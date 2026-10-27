@@ -115,12 +115,23 @@ struct PreconditionerReuseContext
   std::size_t topology_generation = 0;      ///< Equation topology generation.
 };
 
+/** Build the sparse pressure preconditioning matrix L + B^T B.
+ * B maps pressure to velocity. Tpetra handles distributed transpose products,
+ * including off-rank contributions. Resistance remains in PressureSchurOperator;
+ * its dense low-rank corrections are deliberately not inserted into this matrix.
+ */
+Teuchos::RCP<Tpetra_CrsMatrix> build_schur_preconditioning_matrix(
+    const Teuchos::RCP<Tpetra_CrsMatrix>& L,
+    const Teuchos::RCP<Tpetra_CrsMatrix>& B);
+
 /**
  * @brief Construct and compute a reusable preconditioner.
  * @param type Registered Trilinos preconditioner type.
  * @param role Momentum-GMRES or pressure-CG usage.
  * @param matrix Fill-complete square matrix used for map validation and
- *        Ifpack2 or MueLu setup. It may be null only for the diagonal policy.
+ *        Ifpack2 or MueLu setup. For trilinos-schur-amg this must be L + B^T B
+ *        from build_schur_preconditioning_matrix(). It may be null only for
+ *        the diagonal policy.
  * @param resistance_operator Velocity-space resistance transform required by
  *        the resistance policy.
  * @param reuse Optional equation-local MueLu cache and current solve epoch.
