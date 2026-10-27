@@ -80,14 +80,15 @@ same block solver. The fallback preserves the established nodal CSR traversal
 and lifts its assembled values and residual into the full Tpetra system before
 block extraction.
 
-For native assembly, element matrices are produced in host memory. The
-equation-local assembly buffer uses cached scalar offsets to add each dense
-element block directly to a host view of an overlapping `Tpetra::CrsMatrix`.
-It does not allocate column/value arrays or call global-index insertion inside
-the element loop. At solve entry, `getLocalMatrixDevice()` performs one bulk
-host-to-device synchronization, and a cached `Tpetra::Export` sums overlapping
-ghost rows into the uniquely owned matrix. The RHS follows the same overlap
-layout and is exported separately.
+For native assembly, supported rigid-wall TET4/HEX8 VMS fluid cases use shared
+Kokkos element kernels that accumulate directly into Tpetra local CRS values
+and vectors. The numerical matrix remains in the selected execution space.
+Geometry and scatter offsets are cached, and small host boundary contributions
+are staged as sparse deltas on GPU builds. Other cases retain host element
+assembly into the same overlapping storage. A cached numeric-value export
+sums shared rows; one-rank runs use a direct CRS value copy. The RHS is exported
+separately. See [README_Native_Kokkos_Assembly.md](README_Native_Kokkos_Assembly.md)
+for supported cases, controls, CPU results, and GPU validation commands.
 
 The overlap is required for finite element assembly: an element on one rank
 can contribute to a node owned by another rank. Directly writing only the
@@ -204,8 +205,10 @@ Each equation-level Trilinos object owns a `trilinos_backend::TopologyCache`.
 The cache retains the owned and ghost maps, solution importer, overlap-to-owned
 exporter, owned and overlapping fill-complete `Tpetra::CrsGraph` objects, and
 derived assembly offsets across Newton iterations and time steps. `alloc()`
-creates fresh matrices and vectors from those static graphs and maps, so no
-Jacobian values or residual data survive between solves.
+reuses full-system matrices and vectors when those graphs/maps match, resetting
+all numerical values for every Jacobian. The overlap storage and numeric
+communication plan are reused as well; numerical contributions never survive
+the reset.
 
 The cache signature includes communicator size and rank, global/local/ghost
 node counts, DOF count, index base, local-to-global maps, CSR row pointers, and

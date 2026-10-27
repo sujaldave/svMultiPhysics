@@ -1,0 +1,237 @@
+{
+  "date": "2026-10-26",
+  "baseline_commit": "52399c5",
+  "cpu": "Apple M4 Pro, 48 GB RAM",
+  "platform": "macOS 26.6.2 arm64",
+  "compiler": "AppleClang 21",
+  "trilinos": "16.2.0 / Kokkos SERIAL",
+  "build_type": "RelWithDebInfo",
+  "ranks": 10,
+  "threads_per_rank": 1,
+  "time_steps": 20,
+  "nodes": 15334,
+  "tetrahedra": 75819,
+  "runs": {
+    "assembly-baseline-10": [
+      {
+        "wall_seconds": 46.06257891600035,
+        "simulation_seconds": 44.09,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "assembly_phase_totals": {}
+      },
+      {
+        "wall_seconds": 46.75085833400226,
+        "simulation_seconds": 45.62,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "assembly_phase_totals": {}
+      }
+    ],
+    "assembly-kokkos-10": [
+      {
+        "wall_seconds": 39.53282625000065,
+        "simulation_seconds": 37.55,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "assembly_phase_totals": {
+          "ASSEMBLY_STATS": {
+            "total_s": 2.328557837,
+            "cache_s": 0.018246882,
+            "state_s": 0.0023962610000000002,
+            "kernel_s": 2.308789375
+          },
+          "ASSEMBLY_EXPORT_STATS": {
+            "stage_s": 0.0017170000000530212,
+            "export_s": 0.24332099999999132
+          },
+          "ASSEMBLY_ALLOC_STATS": {
+            "total_s": 0.08849699999997802
+          }
+        },
+        "pressure_cg_totals": {
+          "cg_calls": 717.0,
+          "cg_iterations": 50262.0,
+          "cg_failures": 0.0,
+          "cg_true_residual_failures": 0.0
+        }
+      },
+      {
+        "wall_seconds": 40.13637516699964,
+        "simulation_seconds": 39.0,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "assembly_phase_totals": {
+          "ASSEMBLY_STATS": {
+            "total_s": 2.445647711,
+            "cache_s": 0.018976417,
+            "state_s": 0.00240396,
+            "kernel_s": 2.425033377
+          },
+          "ASSEMBLY_EXPORT_STATS": {
+            "stage_s": 0.0021240000000249067,
+            "export_s": 0.2499280000000292
+          },
+          "ASSEMBLY_ALLOC_STATS": {
+            "total_s": 0.08723100000000644
+          }
+        },
+        "pressure_cg_totals": {
+          "cg_calls": 717.0,
+          "cg_iterations": 50262.0,
+          "cg_failures": 0.0,
+          "cg_true_residual_failures": 0.0
+        }
+      }
+    ],
+    "assembly-legacy-10": [
+      {
+        "wall_seconds": 44.456725707997975,
+        "simulation_seconds": 43.35,
+        "nonlinear_iterations": 184,
+        "completed": true,
+        "returncode": 0,
+        "assembly_phase_totals": {
+          "ASSEMBLY_STATS": {
+            "total_s": 7.904255747
+          },
+          "ASSEMBLY_EXPORT_STATS": {
+            "stage_s": 0.0016250000000837801,
+            "export_s": 0.2532000000000372
+          },
+          "ASSEMBLY_ALLOC_STATS": {
+            "total_s": 0.09076100000002782
+          }
+        },
+        "pressure_cg_totals": {
+          "cg_calls": 717.0,
+          "cg_iterations": 50262.0,
+          "cg_failures": 0.0,
+          "cg_true_residual_failures": 0.0
+        }
+      }
+    ]
+  },
+  "baseline_median_wall_seconds": 46.406718625001304,
+  "kokkos_median_wall_seconds": 39.83460070850015,
+  "wall_speedup": 1.164985158621127,
+  "wall_time_reduction_fraction": 0.14161996605725258,
+  "element_assembly_speedup": 3.3112339498290915,
+  "validation": {
+    "artery_repeat_1": {
+      "Velocity": {
+        "relative_l2": 2.602750039830297e-14,
+        "maximum_absolute": 4.660494212771482e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.0178430132255353e-15,
+        "maximum_absolute": 1.7462298274040222e-09,
+        "passed": true
+      }
+    },
+    "artery_repeat_2": {
+      "Velocity": {
+        "relative_l2": 2.602750039830297e-14,
+        "maximum_absolute": 4.660494212771482e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.0178430132255353e-15,
+        "maximum_absolute": 1.7462298274040222e-09,
+        "passed": true
+      }
+    },
+    "artery_legacy": {
+      "Velocity": {
+        "relative_l2": 2.602750039830297e-14,
+        "maximum_absolute": 4.660494212771482e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.0178430132255353e-15,
+        "maximum_absolute": 1.7462298274040222e-09,
+        "passed": true
+      }
+    },
+    "carreau_fallback": {
+      "Velocity": {
+        "relative_l2": 2.613764903688152e-15,
+        "maximum_absolute": 2.220446049250313e-16,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 6.798179203296971e-17,
+        "maximum_absolute": 2.2737367544323206e-13,
+        "passed": true
+      }
+    },
+    "casson_fallback": {
+      "Velocity": {
+        "relative_l2": 2.4883507349141847e-15,
+        "maximum_absolute": 3.191891195797325e-16,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.483268284646596e-16,
+        "maximum_absolute": 4.547473508864641e-13,
+        "passed": true
+      }
+    },
+    "fsi_fallback": {
+      "Velocity": {
+        "relative_l2": 1.2789330610166529e-15,
+        "maximum_absolute": 2.842170943040401e-14,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.1375698392689042e-16,
+        "maximum_absolute": 1.4551915228366852e-11,
+        "passed": true
+      },
+      "Displacement": {
+        "relative_l2": 2.867459848225829e-16,
+        "maximum_absolute": 2.168404344971009e-19,
+        "passed": true
+      }
+    },
+    "single_rank_native": {
+      "Velocity": {
+        "relative_l2": 5.5365211166200496e-14,
+        "maximum_absolute": 1.2533973858808167e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.8253509934601846e-16,
+        "maximum_absolute": 2.7939677238464355e-09,
+        "passed": true
+      }
+    },
+    "fsils_assembly_input": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    }
+  },
+  "unit_tests": {
+    "serial_passed": 360,
+    "serial_skipped_requires_two_ranks": 1,
+    "two_rank_selected_passed_per_rank": 8
+  },
+  "gpu_validation": {
+    "cuda_compilation_verified": false,
+    "gpu_performance_measured": false,
+    "reason": "Local Trilinos is CPU-only; user will run cluster validation."
+  }
+}

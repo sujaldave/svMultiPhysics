@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 #include <stdexcept>
 
@@ -189,32 +190,27 @@ Teuchos::RCP<Tpetra_Operator> create_schur_amg(
 {
   Tpetra_Vector diagonal(matrix->getRowMap());
   matrix->getLocalDiagCopy(diagonal);
-  double local_bound = 1.0;
-  int local_invalid = 0;
+  double local_bound = 0.0;
   {
-    const auto d = diagonal.getLocalViewHost(Tpetra::Access::ReadOnly);
-    const auto a = matrix->getLocalMatrixHost();
-    for (size_t row = 0; row < matrix->getLocalNumRows(); ++row) {
-      if (!(d(row, 0) > 0.0) || !std::isfinite(d(row, 0))) {
-        local_invalid = 1;
-        continue;
-      }
-      double sum = 0.0;
-      for (auto k = a.graph.row_map(row); k < a.graph.row_map(row + 1); ++k) {
-        sum += std::abs(a.values(k));
-      }
-      if (!std::isfinite(sum)) {
-        local_invalid = 1;
-      }
-      local_bound = std::max(local_bound, sum / d(row, 0));
-    }
+    const auto d = diagonal.getLocalViewDevice(Tpetra::Access::ReadOnly);
+    const auto a = matrix->getLocalMatrixDevice();
+    const double maximum = std::numeric_limits<double>::max();
+    const double invalid = std::numeric_limits<double>::infinity();
+    Kokkos::parallel_reduce("schur_amg_spectral_bound",
+        Kokkos::RangePolicy<typename Node::execution_space>(0,matrix->getLocalNumRows()),
+        KOKKOS_LAMBDA(const int row, double& bound) {
+          double sum = 0.0;
+          for (auto k=a.graph.row_map(row); k<a.graph.row_map(row+1); ++k) sum += fabs(a.values(k));
+          double ratio = sum/d(row,0);
+          if (!(d(row,0)>0.0 && d(row,0)<=maximum && ratio>=0.0 && ratio<=maximum)) ratio=invalid;
+          if (ratio>bound) bound=ratio;
+        },Kokkos::Max<double>(local_bound));
   }
+  local_bound = std::max(1.0,local_bound);
   double bound = 0.0;
-  int invalid = 0;
   const auto comm = matrix->getRowMap()->getComm();
-  Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &local_bound, &bound);
-  Teuchos::reduceAll(*comm, Teuchos::REDUCE_MAX, 1, &local_invalid, &invalid);
-  if (invalid || !std::isfinite(bound)) {
+  Teuchos::reduceAll(*comm,Teuchos::REDUCE_MAX,1,&local_bound,&bound);
+  if (!std::isfinite(bound)) {
     throw std::runtime_error("[SchurAMG] Expected a finite positive Schur diagonal.");
   }
 

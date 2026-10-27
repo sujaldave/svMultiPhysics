@@ -206,6 +206,8 @@ set(CSRCS
   TrilinosLinearAlgebra.h TrilinosLinearAlgebra.cpp
   TrilinosBipartitionNS.h TrilinosBipartitionNS.cpp
   TrilinosAssembly.cpp
+  TrilinosFluidAssembly.h TrilinosFluidAssembly.cpp
+  FluidElementKernel.h
   TrilinosNSBlockOperators.h TrilinosNSBlockOperators.cpp
   TrilinosPreconditionerFactory.h TrilinosPreconditionerFactory.cpp
   TrilinosResistanceOperator.h TrilinosResistanceOperator.cpp

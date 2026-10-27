@@ -261,7 +261,6 @@ void reset_trilinos_state_after_solve(
   trilinos->ifpackPrec = Teuchos::null;
   trilinos->resistancePrec = Teuchos::null;
   trilinos->resistanceFaces.clear();
-  trilinos->K = Teuchos::null;
 }
 
 } // namespace
@@ -447,8 +446,7 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
   if (!trilinos_->K->isFillComplete()) {
     trilinos_->K->fillComplete();
   }
-  Tpetra::Export<LO, GO, Node> rhs_exporter(
-      trilinos_->ghostF->getMap(), trilinos_->F->getMap());
+  const auto& rhs_exporter = *trilinos_->topology.assembly_exporter();
   trilinos_->F->doExport(
       *trilinos_->ghostF,
       rhs_exporter,

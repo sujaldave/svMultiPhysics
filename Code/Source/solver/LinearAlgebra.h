@@ -10,6 +10,8 @@
 /// @brief The LinearAlgebra class provides an abstract interface to linear algebra 
 /// frameworks: FSILS, Trilinos, PETSc, etc.
 //
+struct SolutionStates;
+
 class LinearAlgebra {
   public:
     static const std::map<std::string, consts::LinearAlgebraType> name_to_type;
@@ -22,6 +24,8 @@ class LinearAlgebra {
     virtual void alloc(ComMod& com_mod, eqType& lEq) = 0;
     virtual void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN, 
         const Array3<double>& lK, const Array<double>& lR) = 0;
+    // Optional batched fluid assembly into backend-owned storage.
+    virtual bool assemble_fluid(ComMod&, const mshType&, const SolutionStates&) { return false; }
     virtual void check_options(const consts::PreconditionerType prec_cond_type, const consts::LinearAlgebraType assembly_type) = 0;
     virtual void initialize(ComMod& com_mod, eqType& lEq) = 0;
     virtual void set_assembly(consts::LinearAlgebraType assembly_type) = 0;

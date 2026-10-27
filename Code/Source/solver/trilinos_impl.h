@@ -20,6 +20,7 @@
 #include <time.h>
 #include <numeric>
 #include <unordered_map>
+#include <memory>
 
 #include "Array.h"
 #include "Vector.h"
@@ -108,6 +109,7 @@ using MueLu_Preconditioner = Tpetra_Operator;
  * @brief Internal Tpetra ownership and lifecycle support for svMultiPhysics.
  */
 namespace trilinos_backend {
+class NumericAssemblyExport;
 
 /**
  * @class TopologyCache
@@ -116,7 +118,7 @@ namespace trilinos_backend {
  * An equation's node distribution and connectivity normally remain unchanged
  * across Newton iterations and time steps. ensure() compares the complete
  * structural signature and reuses these expensive Tpetra objects on a match.
- * Matrix values and solve vectors are intentionally not cached here.
+ * Numerical storage is reset separately from this topology cache.
  */
 class TopologyCache
 {
@@ -253,18 +255,17 @@ class TopologyCache
 
 /**
  * @class LocalAssemblyBuffer
- * @brief Accumulates host element tensors in an overlapping local CRS matrix.
+ * @brief Owns reusable overlapping CRS values for native element assembly.
  *
- * Element kernels currently produce small dense arrays in host memory. This
- * buffer writes them directly into the final local CRS ordering and performs
- * one bulk host-to-device synchronization before exporting shared rows to
- * their owning MPI ranks. The class owns only per-Jacobian values; its graph
- * and communication plan come from TopologyCache.
+ * Supports host element tensors and direct Kokkos writes. After device volume
+ * assembly, host boundary contributions are uploaded as sparse deltas. Shared
+ * rows use a cached numeric-value export; single-rank matrices use a local CRS
+ * copy. reset() clears numerical values while preserving allocations/plans.
  */
 class LocalAssemblyBuffer
 {
   public:
-    /// @brief Allocate and zero values for a new Jacobian assembly.
+    /// @brief Reuse allocations and zero values for a new Jacobian assembly.
     void reset(const TopologyCache& topology);
 
     /// @brief Add one dense element matrix and residual to overlapping storage.
@@ -285,6 +286,9 @@ class LocalAssemblyBuffer
         Tpetra_CrsMatrix& owned_matrix,
         Tpetra_MultiVector& ghost_rhs);
 
+    // Mark native execution-space writes; release all returned views before flush.
+    Teuchos::RCP<Tpetra_CrsMatrix> device_assembly_matrix();
+
     /// @brief Return whether element contributions await a flush.
     bool pending() const;
 
@@ -295,6 +299,12 @@ class LocalAssemblyBuffer
     Teuchos::RCP<Tpetra_CrsMatrix> overlap_matrix_;
     std::size_t topology_generation_ = 0;
     bool pending_ = false;
+    bool device_assembly_ = false;
+    std::shared_ptr<NumericAssemblyExport> numeric_export_;
+    std::vector<std::size_t> staged_matrix_offsets_;
+    std::vector<double> staged_matrix_values_;
+    std::vector<LO> staged_rhs_offsets_;
+    std::vector<double> staged_rhs_values_;
 };
 
 } // namespace trilinos_backend
@@ -332,7 +342,7 @@ struct Trilinos
   /// Equation-local maps, importer, graph, and assembly metadata.
   trilinos_backend::TopologyCache topology;
 
-  /// Per-Jacobian native Trilinos element assembly storage.
+  /// Reusable native Trilinos element assembly storage.
   trilinos_backend::LocalAssemblyBuffer local_assembly;
 
   Teuchos::RCP<Tpetra_MultiVector> F;

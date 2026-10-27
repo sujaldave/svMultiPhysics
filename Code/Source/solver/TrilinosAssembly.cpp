@@ -11,8 +11,78 @@
 #include "trilinos_impl.h"
 
 #include <stdexcept>
+#include <cstdlib>
+#include <limits>
+#include "Teuchos_CommHelpers.hpp"
 
 namespace trilinos_backend {
+
+// A sparse matrix doExport in Trilinos 16.2 copies/permutates rows through host
+// APIs. Build entry IDs once, then export only numeric values as a multivector.
+// This uses Tpetra's execution-space-aware vector communication for every later
+// Jacobian, including GPU-aware MPI when configured by the installed Trilinos.
+class NumericAssemblyExport {
+  Teuchos::RCP<Tpetra_MultiVector> overlap_values_, owned_values_;
+  Teuchos::RCP<Tpetra_Export> exporter_;
+public:
+  NumericAssemblyExport(const TopologyCache& topology, const Tpetra_CrsMatrix& owned) {
+    const auto count = owned.getGlobalNumEntries();
+    // This backend currently uses GO=int. Keep a correct generic fallback if
+    // the flattened global entry space exceeds that ordinal type.
+    if (count > static_cast<Tpetra::global_size_t>(std::numeric_limits<GO>::max())) return;
+    auto value_map = Teuchos::rcp(new Tpetra_Map(count,owned.getLocalNumEntries(),0,topology.map()->getComm()));
+    auto ids = Teuchos::rcp(new Tpetra_CrsMatrix(topology.graph()));
+    ids->fillComplete(topology.map(),topology.map());
+    {
+      const auto local = ids->getLocalMatrixDevice();
+      const GO offset = value_map->getMinGlobalIndex();
+      Kokkos::parallel_for("assembly_entry_ids",Kokkos::RangePolicy<typename Node::execution_space>(0,local.values.extent(0)),
+          KOKKOS_LAMBDA(const int k) { local.values(k)=static_cast<double>(offset+k); });
+      Kokkos::fence("assembly_entry_ids_ready");
+    }
+    auto ghost_ids = Teuchos::rcp(new Tpetra_CrsMatrix(topology.ghost_map(),owned.getGlobalMaxNumRowEntries()));
+    ghost_ids->doImport(*ids,*topology.importer(),Tpetra::INSERT);
+    ghost_ids->fillComplete(topology.map(),topology.map());
+    std::vector<GO> gids;
+    {
+      const auto imported = ghost_ids->getLocalMatrixHost();
+      const auto graph = topology.assembly_graph()->getLocalGraphHost();
+      gids.resize(graph.entries.extent(0));
+      for (LO row=0; row<static_cast<LO>(topology.ghost_map()->getLocalNumElements()); ++row) {
+        std::unordered_map<GO,GO> entry_ids;
+        for (auto k=imported.graph.row_map(row); k<imported.graph.row_map(row+1); ++k)
+          entry_ids.emplace(ghost_ids->getColMap()->getGlobalElement(imported.graph.entries(k)),static_cast<GO>(imported.values(k)));
+        for (auto k=graph.row_map(row); k<graph.row_map(row+1); ++k)
+          gids[k]=entry_ids.at(topology.assembly_graph()->getColMap()->getGlobalElement(graph.entries(k)));
+      }
+    }
+    auto overlap_map = Teuchos::rcp(new Tpetra_Map(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+        Teuchos::arrayView(gids.data(),gids.size()),0,topology.map()->getComm()));
+    overlap_values_=Teuchos::rcp(new Tpetra_MultiVector(overlap_map,1));
+    owned_values_=Teuchos::rcp(new Tpetra_MultiVector(value_map,1));
+    exporter_=Teuchos::rcp(new Tpetra_Export(overlap_map,value_map));
+  }
+  bool apply(Tpetra_CrsMatrix& overlap, Tpetra_CrsMatrix& owned) {
+    if (exporter_ == Teuchos::null) return false;
+    {
+      const auto source=overlap.getLocalMatrixDevice();
+      const auto target=overlap_values_->getLocalViewDevice(Tpetra::Access::OverwriteAll);
+      Kokkos::parallel_for("assembly_pack_numeric",Kokkos::RangePolicy<typename Node::execution_space>(0,source.values.extent(0)),
+          KOKKOS_LAMBDA(const int k) { target(k,0)=source.values(k); });
+      Kokkos::fence("assembly_numeric_ready");
+    }
+    owned_values_->putScalar(0.0);
+    owned_values_->doExport(*overlap_values_,*exporter_,Tpetra::ADD);
+    {
+      const auto source=owned_values_->getLocalViewDevice(Tpetra::Access::ReadOnly);
+      const auto target=owned.getLocalMatrixDevice();
+      Kokkos::parallel_for("assembly_unpack_numeric",Kokkos::RangePolicy<typename Node::execution_space>(0,target.values.extent(0)),
+          KOKKOS_LAMBDA(const int k) { target.values(k)=source(k,0); });
+      Kokkos::fence("assembly_owned_values_ready");
+    }
+    return true;
+  }
+};
 
 void LocalAssemblyBuffer::reset(const TopologyCache& topology)
 {
@@ -21,17 +91,20 @@ void LocalAssemblyBuffer::reset(const TopologyCache& topology)
         "[TrilinosAssembly] ERROR: topology is not initialized.");
   }
 
-  overlap_matrix_ = Teuchos::rcp(
-      new Tpetra_CrsMatrix(topology.assembly_graph()));
-  overlap_matrix_->fillComplete(topology.map(), topology.map());
-
-  // Tpetra allocates static-graph values without initializing them. Zero the
-  // host view once; subsequent element calls add directly to this CRS array.
-  auto local_matrix = overlap_matrix_->getLocalMatrixHost();
-  Kokkos::deep_copy(local_matrix.values, Scalar_d(0.0));
-
+  if (overlap_matrix_ == Teuchos::null || topology_generation_ != topology.generation() ||
+      overlap_matrix_->getCrsGraph().getRawPtr() != topology.assembly_graph().getRawPtr()) {
+    numeric_export_.reset();
+    overlap_matrix_ = Teuchos::rcp(new Tpetra_CrsMatrix(topology.assembly_graph()));
+    overlap_matrix_->fillComplete(topology.map(), topology.map());
+  }
+  overlap_matrix_->setAllToScalar(0.0);
   topology_generation_ = topology.generation();
   pending_ = false;
+  device_assembly_ = false;
+  staged_matrix_offsets_.clear();
+  staged_matrix_values_.clear();
+  staged_rhs_offsets_.clear();
+  staged_rhs_values_.clear();
 }
 
 void LocalAssemblyBuffer::add_element(
@@ -51,6 +124,34 @@ void LocalAssemblyBuffer::add_element(
       element_matrix == nullptr || element_rhs == nullptr) {
     throw std::runtime_error(
         "[TrilinosAssembly] ERROR: invalid element assembly input.");
+  }
+
+  // Small host boundary contributions must not synchronize the full matrix
+  // back from a GPU after volume assembly. Upload sparse deltas once in flush.
+  if (device_assembly_ &&
+      !Kokkos::SpaceAccessibility<Kokkos::HostSpace, typename Node::memory_space>::accessible) {
+    const int dof = topology.dof();
+    for (int a = 0; a < num_element_nodes; ++a) {
+      for (int i = 0; i < dof; ++i) {
+        const double value = element_rhs[a*dof + i];
+        if (value != 0.0) {
+          staged_rhs_offsets_.push_back(topology.assembly_vector_lid(equation_nodes[a], i));
+          staged_rhs_values_.push_back(value);
+        }
+      }
+      for (int b = 0; b < num_element_nodes; ++b) {
+        const auto offsets = topology.assembly_block_offsets(equation_nodes[a], equation_nodes[b]);
+        for (int i = 0; i < dof; ++i) for (int j = 0; j < dof; ++j) {
+          const double value = element_matrix[b*dof*dof*num_element_nodes + a*dof*dof + i*dof + j];
+          if (value != 0.0) {
+            staged_matrix_offsets_.push_back(offsets[i*dof + j]);
+            staged_matrix_values_.push_back(value);
+          }
+        }
+      }
+    }
+    pending_ = true;
+    return;
   }
 
   const int dof = topology.dof();
@@ -93,6 +194,26 @@ void LocalAssemblyBuffer::add_element(
   pending_ = true;
 }
 
+Teuchos::RCP<Tpetra_CrsMatrix> LocalAssemblyBuffer::device_assembly_matrix()
+{
+  if (overlap_matrix_ == Teuchos::null) throw std::runtime_error("Assembly buffer is not initialized.");
+  device_assembly_ = true;
+  pending_ = true;
+  return overlap_matrix_;
+}
+
+namespace {
+template<class T>
+auto upload_deltas(const std::vector<T>& host, const char* label)
+{
+  Kokkos::View<T*, typename Node::device_type> device(std::string(label), host.size());
+  auto mirror = Kokkos::create_mirror_view(device);
+  for (size_t i = 0; i < host.size(); ++i) mirror(i) = host[i];
+  Kokkos::deep_copy(device, mirror);
+  return device;
+}
+}
+
 bool LocalAssemblyBuffer::flush(
     const TopologyCache& topology,
     Tpetra_CrsMatrix& owned_matrix,
@@ -101,6 +222,7 @@ bool LocalAssemblyBuffer::flush(
   if (!pending_) {
     return false;
   }
+  const double start = MPI_Wtime();
   if (overlap_matrix_ == Teuchos::null ||
       topology_generation_ != topology.generation() ||
       topology.assembly_exporter() == Teuchos::null) {
@@ -108,28 +230,60 @@ bool LocalAssemblyBuffer::flush(
         "[TrilinosAssembly] ERROR: cannot flush stale assembly storage.");
   }
 
-  // These device views trigger one bulk synchronization of the host-written
-  // matrix and RHS. Destroy them before calling Tpetra operations that may
-  // access the same graph metadata on host; WrappedDualView forbids host
-  // access while a device graph view remains alive.
   {
-    const auto local_matrix_device = overlap_matrix_->getLocalMatrixDevice();
-    const auto local_rhs_device =
-        ghost_rhs.getLocalViewDevice(Tpetra::Access::ReadOnly);
-    (void)local_matrix_device;
-    (void)local_rhs_device;
-    Kokkos::fence("svmp_trilinos_assembly_host_to_device");
+    const auto matrix = overlap_matrix_->getLocalMatrixDevice();
+    const auto rhs = ghost_rhs.getLocalViewDevice(Tpetra::Access::ReadWrite);
+    const auto mi = upload_deltas(staged_matrix_offsets_, "boundary_matrix_offsets");
+    const auto mv = upload_deltas(staged_matrix_values_, "boundary_matrix_values");
+    const auto ri = upload_deltas(staged_rhs_offsets_, "boundary_rhs_offsets");
+    const auto rv = upload_deltas(staged_rhs_values_, "boundary_rhs_values");
+    Kokkos::parallel_for("svmp_boundary_matrix", Kokkos::RangePolicy<typename Node::execution_space>(0, mi.extent(0)),
+        KOKKOS_LAMBDA(const int i) { Kokkos::atomic_add(&matrix.values(mi(i)), mv(i)); });
+    Kokkos::parallel_for("svmp_boundary_rhs", Kokkos::RangePolicy<typename Node::execution_space>(0, ri.extent(0)),
+        KOKKOS_LAMBDA(const int i) { Kokkos::atomic_add(&rhs(ri(i), 0), rv(i)); });
+    Kokkos::fence("svmp_assembly_complete");
+  }
+  staged_matrix_offsets_.clear();
+  staged_matrix_values_.clear();
+  staged_rhs_offsets_.clear();
+  staged_rhs_values_.clear();
+
+  const double stage_seconds = MPI_Wtime()-start;
+  const char* transport="local-copy";
+  if (topology.map()->getComm()->getSize() == 1 &&
+      topology.map()->isSameAs(*topology.ghost_map())) {
+    // Both graphs are constructed from the same rows/columns by TopologyCache.
+    // With no shared rows, copying numeric CRS values avoids Tpetra's general
+    // row pack/unpack (which includes global-column lookup on every Jacobian).
+    if (!owned_matrix.isFillComplete()) owned_matrix.fillComplete(topology.map(),topology.map());
+    {
+      const auto source = overlap_matrix_->getLocalMatrixDevice();
+      const auto target = owned_matrix.getLocalMatrixDevice();
+      if (source.values.extent(0) != target.values.extent(0))
+        throw std::runtime_error("Incompatible serial assembly CRS graphs.");
+      Kokkos::deep_copy(target.values,source.values);
+    }
+  } else {
+    if (!owned_matrix.isFillComplete()) owned_matrix.fillComplete(topology.map(),topology.map());
+    transport="numeric-values";
+    if (!numeric_export_) numeric_export_ = std::make_shared<NumericAssemblyExport>(topology,owned_matrix);
+    if (!numeric_export_->apply(*overlap_matrix_,owned_matrix)) {
+      transport="matrix-rows";
+      if (owned_matrix.isFillComplete()) owned_matrix.resumeFill();
+      owned_matrix.setAllToScalar(0.0);
+      owned_matrix.doExport(*overlap_matrix_,*topology.assembly_exporter(),Tpetra::ADD);
+      owned_matrix.fillComplete(topology.map(),topology.map());
+    }
   }
 
-  if (owned_matrix.isFillComplete()) {
-    throw std::runtime_error(
-        "[TrilinosAssembly] ERROR: owned matrix is already fill complete.");
+  if (std::getenv("SV_TRILINOS_ASSEMBLY_STATS")) {
+    Kokkos::fence("assembly_export_timing");
+    const double local[] = {stage_seconds,MPI_Wtime()-start-stage_seconds};
+    double global[2];
+    Teuchos::reduceAll(*topology.map()->getComm(),Teuchos::REDUCE_MAX,2,local,global);
+    if (topology.map()->getComm()->getRank() == 0) std::cout << "ASSEMBLY_EXPORT_STATS stage_s="
+        << global[0] << " export_s=" << global[1] << " transport=" << transport << std::endl;
   }
-  owned_matrix.setAllToScalar(0.0);
-  owned_matrix.doExport(
-      *overlap_matrix_, *topology.assembly_exporter(), Tpetra::ADD);
-  owned_matrix.fillComplete(topology.map(), topology.map());
-
   pending_ = false;
   return true;
 }
@@ -141,9 +295,15 @@ bool LocalAssemblyBuffer::pending() const
 
 void LocalAssemblyBuffer::clear()
 {
+  numeric_export_.reset();
   overlap_matrix_ = Teuchos::null;
   topology_generation_ = 0;
   pending_ = false;
+  device_assembly_ = false;
+  staged_matrix_offsets_.clear();
+  staged_matrix_values_.clear();
+  staged_rhs_offsets_.clear();
+  staged_rhs_values_.clear();
 }
 
 } // namespace trilinos_backend

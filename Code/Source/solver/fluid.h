@@ -9,6 +9,8 @@
 #include "consts.h"
 
 namespace fluid {
+namespace element { struct Parameters; }
+element::Parameters element_parameters(const ComMod& com_mod, const dmnType& dmn);
 
 void b_fluid(ComMod& com_mod, const int eNoN, const double w, const Vector<double>& N, const Vector<double>& y,   
     const double h, const Vector<double>& nV, Array<double>& lR, Array3<double>& lK);

@@ -23,6 +23,7 @@ def main():
     parser.add_argument('candidate', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--tolerance', type=float, default=1e-7)
+    parser.add_argument('--fields', nargs='+', default=['Velocity','Pressure'])
     args = parser.parse_args()
     ref, cand = read(args.reference), read(args.candidate)
     if ref.GetNumberOfPoints() != cand.GetNumberOfPoints():
@@ -31,7 +32,7 @@ def main():
     lookup = {cand.GetPoint(i): i for i in range(cand.GetNumberOfPoints())}
     order = [lookup[ref.GetPoint(i)] for i in range(ref.GetNumberOfPoints())]
     results = {}
-    for name in ('Velocity', 'Pressure'):
+    for name in args.fields:
         a, b = ref.GetPointData().GetArray(name), cand.GetPointData().GetArray(name)
         if a is None or b is None:
             raise ValueError(f'Missing {name} field')

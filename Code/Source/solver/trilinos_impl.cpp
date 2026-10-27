@@ -17,6 +17,7 @@
 #include "TrilinosBipartitionNS.h"
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
+#include "TrilinosFluidAssembly.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -137,7 +138,7 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
 
   // Maps, importer, and sparsity are equation topology. Reuse them across
   // Newton iterations; only the matrix values and vectors below are fresh.
-  trilinos_->topology.ensure(
+  const bool rebuilt = trilinos_->topology.ensure(
       trilinos_->comm,
       numGlobalNodes,
       numLocalNodes,
@@ -150,38 +151,30 @@ void trilinos_lhs_create(const Teuchos::RCP<Trilinos> &trilinos_, const int numG
       Dof,
       indexBase);
 
-  // --- Create block finite element matrix from graph with fillcomplete ------
-  // construct matrix from filled graph
-  trilinos_->K = Teuchos::rcp(
-      new Tpetra_CrsMatrix(trilinos_->topology.graph()));
-
-  //construct RHS force vector F topology
-  trilinos_->F = Teuchos::rcp(
-      new Tpetra_MultiVector(trilinos_->topology.map(), 1));
-
-  //construct RHS force vector ghostF topology
-  trilinos_->ghostF = Teuchos::rcp(
-      new Tpetra_MultiVector(trilinos_->topology.ghost_map(), 1));
-
-  // Construct a boundary vector for each coupled Neumann boundary condition
-  trilinos_->bdryVec_list.clear();
-  trilinos_->bdryCapVec_list.clear();
-  for (int i = 0; i < numCoupledNeumannBC; ++i)
-  {
-    trilinos_->bdryVec_list.push_back(Teuchos::rcp(
-        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
-    trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(
-        new Tpetra_MultiVector(trilinos_->topology.map(), 1)));
+  // Keep values/vectors with the cached graphs. Only topology changes require
+  // allocation; each new Jacobian resets numerical values in place.
+  if (rebuilt || trilinos_->K == Teuchos::null) {
+    trilinos_->K = Teuchos::rcp(new Tpetra_CrsMatrix(trilinos_->topology.graph()));
+    trilinos_->F = Teuchos::rcp(new Tpetra_MultiVector(trilinos_->topology.map(),1));
+    trilinos_->ghostF = Teuchos::rcp(new Tpetra_MultiVector(trilinos_->topology.ghost_map(),1));
+    trilinos_->X = Teuchos::rcp(new Tpetra_Vector(trilinos_->topology.map()));
+    trilinos_->ghostX = Teuchos::rcp(new Tpetra_Vector(trilinos_->topology.ghost_map()));
   }
-
-  // Initialize solution vector which is unique and does not include the ghost
-  // indices using the unique map
-  trilinos_->X = Teuchos::rcp(
-      new Tpetra_Vector(trilinos_->topology.map()));
-
-  //initialize vector which will import the ghost nodes using the ghost map
-  trilinos_->ghostX = Teuchos::rcp(
-      new Tpetra_Vector(trilinos_->topology.ghost_map()));
+  trilinos_->K->setAllToScalar(0.0);
+  trilinos_->F->putScalar(0.0);
+  trilinos_->ghostF->putScalar(0.0);
+  trilinos_->X->putScalar(0.0);
+  trilinos_->ghostX->putScalar(0.0);
+  if (rebuilt || trilinos_->bdryVec_list.size() != static_cast<size_t>(numCoupledNeumannBC)) {
+    trilinos_->bdryVec_list.clear();
+    trilinos_->bdryCapVec_list.clear();
+    for (int i = 0; i < numCoupledNeumannBC; ++i) {
+      trilinos_->bdryVec_list.push_back(Teuchos::rcp(new Tpetra_MultiVector(trilinos_->topology.map(),1)));
+      trilinos_->bdryCapVec_list.push_back(Teuchos::rcp(new Tpetra_MultiVector(trilinos_->topology.map(),1)));
+    }
+  }
+  for (auto& vector : trilinos_->bdryVec_list) vector->putScalar(0.0);
+  for (auto& vector : trilinos_->bdryCapVec_list) vector->putScalar(0.0);
 
 } // trilinos_lhs_create_
 
@@ -497,8 +490,6 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   if (trilinos_->ifpackPrec != Teuchos::null) trilinos_->ifpackPrec = Teuchos::null;
   if (trilinos_->resistancePrec != Teuchos::null) trilinos_->resistancePrec = Teuchos::null;
   trilinos_->resistanceFaces.clear();
-
-  trilinos_->K = Teuchos::null;
 
 } // trilinos_solve_
 
@@ -1015,6 +1006,7 @@ class TrilinosLinearAlgebra::TrilinosImpl {
     void alloc(ComMod& com_mod, eqType& lEq, bool native_assembly);
     void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN,
         const Array3<double>& lK, const Array<double>& lR);
+    bool assemble_fluid(ComMod& c, const mshType& m, const SolutionStates& s) { return fluid_assembly_.assemble(c, m, s, *trilinos_); }
     void initialize(ComMod& com_mod);
     void solve(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vector<double>& res);
     void solve_assembled(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vector<double>& res);
@@ -1042,6 +1034,7 @@ class TrilinosLinearAlgebra::TrilinosImpl {
     /// @brief Equation-local NS velocity/pressure maps, graphs, and plans.
     Teuchos::RCP<trilinos_bipartition::TrilinosNSBlockTopologyCache>
         block_topology_cache_;
+    trilinos_backend::FluidAssembly fluid_assembly_;
     bool runtime_registered_ = false;
 };
 
@@ -1051,6 +1044,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::alloc(
     eqType& lEq,
     bool native_assembly)
 {
+  const double alloc_start = MPI_Wtime();
   int dof = com_mod.dof;
   int tnNo = com_mod.tnNo;
   int gtnNo = com_mod.gtnNo;
@@ -1062,13 +1056,10 @@ void TrilinosLinearAlgebra::TrilinosImpl::alloc(
   std::cout << "[TrilinosImpl.alloc] ltg_.size(): " << ltg_.size() << std::endl;
   #endif
 
-  if (W_.size() != 0) {
-    W_.clear();
-    R_.clear();
-  }
-
-  W_.resize(dof,tnNo); 
-  R_.resize(dof,tnNo);
+  if (W_.nrows() != dof || W_.ncols() != tnNo) W_.resize(dof,tnNo);
+  if (R_.nrows() != dof || R_.ncols() != tnNo) R_.resize(dof,tnNo);
+  W_ = 0.0;
+  R_ = 0.0;
 
   int cpp_index = 1;
   int task_id = com_mod.cm.idcm();
@@ -1078,6 +1069,15 @@ void TrilinosLinearAlgebra::TrilinosImpl::alloc(
 
   if (native_assembly) {
     trilinos_->local_assembly.reset(trilinos_->topology);
+  } else if (trilinos_->K->isFillComplete()) {
+    trilinos_->K->resumeFill();
+  }
+  if (std::getenv("SV_TRILINOS_ASSEMBLY_STATS")) {
+    Kokkos::fence("assembly_allocation_timing");
+    const double local = MPI_Wtime()-alloc_start;
+    double global = 0.0;
+    Teuchos::reduceAll(*trilinos_->comm,Teuchos::REDUCE_MAX,1,&local,&global);
+    if (trilinos_->comm->getRank() == 0) std::cout << "ASSEMBLY_ALLOC_STATS total_s=" << global << std::endl;
   }
 }
 
@@ -1253,6 +1253,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   momentum_muelu_cache_ = Teuchos::null;
   pressure_muelu_cache_ = Teuchos::null;
   block_topology_cache_ = Teuchos::null;
+  fluid_assembly_.clear();
   trilinos_->local_assembly.clear();
   trilinos_->topology.clear();
   trilinos_->comm = Teuchos::null;
