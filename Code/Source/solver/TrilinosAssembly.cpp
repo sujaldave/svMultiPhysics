@@ -17,6 +17,23 @@
 
 namespace trilinos_backend {
 
+namespace {
+
+// NVCC cannot lower an extended host/device lambda inside a constructor:
+// its enclosing function must have an address, and constructors do not.
+// A namespace-scope functor has no such enclosing-function requirement.
+struct AssemblyEntryIdsFunctor {
+  Tpetra_CrsMatrix::local_matrix_device_type matrix;
+  GO offset;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const int k) const {
+    matrix.values(k) = static_cast<double>(offset + k);
+  }
+};
+
+} // namespace
+
 // A sparse matrix doExport in Trilinos 16.2 copies/permutates rows through host
 // APIs. Build entry IDs once, then export only numeric values as a multivector.
 // This uses Tpetra's execution-space-aware vector communication for every later
@@ -37,7 +54,7 @@ public:
       const auto local = ids->getLocalMatrixDevice();
       const GO offset = value_map->getMinGlobalIndex();
       Kokkos::parallel_for("assembly_entry_ids",Kokkos::RangePolicy<typename Node::execution_space>(0,local.values.extent(0)),
-          KOKKOS_LAMBDA(const int k) { local.values(k)=static_cast<double>(offset+k); });
+          AssemblyEntryIdsFunctor{local,offset});
       Kokkos::fence("assembly_entry_ids_ready");
     }
     auto ghost_ids = Teuchos::rcp(new Tpetra_CrsMatrix(topology.ghost_map(),owned.getGlobalMaxNumRowEntries()));

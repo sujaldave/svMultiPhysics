@@ -171,6 +171,22 @@ To rebuild that baseline elsewhere, use a separate checkout/worktree of
 
 ### Cluster CUDA build
 
+The Sherlock/A40 constructor-lambda build failure is fixed by using a named
+namespace-scope functor to initialize numeric export entry IDs. NVCC cannot
+use an extended host/device lambda whose enclosing function is a constructor.
+The project also no longer adds a redundant `-std` flag alongside
+`CMAKE_CXX_STANDARD`; the required language standard remains C++20.
+
+After updating an already configured checkout, rebuild the inner target:
+
+```sh
+cmake --build build/svMultiPhysics-build -j4
+```
+
+This explicitly rebuilds changed sources even if the top-level superbuild's
+external-project completion stamps are already present. Use `build-gpu` in
+place of `build` if that is the configured build directory.
+
 Activate the same MPI/CUDA environment that builds your existing GPU Trilinos
 solver. Use the CUDA-enabled Trilinos prefix and its compatible C++ compiler
 wrapper; the CPU-only installation on this Mac cannot build CUDA kernels.

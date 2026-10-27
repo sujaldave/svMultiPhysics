@@ -89,7 +89,8 @@ endif()
 # add trilinos flags and defines
 if(USE_TRILINOS)
   ADD_DEFINITIONS(-DWITH_TRILINOS)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++${CMAKE_CXX_STANDARD}")
+  # CMAKE_CXX_STANDARD already selects the language standard. Appending a
+  # second -std flag makes nvcc_wrapper report conflicting standard flags.
   # GPU compatibility: CUDA-enabled Trilinos/Tacho builds may leave CUDA TPLs
   # out of Trilinos_TPL_LIBRARIES, so link the imported CUDA targets when they
   # are available.  This stays optional for CPU-only Trilinos installations.
