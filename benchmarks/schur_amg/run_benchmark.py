@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--preconditioner', choices=['diagonal', 'schur-amg', 'ml', 'fsils'], required=True)
+    parser.add_argument('--gmres-preconditioner', choices=['diagonal','resistance'], default='diagonal')
     parser.add_argument('--steps', type=int, default=20)
     parser.add_argument('--ranks', type=int, default=1)
     parser.add_argument('--threads', type=int, default=1)
@@ -39,6 +40,8 @@ def main():
     args = parser.parse_args()
     if min(args.steps, args.ranks, args.repeat, args.threads) < 1:
         parser.error("steps, ranks, repeat, and threads must be positive")
+    if args.preconditioner == 'fsils' and args.gmres_preconditioner != 'diagonal':
+        parser.error('gmres-preconditioner selects a Trilinos policy; it is not applied to FSILS inputs')
     if args.gpus_per_task < 0 or (args.gpus_per_task and args.launcher != "srun"):
         parser.error("gpus-per-task requires srun and a nonnegative count")
     if args.gpus_per_node < 0 or (args.gpus_per_node and args.launcher != 'srun'):
@@ -68,7 +71,7 @@ def main():
                 la.remove(child)
             ET.SubElement(la, 'Assembly').text = 'trilinos'
             ET.SubElement(la, 'Preconditioner').text = 'trilinos-diagonal'
-            ET.SubElement(la, 'GMRES_Preconditioner').text = 'trilinos-diagonal'
+            ET.SubElement(la, 'GMRES_Preconditioner').text = 'trilinos-' + args.gmres_preconditioner
             ET.SubElement(la, 'CG_Preconditioner').text = 'trilinos-' + args.preconditioner
         tree.write(run / 'solver.xml', encoding='utf-8', xml_declaration=True)
         command = [str(exe), 'solver.xml']
@@ -131,6 +134,7 @@ def main():
         record = dict(schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
                       profiled=bool(args.profile), boundary_stats=boundary_stats,
                       executable=str(exe), preconditioner=args.preconditioner,
+                      gmres_preconditioner=args.gmres_preconditioner,
                       assembly_mode=args.assembly, assembly_stats=assembly_stats,
                       steps=args.steps, ranks=args.ranks, threads=args.threads, command=command,
                       wall_seconds=elapsed, returncode=result.returncode,

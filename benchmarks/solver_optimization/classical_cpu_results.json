@@ -1,0 +1,637 @@
+{
+  "date": "2026-10-28",
+  "solver_base_commit": "1227395",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "cpu": "Apple M4 Pro, 48 GB",
+  "trilinos": "16.2.0 / Kokkos 4.7.1 Serial",
+  "ranks": 10,
+  "threads_per_rank": 1,
+  "steps": 20,
+  "repeat": 2,
+  "assembly": "kokkos",
+  "groups": {
+    "amg-diagonal": {
+      "median_wall_s": 34.796011936996365,
+      "runs": [
+        {
+          "wall_seconds": 35.453989916000864,
+          "simulation_seconds": 34.31,
+          "gmres_preconditioner": "diagonal",
+          "preconditioner": "schur-amg",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 51161.0,
+            "cg_true_residual_failures": 0.0,
+            "cg_s": 25.325709,
+            "cg_failures": 0.0,
+            "pressure_setup_s": 0.3497360000000307,
+            "gmres_s": 2.654647999999977,
+            "cg_calls": 717.0,
+            "schur_setup_s": 1.053262000000028,
+            "total_s": 31.536103,
+            "operator_setup_s": 0.1265740000000152,
+            "scaling_s": 0.2374820000000083,
+            "block_setup_s": 0.3179430000000181,
+            "gmres_iterations": 12059.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09028400000001685
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.543347582999999,
+              "cache_s": 0.021957794000000006,
+              "state_s": 0.002427415,
+              "kernel_s": 2.5205449630000016,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.002826000000052973,
+              "export_s": 0.30628400000001443
+            }
+          }
+        },
+        {
+          "wall_seconds": 34.138033957991865,
+          "simulation_seconds": 33.0,
+          "gmres_preconditioner": "diagonal",
+          "preconditioner": "schur-amg",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 51161.0,
+            "cg_true_residual_failures": 0.0,
+            "cg_s": 24.40189799999999,
+            "cg_failures": 0.0,
+            "pressure_setup_s": 0.364633000000012,
+            "gmres_s": 2.454698000000065,
+            "cg_calls": 717.0,
+            "schur_setup_s": 1.044356000000007,
+            "total_s": 30.287763,
+            "operator_setup_s": 0.1302459999999872,
+            "scaling_s": 0.2309739999999958,
+            "block_setup_s": 0.30773399999998,
+            "gmres_iterations": 12059.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09619700000003288
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.481887796,
+              "cache_s": 0.01970533599999999,
+              "state_s": 0.0025161619999999993,
+              "kernel_s": 2.4614938349999993,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0024100000000122387,
+              "export_s": 0.2586910000000086
+            }
+          }
+        }
+      ]
+    },
+    "amg-resistance": {
+      "median_wall_s": 35.18680370850052,
+      "runs": [
+        {
+          "wall_seconds": 36.236458584011416,
+          "simulation_seconds": 35.04,
+          "gmres_preconditioner": "resistance",
+          "preconditioner": "schur-amg",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 51044.0,
+            "cg_true_residual_failures": 0.0,
+            "cg_s": 26.071146,
+            "cg_failures": 0.0,
+            "pressure_setup_s": 0.367286999999996,
+            "gmres_s": 2.354932000000025,
+            "cg_calls": 717.0,
+            "schur_setup_s": 1.161613000000006,
+            "total_s": 32.128836,
+            "operator_setup_s": 0.1231519999999989,
+            "scaling_s": 0.2280980000000273,
+            "block_setup_s": 0.3120419999999937,
+            "gmres_iterations": 9546.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09647900000003998
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.654089791000001,
+              "cache_s": 0.039933455000000014,
+              "state_s": 0.0023203000000000004,
+              "kernel_s": 2.634609707999998,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0025730000000311146,
+              "export_s": 0.2727450000000068
+            }
+          }
+        },
+        {
+          "wall_seconds": 34.137148832989624,
+          "simulation_seconds": 33.0,
+          "gmres_preconditioner": "resistance",
+          "preconditioner": "schur-amg",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 51044.0,
+            "cg_true_residual_failures": 0.0,
+            "cg_s": 24.50241700000002,
+            "cg_failures": 0.0,
+            "pressure_setup_s": 0.364864000000002,
+            "gmres_s": 2.174165000000021,
+            "cg_calls": 717.0,
+            "schur_setup_s": 1.107233000000013,
+            "total_s": 30.203984,
+            "operator_setup_s": 0.1293299999999884,
+            "scaling_s": 0.2278769999999927,
+            "block_setup_s": 0.2940810000000121,
+            "gmres_iterations": 9546.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.08948699999999687
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.5690022100000025,
+              "cache_s": 0.018428670999999997,
+              "state_s": 0.002349338,
+              "kernel_s": 2.5509792909999995,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.002296999999979281,
+              "export_s": 0.25830900000001955
+            }
+          }
+        }
+      ]
+    },
+    "classic-diagonal": {
+      "median_wall_s": 49.00290668800153,
+      "runs": [
+        {
+          "wall_seconds": 49.6454499590036,
+          "simulation_seconds": 48.49,
+          "gmres_preconditioner": "diagonal",
+          "preconditioner": "diagonal",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 261427.0,
+            "cg_true_residual_failures": 864.0,
+            "cg_s": 40.12850400000001,
+            "cg_failures": 864.0,
+            "pressure_setup_s": 0.0001450000000646877,
+            "gmres_s": 3.226188000000124,
+            "cg_calls": 877.0,
+            "schur_setup_s": 0.0,
+            "total_s": 45.51874,
+            "operator_setup_s": 0.0,
+            "scaling_s": 0.2430039999999978,
+            "block_setup_s": 0.3042180000000084,
+            "gmres_iterations": 14277.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09203800000005342
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.7225251709999987,
+              "cache_s": 0.018811913000000006,
+              "state_s": 0.0026531769999999983,
+              "kernel_s": 2.7048795899999987,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0024250000000333983,
+              "export_s": 0.28101400000000354
+            }
+          }
+        },
+        {
+          "wall_seconds": 48.36036341699946,
+          "simulation_seconds": 47.17,
+          "gmres_preconditioner": "diagonal",
+          "preconditioner": "diagonal",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 261427.0,
+            "cg_true_residual_failures": 864.0,
+            "cg_s": 39.000025,
+            "cg_failures": 864.0,
+            "pressure_setup_s": 0.0001460000001033546,
+            "gmres_s": 3.112227999999971,
+            "cg_calls": 877.0,
+            "schur_setup_s": 0.0,
+            "total_s": 44.225289000000004,
+            "operator_setup_s": 0.0,
+            "scaling_s": 0.24128099999998,
+            "block_setup_s": 0.307308999999982,
+            "gmres_iterations": 14277.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09308600000005714
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.7024720069999986,
+              "cache_s": 0.021308628,
+              "state_s": 0.0028505359999999986,
+              "kernel_s": 2.6793927909999993,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0026980000000452605,
+              "export_s": 0.2627279999999885
+            }
+          }
+        }
+      ]
+    },
+    "classic-resistance": {
+      "median_wall_s": 49.83598950000305,
+      "runs": [
+        {
+          "wall_seconds": 51.06878820899874,
+          "simulation_seconds": 49.99,
+          "gmres_preconditioner": "resistance",
+          "preconditioner": "diagonal",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 261071.0,
+            "cg_true_residual_failures": 859.0,
+            "cg_s": 41.77082500000001,
+            "cg_failures": 859.0,
+            "pressure_setup_s": 0.0001460000001035763,
+            "gmres_s": 3.114600000000094,
+            "cg_calls": 874.0,
+            "schur_setup_s": 0.0,
+            "total_s": 47.165458,
+            "operator_setup_s": 0.0,
+            "scaling_s": 0.2385560000000072,
+            "block_setup_s": 0.3355179999999947,
+            "gmres_iterations": 11947.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.09261900000000954
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.5771254150000003,
+              "cache_s": 0.02038734000000001,
+              "state_s": 0.002537879999999998,
+              "kernel_s": 2.556018625,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.002497000000092676,
+              "export_s": 0.2775150000000117
+            }
+          }
+        },
+        {
+          "wall_seconds": 48.603190791007364,
+          "simulation_seconds": 47.48,
+          "gmres_preconditioner": "resistance",
+          "preconditioner": "diagonal",
+          "nonlinear_iterations": 184,
+          "completed": true,
+          "returncode": 0,
+          "failed_ri_solves": 0,
+          "solver_totals": {
+            "cg_iterations": 261071.0,
+            "cg_true_residual_failures": 859.0,
+            "cg_s": 39.532171,
+            "cg_failures": 859.0,
+            "pressure_setup_s": 0.0001570000000944573,
+            "gmres_s": 3.002366999999921,
+            "cg_calls": 874.0,
+            "schur_setup_s": 0.0,
+            "total_s": 44.729991,
+            "operator_setup_s": 0.0,
+            "scaling_s": 0.2383520000000068,
+            "block_setup_s": 0.3112720000000277,
+            "gmres_iterations": 11947.0
+          },
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.08959900000002198
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 2.521381465000002,
+              "cache_s": 0.017081624000000007,
+              "state_s": 0.0026170869999999997,
+              "kernel_s": 2.5038906220000006,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0023540000000501064,
+              "export_s": 0.25357599999999775
+            }
+          }
+        }
+      ]
+    }
+  },
+  "field_checks": {
+    "amg-diagonal/run-1": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    },
+    "amg-diagonal/run-2": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    },
+    "amg-resistance/run-1": {
+      "Velocity": {
+        "relative_l2": 2.560304592103933e-14,
+        "maximum_absolute": 4.433786671143025e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.4486531718578984e-15,
+        "maximum_absolute": 2.444721758365631e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 1.3959715135084237e-14,
+        "maximum_absolute": 4.547473508864641e-13,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 1.383170062813245e-15,
+        "maximum_absolute": 2.2118911147117615e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 2.3033734851157608e-14,
+        "maximum_absolute": 2.0051516003150027e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.3591332315729255e-13,
+        "maximum_absolute": 8.325784506268974e-12,
+        "passed": true
+      }
+    },
+    "amg-resistance/run-2": {
+      "Velocity": {
+        "relative_l2": 2.560304592103933e-14,
+        "maximum_absolute": 4.433786671143025e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.4486531718578984e-15,
+        "maximum_absolute": 2.444721758365631e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 1.3959715135084237e-14,
+        "maximum_absolute": 4.547473508864641e-13,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 1.383170062813245e-15,
+        "maximum_absolute": 2.2118911147117615e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 2.3033734851157608e-14,
+        "maximum_absolute": 2.0051516003150027e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.3591332315729255e-13,
+        "maximum_absolute": 8.325784506268974e-12,
+        "passed": true
+      }
+    },
+    "classic-diagonal/run-1": {
+      "Velocity": {
+        "relative_l2": 3.583755378534271e-14,
+        "maximum_absolute": 1.3173462320992257e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 5.297469855503407e-15,
+        "maximum_absolute": 5.820766091346741e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 3.3528222430404525e-14,
+        "maximum_absolute": 2.0339285811132868e-12,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 5.056454366397938e-15,
+        "maximum_absolute": 5.704350769519806e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 3.927597037271223e-14,
+        "maximum_absolute": 5.3233861763146706e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.639155201088954e-13,
+        "maximum_absolute": 9.929279620735088e-12,
+        "passed": true
+      }
+    },
+    "classic-diagonal/run-2": {
+      "Velocity": {
+        "relative_l2": 3.583755378534271e-14,
+        "maximum_absolute": 1.3173462320992257e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 5.297469855503407e-15,
+        "maximum_absolute": 5.820766091346741e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 3.3528222430404525e-14,
+        "maximum_absolute": 2.0339285811132868e-12,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 5.056454366397938e-15,
+        "maximum_absolute": 5.704350769519806e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 3.927597037271223e-14,
+        "maximum_absolute": 5.3233861763146706e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.639155201088954e-13,
+        "maximum_absolute": 9.929279620735088e-12,
+        "passed": true
+      }
+    },
+    "classic-resistance/run-1": {
+      "Velocity": {
+        "relative_l2": 3.423467231161806e-14,
+        "maximum_absolute": 1.0434320074637071e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.448683440463521e-15,
+        "maximum_absolute": 2.561137080192566e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 3.0447149708312976e-14,
+        "maximum_absolute": 1.7479351299698465e-12,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 1.358159373773179e-15,
+        "maximum_absolute": 2.444721758365631e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 3.6684188527761134e-14,
+        "maximum_absolute": 4.96243046654854e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.6306711382447564e-13,
+        "maximum_absolute": 1.4459544672718039e-11,
+        "passed": true
+      }
+    },
+    "classic-resistance/run-2": {
+      "Velocity": {
+        "relative_l2": 3.423467231161806e-14,
+        "maximum_absolute": 1.0434320074637071e-11,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 1.448683440463521e-15,
+        "maximum_absolute": 2.561137080192566e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 3.0447149708312976e-14,
+        "maximum_absolute": 1.7479351299698465e-12,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 1.358159373773179e-15,
+        "maximum_absolute": 2.444721758365631e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 3.6684188527761134e-14,
+        "maximum_absolute": 4.96243046654854e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.6306711382447564e-13,
+        "maximum_absolute": 1.4459544672718039e-11,
+        "passed": true
+      }
+    }
+  },
+  "failures": [],
+  "warnings": [
+    "classic-diagonal/run-1/measurement.json: cg_failures=864.0",
+    "classic-diagonal/run-1/measurement.json: cg_true_residual_failures=864.0",
+    "classic-diagonal/run-2/measurement.json: cg_failures=864.0",
+    "classic-diagonal/run-2/measurement.json: cg_true_residual_failures=864.0",
+    "classic-resistance/run-1/measurement.json: cg_failures=859.0",
+    "classic-resistance/run-1/measurement.json: cg_true_residual_failures=859.0",
+    "classic-resistance/run-2/measurement.json: cg_failures=859.0",
+    "classic-resistance/run-2/measurement.json: cg_true_residual_failures=859.0"
+  ],
+  "notes": [
+    "Classical inner convergence limits are reported, not treated as converged. All outer solves and six-field comparisons passed.",
+    "One failed ParMETIS preprocessing launch is preserved outside the successful benchmark directory.",
+    "GPU timing requires the supplied Sherlock job; no solver C++ changes or defaults were made."
+  ],
+  "executable_sha256": "85405ced48b766375b0c0371981f11672f920ad2ea91717fcc0512ed02346550"
+}

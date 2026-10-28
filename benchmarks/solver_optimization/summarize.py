@@ -17,10 +17,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--expect-cuda', action='store_true')
+    parser.add_argument('--reference-group', help='Directory label used for field and timing comparisons.')
+    parser.add_argument('--allow-diagonal-inner-nonconvergence', action='store_true',
+                        help='Report unconverged diagonal-pressure inner solves as warnings; outer/field checks remain strict.')
     args = parser.parse_args()
     directory = args.directory.resolve()
     groups = {}
     failures = []
+    warnings = []
     for path in sorted(directory.glob('*/run-*/measurement.json')):
         data = json.loads(path.read_text())
         label = path.parent.parent.name
@@ -46,18 +50,24 @@ def main():
             failures.append(data['path']+': incomplete or failed solve')
         for key in ('cg_failures','cg_true_residual_failures'):
             if data['solver_totals'].get(key, 0):
-                failures.append(data['path']+': '+key)
+                message = data['path']+': '+key+'='+str(data['solver_totals'][key])
+                if args.allow_diagonal_inner_nonconvergence and data['preconditioner'] == 'diagonal':
+                    warnings.append(message)
+                else:
+                    failures.append(message)
         if args.expect_cuda and label!='cpu' and data['assembly_mode']=='kokkos' and spaces!={'Cuda'}:
             failures.append(data['path']+': expected CUDA assembly, got '+str(spaces))
         groups.setdefault(label, []).append(data)
     if not groups:
         parser.error('no */run-*/measurement.json files found')
-    summary = {'groups': {}, 'failures': failures, 'field_checks': {}}
+    summary = {'groups': {}, 'failures': failures, 'warnings': warnings, 'field_checks': {}}
     for label, runs in groups.items():
         successful = [r for r in runs if not r['returncode'] and r['completed']]
         summary['groups'][label] = {'median_wall_s': statistics.median(r['wall_seconds'] for r in successful) if successful else None,
                                    'runs': runs}
-    reference_label = 'old' if 'old' in groups else 'fresh-factored'
+    reference_label = args.reference_group or ('old' if 'old' in groups else 'fresh-factored')
+    if args.reference_group and reference_label not in groups:
+        failures.append('requested reference group is missing: '+reference_label)
     if reference_label in groups and all(not r['returncode'] and r['completed'] for r in groups[reference_label]):
         reference_run = directory / groups[reference_label][0]['path']
         reference = reference_run.parent / f"{groups[reference_label][0]['ranks']}-procs/result_{groups[reference_label][0]['steps']:03d}.vtu"
@@ -92,6 +102,8 @@ def main():
             print(f"{label:24} median wall {data['median_wall_s']:.3f} s")
     print(summary.get('field_check_status','no matching field reference'))
     print('Summary:', directory/'summary.json')
+    for warning in warnings:
+        print('WARNING:',warning)
     if failures:
         raise SystemExit('\n'.join(failures))
 
