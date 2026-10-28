@@ -1,0 +1,1758 @@
+{
+  "field_checks": "completed",
+  "field_tolerances": {
+    "scalar": 0.0001,
+    "solid": 0.0001,
+    "fsi": 1e-07
+  },
+  "failures": [],
+  "hardware": "Apple M4 Pro, 48 GiB RAM",
+  "ranks": 1,
+  "threads": 1,
+  "execution_space": "Serial",
+  "build_type": "RelWithDebInfo, -O2 -g -DNDEBUG",
+  "raw_output": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/benchmarks/multiphysics-cpu-converged",
+  "manifest": {
+    "steps": 20,
+    "repeat": 2,
+    "cases": [
+      "scalar",
+      "solid",
+      "fsi"
+    ],
+    "assemblies": [
+      "trilinos",
+      "fsils"
+    ],
+    "variants": null,
+    "executable": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+    "sha256": "85405ced48b766375b0c0371981f11672f920ad2ea91717fcc0512ed02346550",
+    "expected_groups": [
+      [
+        "scalar",
+        "gmres-diagonal",
+        "trilinos"
+      ],
+      [
+        "scalar",
+        "gmres-diagonal",
+        "fsils"
+      ],
+      [
+        "scalar",
+        "gmres-blockjacobi",
+        "trilinos"
+      ],
+      [
+        "scalar",
+        "gmres-blockjacobi",
+        "fsils"
+      ],
+      [
+        "scalar",
+        "gmres-riluk0",
+        "trilinos"
+      ],
+      [
+        "scalar",
+        "gmres-riluk0",
+        "fsils"
+      ],
+      [
+        "scalar",
+        "gmres-ml",
+        "trilinos"
+      ],
+      [
+        "scalar",
+        "gmres-ml",
+        "fsils"
+      ],
+      [
+        "solid",
+        "gmres-diagonal",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "gmres-diagonal",
+        "fsils"
+      ],
+      [
+        "solid",
+        "gmres-blockjacobi",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "gmres-blockjacobi",
+        "fsils"
+      ],
+      [
+        "solid",
+        "gmres-riluk0",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "gmres-riluk0",
+        "fsils"
+      ],
+      [
+        "solid",
+        "gmres-ml",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "gmres-ml",
+        "fsils"
+      ],
+      [
+        "solid",
+        "cg-diagonal",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "cg-diagonal",
+        "fsils"
+      ],
+      [
+        "solid",
+        "cg-blockjacobi",
+        "trilinos"
+      ],
+      [
+        "solid",
+        "cg-blockjacobi",
+        "fsils"
+      ],
+      [
+        "fsi",
+        "gmres-diagonal",
+        "trilinos"
+      ],
+      [
+        "fsi",
+        "gmres-diagonal",
+        "fsils"
+      ],
+      [
+        "fsi",
+        "gmres-blockjacobi",
+        "trilinos"
+      ],
+      [
+        "fsi",
+        "gmres-blockjacobi",
+        "fsils"
+      ],
+      [
+        "fsi",
+        "gmres-riluk0",
+        "trilinos"
+      ],
+      [
+        "fsi",
+        "gmres-riluk0",
+        "fsils"
+      ],
+      [
+        "fsi",
+        "gmres-ml",
+        "trilinos"
+      ],
+      [
+        "fsi",
+        "gmres-ml",
+        "fsils"
+      ],
+      [
+        "fsi",
+        "gmres-riluk0-mesh-gmres",
+        "trilinos"
+      ],
+      [
+        "fsi",
+        "gmres-riluk0-mesh-gmres",
+        "fsils"
+      ]
+    ],
+    "commit": "8f4b1b3efbaa59139985861f6188506e06f6c2b9"
+  },
+  "groups": [
+    {
+      "case": "fsi",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 14.14955997949437,
+      "simulation_seconds": 13.629999999999999,
+      "wall_range": [
+        14.141739083992434,
+        14.157380874996306
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25636.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 14.157380874996306,
+          "simulation_seconds": 13.64,
+          "history_rows": 271,
+          "linear_iterations": 25636,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.3663022779726914e-14,
+            "Pressure": 4.286907161067212e-14,
+            "FS_Displacement": 1.0804921527127439e-15,
+            "VonMises_stress": 2.459844874425484e-15,
+            "Displacement": 2.158682657995261e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 14.141739083992434,
+          "simulation_seconds": 13.62,
+          "history_rows": 271,
+          "linear_iterations": 25636,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.3663022779726914e-14,
+            "Pressure": 4.286907161067212e-14,
+            "FS_Displacement": 1.0804921527127439e-15,
+            "VonMises_stress": 2.459844874425484e-15,
+            "Displacement": 2.158682657995261e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 12.464442291500745,
+      "simulation_seconds": 11.925,
+      "wall_range": [
+        12.464065833002678,
+        12.464818749998813
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25636.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 12.464065833002678,
+          "simulation_seconds": 11.91,
+          "history_rows": 271,
+          "linear_iterations": 25636,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.3663022779726914e-14,
+            "Pressure": 4.286907161067212e-14,
+            "FS_Displacement": 1.0804921527127439e-15,
+            "VonMises_stress": 2.459844874425484e-15,
+            "Displacement": 2.158682657995261e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 12.464818749998813,
+          "simulation_seconds": 11.94,
+          "history_rows": 271,
+          "linear_iterations": 25636,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.3663022779726914e-14,
+            "Pressure": 4.286907161067212e-14,
+            "FS_Displacement": 1.0804921527127439e-15,
+            "VonMises_stress": 2.459844874425484e-15,
+            "Displacement": 2.158682657995261e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 13.948528666005586,
+      "simulation_seconds": 13.44,
+      "wall_range": [
+        13.929845791004482,
+        13.96721154100669
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25632.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 13.96721154100669,
+          "simulation_seconds": 13.44,
+          "history_rows": 271,
+          "linear_iterations": 25632,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.406857201715489e-14,
+            "Pressure": 4.874157411840607e-14,
+            "FS_Displacement": 1.0742861032818606e-15,
+            "VonMises_stress": 2.3871301763938318e-15,
+            "Displacement": 2.149016112821407e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 13.929845791004482,
+          "simulation_seconds": 13.44,
+          "history_rows": 271,
+          "linear_iterations": 25632,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.406857201715489e-14,
+            "Pressure": 4.874157411840607e-14,
+            "FS_Displacement": 1.0742861032818606e-15,
+            "VonMises_stress": 2.3871301763938318e-15,
+            "Displacement": 2.149016112821407e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 12.296597145497799,
+      "simulation_seconds": 11.805,
+      "wall_range": [
+        12.257669124999666,
+        12.335525165995932
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25632.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 12.257669124999666,
+          "simulation_seconds": 11.77,
+          "history_rows": 271,
+          "linear_iterations": 25632,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.406857201715489e-14,
+            "Pressure": 4.874157411840607e-14,
+            "FS_Displacement": 1.0742861032818606e-15,
+            "VonMises_stress": 2.3871301763938318e-15,
+            "Displacement": 2.149016112821407e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 12.335525165995932,
+          "simulation_seconds": 11.84,
+          "history_rows": 271,
+          "linear_iterations": 25632,
+          "linear_failures": 135,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Velocity": 2.406857201715489e-14,
+            "Pressure": 4.874157411840607e-14,
+            "FS_Displacement": 1.0742861032818606e-15,
+            "VonMises_stress": 2.3871301763938318e-15,
+            "Displacement": 2.149016112821407e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 21.73617862500396,
+      "simulation_seconds": 21.235,
+      "wall_range": [
+        21.669108542002505,
+        21.803248708005412
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 13889.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 21.669108542002505,
+          "simulation_seconds": 21.18,
+          "history_rows": 271,
+          "linear_iterations": 13889,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.415193124831094e-14,
+            "Pressure": 4.702752105264178e-14,
+            "FS_Displacement": 1.0463900218291557e-15,
+            "VonMises_stress": 2.7189203848562644e-15,
+            "Displacement": 2.1566023893263798e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 21.803248708005412,
+          "simulation_seconds": 21.29,
+          "history_rows": 271,
+          "linear_iterations": 13889,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.415193124831094e-14,
+            "Pressure": 4.702752105264178e-14,
+            "FS_Displacement": 1.0463900218291557e-15,
+            "VonMises_stress": 2.7189203848562644e-15,
+            "Displacement": 2.1566023893263798e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 19.816782604000764,
+      "simulation_seconds": 19.295,
+      "wall_range": [
+        19.802983082990977,
+        19.83058212501055
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 13889.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.096857096298553,
+      "samples": [
+        {
+          "wall_seconds": 19.802983082990977,
+          "simulation_seconds": 19.29,
+          "history_rows": 271,
+          "linear_iterations": 13889,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.415193124831094e-14,
+            "Pressure": 4.702752105264178e-14,
+            "FS_Displacement": 1.0463900218291557e-15,
+            "VonMises_stress": 2.7189203848562644e-15,
+            "Displacement": 2.1566023893263798e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 19.83058212501055,
+          "simulation_seconds": 19.3,
+          "history_rows": 271,
+          "linear_iterations": 13889,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.415193124831094e-14,
+            "Pressure": 4.702752105264178e-14,
+            "FS_Displacement": 1.0463900218291557e-15,
+            "VonMises_stress": 2.7189203848562644e-15,
+            "Displacement": 2.1566023893263798e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 27.916256916490966,
+      "simulation_seconds": 27.415,
+      "wall_range": [
+        27.857828791995416,
+        27.974685040986515
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15760.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 27.857828791995416,
+          "simulation_seconds": 27.36,
+          "history_rows": 271,
+          "linear_iterations": 15760,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 0.0,
+            "Pressure": 0.0,
+            "FS_Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Displacement": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 27.974685040986515,
+          "simulation_seconds": 27.47,
+          "history_rows": 271,
+          "linear_iterations": 15760,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 0.0,
+            "Pressure": 0.0,
+            "FS_Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Displacement": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 26.292888583506283,
+      "simulation_seconds": 25.805,
+      "wall_range": [
+        26.235461417003535,
+        26.35031575000903
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15760.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.061741726392247,
+      "samples": [
+        {
+          "wall_seconds": 26.35031575000903,
+          "simulation_seconds": 25.86,
+          "history_rows": 271,
+          "linear_iterations": 15760,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 0.0,
+            "Pressure": 0.0,
+            "FS_Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Displacement": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 26.235461417003535,
+          "simulation_seconds": 25.75,
+          "history_rows": 271,
+          "linear_iterations": 15760,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 0.0,
+            "Pressure": 0.0,
+            "FS_Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Displacement": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0-mesh-gmres",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 28.52388485350093,
+      "simulation_seconds": 28.005,
+      "wall_range": [
+        28.36872454099648,
+        28.67904516600538
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 17667.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 28.67904516600538,
+          "simulation_seconds": 28.13,
+          "history_rows": 271,
+          "linear_iterations": 17667,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.364678432312545e-14,
+            "Pressure": 4.596813798835344e-14,
+            "FS_Displacement": 9.926365566172393e-16,
+            "VonMises_stress": 2.585239664111035e-15,
+            "Displacement": 2.042675454402982e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 28.36872454099648,
+          "simulation_seconds": 27.88,
+          "history_rows": 271,
+          "linear_iterations": 17667,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.364678432312545e-14,
+            "Pressure": 4.596813798835344e-14,
+            "FS_Displacement": 9.926365566172393e-16,
+            "VonMises_stress": 2.585239664111035e-15,
+            "Displacement": 2.042675454402982e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0-mesh-gmres",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 26.832519333001983,
+      "simulation_seconds": 26.314999999999998,
+      "wall_range": [
+        26.675622833005036,
+        26.98941583299893
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 17667.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.063034167590022,
+      "samples": [
+        {
+          "wall_seconds": 26.98941583299893,
+          "simulation_seconds": 26.47,
+          "history_rows": 271,
+          "linear_iterations": 17667,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.364678432312545e-14,
+            "Pressure": 4.596813798835344e-14,
+            "FS_Displacement": 9.926365566172393e-16,
+            "VonMises_stress": 2.585239664111035e-15,
+            "Displacement": 2.042675454402982e-15
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 26.675622833005036,
+          "simulation_seconds": 26.16,
+          "history_rows": 271,
+          "linear_iterations": 17667,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Velocity": 2.364678432312545e-14,
+            "Pressure": 4.596813798835344e-14,
+            "FS_Displacement": 9.926365566172393e-16,
+            "VonMises_stress": 2.585239664111035e-15,
+            "Displacement": 2.042675454402982e-15
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 104.20547495799838,
+      "simulation_seconds": 103.05,
+      "wall_range": [
+        101.95312458300032,
+        106.45782533299644
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15922.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 101.95312458300032,
+          "simulation_seconds": 100.8,
+          "history_rows": 611,
+          "linear_iterations": 15922,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 2.0192137826132466e-14,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 106.45782533299644,
+          "simulation_seconds": 105.3,
+          "history_rows": 611,
+          "linear_iterations": 15922,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 2.0192137826132466e-14,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 120.50837024999055,
+      "simulation_seconds": 119.35,
+      "wall_range": [
+        119.3586186249886,
+        121.6581218749925
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15922.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.8647156603464775,
+      "samples": [
+        {
+          "wall_seconds": 119.3586186249886,
+          "simulation_seconds": 118.2,
+          "history_rows": 611,
+          "linear_iterations": 15922,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 2.0192137826132466e-14,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 121.6581218749925,
+          "simulation_seconds": 120.5,
+          "history_rows": 611,
+          "linear_iterations": 15922,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 2.0192137826132466e-14,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 103.97006106250046,
+      "simulation_seconds": 102.8,
+      "wall_range": [
+        103.6146308749885,
+        104.32549125001242
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15919.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 103.6146308749885,
+          "simulation_seconds": 102.5,
+          "history_rows": 611,
+          "linear_iterations": 15919,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 0.0,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 104.32549125001242,
+          "simulation_seconds": 103.1,
+          "history_rows": 611,
+          "linear_iterations": 15919,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 0.0,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 116.66384020799887,
+      "simulation_seconds": 115.55,
+      "wall_range": [
+        115.13901241599524,
+        118.18866800000251
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15919.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.891193542721834,
+      "samples": [
+        {
+          "wall_seconds": 118.18866800000251,
+          "simulation_seconds": 117.1,
+          "history_rows": 611,
+          "linear_iterations": 15919,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 0.0,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 115.13901241599524,
+          "simulation_seconds": 114.0,
+          "history_rows": 611,
+          "linear_iterations": 15919,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 0.0,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 125.28837627100438,
+      "simulation_seconds": 124.1,
+      "wall_range": [
+        124.81930233399908,
+        125.75745020800969
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 4040.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 124.81930233399908,
+          "simulation_seconds": 123.6,
+          "history_rows": 611,
+          "linear_iterations": 4040,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.1646665986945807e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 125.75745020800969,
+          "simulation_seconds": 124.6,
+          "history_rows": 611,
+          "linear_iterations": 4040,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.1646665986945807e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 144.09662525000022,
+      "simulation_seconds": 142.95,
+      "wall_range": [
+        139.22449249999772,
+        148.9687580000027
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 4040.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.8694747434482626,
+      "samples": [
+        {
+          "wall_seconds": 139.22449249999772,
+          "simulation_seconds": 138.1,
+          "history_rows": 611,
+          "linear_iterations": 4040,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.1646665986945807e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 148.9687580000027,
+          "simulation_seconds": 147.8,
+          "history_rows": 611,
+          "linear_iterations": 4040,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.1646665986945807e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 127.40671347900934,
+      "simulation_seconds": 126.25,
+      "wall_range": [
+        124.1816705000092,
+        130.63175645800948
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 5046.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 124.1816705000092,
+          "simulation_seconds": 123.1,
+          "history_rows": 611,
+          "linear_iterations": 5046,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.2103264055138293e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 130.63175645800948,
+          "simulation_seconds": 129.4,
+          "history_rows": 611,
+          "linear_iterations": 5046,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.2103264055138293e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 142.19124264600396,
+      "simulation_seconds": 140.95,
+      "wall_range": [
+        137.32367529200565,
+        147.05881000000227
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 5046.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.8960236306268042,
+      "samples": [
+        {
+          "wall_seconds": 137.32367529200565,
+          "simulation_seconds": 136.1,
+          "history_rows": 611,
+          "linear_iterations": 5046,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.2103264055138293e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 147.05881000000227,
+          "simulation_seconds": 145.8,
+          "history_rows": 611,
+          "linear_iterations": 5046,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Concentration": 1.2103264055138293e-12,
+            "Velocity": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "cg-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 1.1576476874979562,
+      "simulation_seconds": 0.6749499999999999,
+      "wall_range": [
+        1.1543089170008898,
+        1.1609864579950226
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15258.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 1.1543089170008898,
+          "simulation_seconds": 0.6754,
+          "history_rows": 40,
+          "linear_iterations": 15258,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.0224732995901916e-16,
+            "VonMises_stress": 1.7171295507306008e-14,
+            "Stress": 0.0,
+            "Strain": 6.033595157703752e-14,
+            "Jacobian": 1.3744170672407778e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 1.1609864579950226,
+          "simulation_seconds": 0.6745,
+          "history_rows": 40,
+          "linear_iterations": 15258,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.0224732995901916e-16,
+            "VonMises_stress": 1.7171295507306008e-14,
+            "Stress": 0.0,
+            "Strain": 6.033595157703752e-14,
+            "Jacobian": 1.3744170672407778e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "cg-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 1.1039657499932218,
+      "simulation_seconds": 0.63745,
+      "wall_range": [
+        1.1029480419965694,
+        1.1049834579898743
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15258.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.048626451957467,
+      "samples": [
+        {
+          "wall_seconds": 1.1049834579898743,
+          "simulation_seconds": 0.6426,
+          "history_rows": 40,
+          "linear_iterations": 15258,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.0224732995901916e-16,
+            "VonMises_stress": 1.7171295507306008e-14,
+            "Stress": 0.0,
+            "Strain": 6.033595157703752e-14,
+            "Jacobian": 1.3744170672407778e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 1.1029480419965694,
+          "simulation_seconds": 0.6323,
+          "history_rows": 40,
+          "linear_iterations": 15258,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.0224732995901916e-16,
+            "VonMises_stress": 1.7171295507306008e-14,
+            "Stress": 0.0,
+            "Strain": 6.033595157703752e-14,
+            "Jacobian": 1.3744170672407778e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "cg-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 1.1014320619942737,
+      "simulation_seconds": 0.6448,
+      "wall_range": [
+        1.0960084159887629,
+        1.1068557079997845
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15291.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 1.1068557079997845,
+          "simulation_seconds": 0.6491,
+          "history_rows": 40,
+          "linear_iterations": 15291,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Stress": 0.0,
+            "Strain": 0.0,
+            "Jacobian": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 1.0960084159887629,
+          "simulation_seconds": 0.6405,
+          "history_rows": 40,
+          "linear_iterations": 15291,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Stress": 0.0,
+            "Strain": 0.0,
+            "Jacobian": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "cg-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 1.0736724375019548,
+      "simulation_seconds": 0.6186499999999999,
+      "wall_range": [
+        1.0613841250014957,
+        1.085960750002414
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15291.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.0258548357233659,
+      "samples": [
+        {
+          "wall_seconds": 1.085960750002414,
+          "simulation_seconds": 0.6261,
+          "history_rows": 40,
+          "linear_iterations": 15291,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Stress": 0.0,
+            "Strain": 0.0,
+            "Jacobian": 0.0
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 1.0613841250014957,
+          "simulation_seconds": 0.6112,
+          "history_rows": 40,
+          "linear_iterations": 15291,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 0.0,
+            "VonMises_stress": 0.0,
+            "Stress": 0.0,
+            "Strain": 0.0,
+            "Jacobian": 0.0
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 17.605006895995757,
+      "simulation_seconds": 17.1,
+      "wall_range": [
+        17.21409749999293,
+        17.995916291998583
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 38,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 17.995916291998583,
+          "simulation_seconds": 17.47,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 5.671863833211989e-06,
+            "VonMises_stress": 5.739143103299118e-06,
+            "Stress": 0.0,
+            "Strain": 5.8086042878643986e-06,
+            "Jacobian": 9.893457224613168e-09
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 17.21409749999293,
+          "simulation_seconds": 16.73,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 5.671863833211989e-06,
+            "VonMises_stress": 5.739143103299118e-06,
+            "Stress": 0.0,
+            "Strain": 5.8086042878643986e-06,
+            "Jacobian": 9.893457224613168e-09
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 17.259171229001367,
+      "simulation_seconds": 16.75,
+      "wall_range": [
+        16.999507957996684,
+        17.51883450000605
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 38,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 17.51883450000605,
+          "simulation_seconds": 17.01,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 5.671863833211989e-06,
+            "VonMises_stress": 5.739143103299118e-06,
+            "Stress": 0.0,
+            "Strain": 5.8086042878643986e-06,
+            "Jacobian": 9.893457224613168e-09
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 16.999507957996684,
+          "simulation_seconds": 16.49,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 5.671863833211989e-06,
+            "VonMises_stress": 5.739143103299118e-06,
+            "Stress": 0.0,
+            "Strain": 5.8086042878643986e-06,
+            "Jacobian": 9.893457224613168e-09
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 16.93390520849789,
+      "simulation_seconds": 16.445,
+      "wall_range": [
+        16.75746999999683,
+        17.11034041699895
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 17.11034041699895,
+          "simulation_seconds": 16.63,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 3.414720661425439e-06,
+            "VonMises_stress": 3.4550283307859378e-06,
+            "Stress": 0.0,
+            "Strain": 3.4966890235845578e-06,
+            "Jacobian": 5.956340294742821e-09
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 16.75746999999683,
+          "simulation_seconds": 16.26,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 3.414720661425439e-06,
+            "VonMises_stress": 3.4550283307859378e-06,
+            "Stress": 0.0,
+            "Strain": 3.4966890235845578e-06,
+            "Jacobian": 5.956340294742821e-09
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 16.605962688001455,
+      "simulation_seconds": 16.115000000000002,
+      "wall_range": [
+        16.401484709000215,
+        16.810440667002695
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 16.810440667002695,
+          "simulation_seconds": 16.32,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 3.414720661425439e-06,
+            "VonMises_stress": 3.4550283307859378e-06,
+            "Stress": 0.0,
+            "Strain": 3.4966890235845578e-06,
+            "Jacobian": 5.956340294742821e-09
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 16.401484709000215,
+          "simulation_seconds": 15.91,
+          "history_rows": 400,
+          "linear_iterations": 400000,
+          "linear_failures": 400,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 3.414720661425439e-06,
+            "VonMises_stress": 3.4550283307859378e-06,
+            "Stress": 0.0,
+            "Strain": 3.4966890235845578e-06,
+            "Jacobian": 5.956340294742821e-09
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 3.734747979004169,
+      "simulation_seconds": 3.237,
+      "wall_range": [
+        3.7166357079986483,
+        3.7528602500096895
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 8740.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 3.7528602500096895,
+          "simulation_seconds": 3.26,
+          "history_rows": 40,
+          "linear_iterations": 8740,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.354806855531059e-16,
+            "VonMises_stress": 1.8216208287974505e-14,
+            "Stress": 0.0,
+            "Strain": 5.98108844190864e-14,
+            "Jacobian": 1.323527452080069e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 3.7166357079986483,
+          "simulation_seconds": 3.214,
+          "history_rows": 40,
+          "linear_iterations": 8740,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.354806855531059e-16,
+            "VonMises_stress": 1.8216208287974505e-14,
+            "Stress": 0.0,
+            "Strain": 5.98108844190864e-14,
+            "Jacobian": 1.323527452080069e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 3.6944880209921394,
+      "simulation_seconds": 3.2065,
+      "wall_range": [
+        3.6718166249920614,
+        3.7171594169922173
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 8740.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.010897303708463,
+      "samples": [
+        {
+          "wall_seconds": 3.7171594169922173,
+          "simulation_seconds": 3.223,
+          "history_rows": 40,
+          "linear_iterations": 8740,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.354806855531059e-16,
+            "VonMises_stress": 1.8216208287974505e-14,
+            "Stress": 0.0,
+            "Strain": 5.98108844190864e-14,
+            "Jacobian": 1.323527452080069e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 3.6718166249920614,
+          "simulation_seconds": 3.19,
+          "history_rows": 40,
+          "linear_iterations": 8740,
+          "linear_failures": 0,
+          "completed": true,
+          "convergence_passed": true,
+          "fields": {
+            "Displacement": 2.354806855531059e-16,
+            "VonMises_stress": 1.8216208287974505e-14,
+            "Stress": 0.0,
+            "Strain": 5.98108844190864e-14,
+            "Jacobian": 1.323527452080069e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 12.296143479004968,
+      "simulation_seconds": 11.82,
+      "wall_range": [
+        12.24679666600423,
+        12.345490292005707
+      ],
+      "linear_failures": 80,
+      "nonlinear_failures": 0,
+      "linear_iterations": 50690.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 12.345490292005707,
+          "simulation_seconds": 11.89,
+          "history_rows": 52,
+          "linear_iterations": 50690,
+          "linear_failures": 40,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 2.598119846071646e-13,
+            "VonMises_stress": 2.6374499453193877e-13,
+            "Stress": 0.0,
+            "Strain": 2.730111989271712e-13,
+            "Jacobian": 5.036083414183172e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 12.24679666600423,
+          "simulation_seconds": 11.75,
+          "history_rows": 52,
+          "linear_iterations": 50690,
+          "linear_failures": 40,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 2.598119846071646e-13,
+            "VonMises_stress": 2.6374499453193877e-13,
+            "Stress": 0.0,
+            "Strain": 2.730111989271712e-13,
+            "Jacobian": 5.036083414183172e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 12.304843666992383,
+      "simulation_seconds": 11.81,
+      "wall_range": [
+        12.203998083990882,
+        12.405689249993884
+      ],
+      "linear_failures": 80,
+      "nonlinear_failures": 0,
+      "linear_iterations": 50690.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null,
+      "samples": [
+        {
+          "wall_seconds": 12.405689249993884,
+          "simulation_seconds": 11.91,
+          "history_rows": 52,
+          "linear_iterations": 50690,
+          "linear_failures": 40,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 2.598119846071646e-13,
+            "VonMises_stress": 2.6374499453193877e-13,
+            "Stress": 0.0,
+            "Strain": 2.730111989271712e-13,
+            "Jacobian": 5.036083414183172e-16
+          },
+          "fields_passed": true
+        },
+        {
+          "wall_seconds": 12.203998083990882,
+          "simulation_seconds": 11.71,
+          "history_rows": 52,
+          "linear_iterations": 50690,
+          "linear_failures": 40,
+          "completed": true,
+          "convergence_passed": false,
+          "fields": {
+            "Displacement": 2.598119846071646e-13,
+            "VonMises_stress": 2.6374499453193877e-13,
+            "Stress": 0.0,
+            "Strain": 2.730111989271712e-13,
+            "Jacobian": 5.036083414183172e-16
+          },
+          "fields_passed": true
+        }
+      ]
+    }
+  ]
+}
