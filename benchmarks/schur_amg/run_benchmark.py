@@ -25,6 +25,9 @@ def main():
     parser.add_argument('--threads', type=int, default=1)
     parser.add_argument('--launcher', choices=['mpirun','srun'], default='mpirun')
     parser.add_argument('--gpus-per-task', type=int, default=0)
+    parser.add_argument('--gpus-per-node', type=int, default=0, help='Explicit GPU count for each Slurm step.')
+    parser.add_argument('--srun-exact', action='store_true', help='Limit each Slurm step to its requested CPU resources.')
+    parser.add_argument('--cpu-bind', choices=['cores'], help='Optional Slurm CPU binding.')
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--assembly', choices=['auto','legacy','kokkos'], default='auto')
     parser.add_argument('--assembly-stats', action='store_true')
@@ -38,6 +41,8 @@ def main():
         parser.error("steps, ranks, repeat, and threads must be positive")
     if args.gpus_per_task < 0 or (args.gpus_per_task and args.launcher != "srun"):
         parser.error("gpus-per-task requires srun and a nonnegative count")
+    if args.gpus_per_node < 0 or (args.gpus_per_node and args.launcher != 'srun'):
+        parser.error('gpus-per-node requires srun and a nonnegative count')
     exe = args.exe.resolve()
     if not exe.is_file():
         parser.error(f"executable does not exist: {exe}")
@@ -72,8 +77,14 @@ def main():
                        '--stats=true','--output='+str(run/'trace')] + command
         if args.launcher == 'srun':
             prefix = ['srun','--ntasks',str(args.ranks),'--cpus-per-task',str(args.threads)]
+            if args.srun_exact:
+                prefix += ['--exact']
+            if args.cpu_bind:
+                prefix += ['--cpu-bind='+args.cpu_bind]
             if args.gpus_per_task:
                 prefix += ['--gpus-per-task',str(args.gpus_per_task),'--gpu-bind=single:1']
+            if args.gpus_per_node:
+                prefix += ['--gpus-per-node',str(args.gpus_per_node)]
             command = prefix + command
         elif args.ranks > 1:
             command = ['mpirun', '-np', str(args.ranks)] + command

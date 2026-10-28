@@ -1,0 +1,1290 @@
+{
+  "date": "2026-10-27",
+  "source_commit": "12273954811a8b263fee5077733a776092761ef1",
+  "jobs": {
+    "sherlock-49893347": {
+      "groups": {
+        "fresh-factored": {
+          "median_wall_s": 22.55127654108219,
+          "runs": [
+            {
+              "wall_seconds": 22.55127654108219,
+              "simulation_seconds": 18.27,
+              "steps": 5,
+              "ranks": 1,
+              "nonlinear_iterations": 48,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 0.0,
+                "amg_refreshes": 0.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3321239900000063
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.5697522230000001,
+                  "cache_s": 0.243011862,
+                  "state_s": 0.015495575999999999,
+                  "kernel_s": 0.31120484499999995,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.007940473000000892,
+                  "export_s": 0.00841797499999591
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 1.253126626,
+                "scaling_s": 0.0376886809999956,
+                "cg_calls": 183.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 3080.0,
+                "cg_s": 5.550662361,
+                "operator_setup_s": 0.0,
+                "pressure_setup_s": 8.138463202,
+                "block_setup_s": 0.6311009579999893,
+                "gmres_s": 0.94280933399999,
+                "total_s": 17.041675678,
+                "cg_iterations": 13689.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        },
+        "legacy-assembly": {
+          "median_wall_s": 50.31274633994326,
+          "runs": [
+            {
+              "wall_seconds": 50.31274633994326,
+              "simulation_seconds": 46.03,
+              "steps": 5,
+              "ranks": 1,
+              "nonlinear_iterations": 48,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 47.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3292516189999942
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 35.64531439300001
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.214440538999998,
+                  "export_s": 0.011860534999997797
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 1.34239279999999,
+                "scaling_s": 0.0462607380000071,
+                "cg_calls": 183.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 3081.0,
+                "cg_s": 5.101827816,
+                "operator_setup_s": 0.0520698749999978,
+                "pressure_setup_s": 0.90800921799999,
+                "block_setup_s": 0.6647248379999849,
+                "gmres_s": 0.94923922700004,
+                "total_s": 9.716740107,
+                "cg_iterations": 13847.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        },
+        "profile": {
+          "median_wall_s": 23.446135844802484,
+          "runs": [
+            {
+              "wall_seconds": 23.446135844802484,
+              "simulation_seconds": 6.411,
+              "steps": 2,
+              "ranks": 1,
+              "nonlinear_iterations": 21,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 20.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3206179210000003
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.39567086900000004,
+                  "cache_s": 0.248633764,
+                  "state_s": 0.007553823999999998,
+                  "kernel_s": 0.13946565099999997,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.04956483000000119,
+                  "export_s": 0.0074034889999988075
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 0.599423589,
+                "scaling_s": 0.0241812550000009,
+                "cg_calls": 78.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 1318.0,
+                "cg_s": 2.794882217,
+                "operator_setup_s": 0.0269735749999989,
+                "pressure_setup_s": 0.481524807,
+                "block_setup_s": 0.637955387999999,
+                "gmres_s": 0.535339567,
+                "total_s": 5.418832994,
+                "cg_iterations": 5730.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        },
+        "reuse-explicit": {
+          "median_wall_s": 14.719759582541883,
+          "runs": [
+            {
+              "wall_seconds": 14.716608016984537,
+              "simulation_seconds": 10.48,
+              "steps": 5,
+              "ranks": 1,
+              "nonlinear_iterations": 48,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 47.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3250488249999985
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.5719561080000003,
+                  "cache_s": 0.244797552,
+                  "state_s": 0.014432889999999997,
+                  "kernel_s": 0.31268879600000005,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.008190462999997221,
+                  "export_s": 0.0110360200000021
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 1.257273229,
+                "scaling_s": 0.0386633980000008,
+                "cg_calls": 183.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 3083.0,
+                "cg_s": 5.071482348,
+                "operator_setup_s": 0.0506762709999984,
+                "pressure_setup_s": 0.853962298,
+                "block_setup_s": 0.6363321450000035,
+                "gmres_s": 0.942705091,
+                "total_s": 9.281131778,
+                "cg_iterations": 13817.0,
+                "cg_true_residual_failures": 0.0
+              }
+            },
+            {
+              "wall_seconds": 14.722911148099229,
+              "simulation_seconds": 10.45,
+              "steps": 5,
+              "ranks": 1,
+              "nonlinear_iterations": 48,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 47.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.32471551300000095
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.5514094449999999,
+                  "cache_s": 0.22512991699999998,
+                  "state_s": 0.014250641,
+                  "kernel_s": 0.3119907559999999,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.007953276000001088,
+                  "export_s": 0.010653144999996962
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 1.251147652,
+                "scaling_s": 0.0380727730000009,
+                "cg_calls": 183.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 3079.0,
+                "cg_s": 4.98703661,
+                "operator_setup_s": 0.0505775629999982,
+                "pressure_setup_s": 0.849151279,
+                "block_setup_s": 0.6675636199999989,
+                "gmres_s": 0.936645878,
+                "total_s": 9.205625868,
+                "cg_iterations": 13726.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        },
+        "reuse-factored": {
+          "median_wall_s": 15.277032722951844,
+          "runs": [
+            {
+              "wall_seconds": 15.277032722951844,
+              "simulation_seconds": 10.98,
+              "steps": 5,
+              "ranks": 1,
+              "nonlinear_iterations": 48,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 47.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3253624459999984
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.5509119229999999,
+                  "cache_s": 0.22429750500000004,
+                  "state_s": 0.014292922,
+                  "kernel_s": 0.312280746,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.007929511999999559,
+                  "export_s": 0.010883009999998623
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 1.264322166,
+                "scaling_s": 0.0378753489999971,
+                "cg_calls": 183.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 3079.0,
+                "cg_s": 5.598341242,
+                "operator_setup_s": 0.0,
+                "pressure_setup_s": 0.84558639,
+                "block_setup_s": 0.6341068030000068,
+                "gmres_s": 0.939355061,
+                "total_s": 9.803993776,
+                "cg_iterations": 13879.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        },
+        "runtime-details": {
+          "median_wall_s": 9.60715189599432,
+          "runs": [
+            {
+              "wall_seconds": 9.60715189599432,
+              "simulation_seconds": 5.317,
+              "steps": 2,
+              "ranks": 1,
+              "nonlinear_iterations": 21,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 20.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3183902000000007
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.372907929,
+                  "cache_s": 0.227236036,
+                  "state_s": 0.006615423,
+                  "kernel_s": 0.13903803000000003,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.0036656699999981883,
+                  "export_s": 0.006756867000001813
+                }
+              },
+              "solver_totals": {
+                "schur_setup_s": 0.575365621,
+                "scaling_s": 0.0200167849999984,
+                "cg_calls": 78.0,
+                "cg_failures": 0.0,
+                "gmres_iterations": 1322.0,
+                "cg_s": 2.130904611,
+                "operator_setup_s": 0.0250315280000005,
+                "pressure_setup_s": 0.45306326599999996,
+                "block_setup_s": 0.6099123769999991,
+                "gmres_s": 0.404560041,
+                "total_s": 4.406424716,
+                "cg_iterations": 5829.0,
+                "cg_true_residual_failures": 0.0
+              }
+            }
+          ]
+        }
+      },
+      "field_checks": {
+        "fresh-factored/run-1": {
+          "Velocity": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          }
+        },
+        "legacy-assembly/run-1": {
+          "Velocity": {
+            "relative_l2": 3.362969840631857e-14,
+            "maximum_absolute": 5.6985527407960035e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 3.353103101170578e-16,
+            "maximum_absolute": 2.0954757928848267e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.5921219446435065e-14,
+            "maximum_absolute": 5.910827383104333e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 3.5969556952311107e-16,
+            "maximum_absolute": 2.3283064365386963e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.966858180775451e-14,
+            "maximum_absolute": 2.0014212509522622e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.427751736159414e-13,
+            "maximum_absolute": 1.1791456699938863e-11,
+            "passed": true
+          }
+        },
+        "reuse-explicit/run-1": {
+          "Velocity": {
+            "relative_l2": 3.0793872459000924e-14,
+            "maximum_absolute": 4.330757974457811e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 5.646365121632852e-16,
+            "maximum_absolute": 2.3283064365386963e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.515336879704228e-14,
+            "maximum_absolute": 5.506706202140776e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 6.352074133613425e-16,
+            "maximum_absolute": 2.561137080192566e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.7039258565083188e-14,
+            "maximum_absolute": 2.049027614248189e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.3502961853534973e-13,
+            "maximum_absolute": 2.2467361304734368e-11,
+            "passed": true
+          }
+        },
+        "reuse-explicit/run-2": {
+          "Velocity": {
+            "relative_l2": 3.1408624730382486e-14,
+            "maximum_absolute": 5.0039972165905056e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 7.680509517794707e-16,
+            "maximum_absolute": 3.026798367500305e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.53802286030947e-14,
+            "maximum_absolute": 7.061018436615996e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 7.743419119654143e-16,
+            "maximum_absolute": 3.026798367500305e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.7750228567488513e-14,
+            "maximum_absolute": 2.3280932737179683e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.344681205287674e-13,
+            "maximum_absolute": 2.758682171588589e-11,
+            "passed": true
+          }
+        },
+        "reuse-factored/run-1": {
+          "Velocity": {
+            "relative_l2": 3.1522233438086365e-14,
+            "maximum_absolute": 7.23332505003782e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 7.333100803076949e-16,
+            "maximum_absolute": 2.561137080192566e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.5485498028013626e-14,
+            "maximum_absolute": 6.785683126508957e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 8.083927104934777e-16,
+            "maximum_absolute": 2.3283064365386963e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.7955830060252913e-14,
+            "maximum_absolute": 3.922195901395753e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.4524381619731087e-13,
+            "maximum_absolute": 3.2866154242583434e-11,
+            "passed": true
+          }
+        }
+      },
+      "failures": [],
+      "field_check_status": "completed"
+    },
+    "sherlock-49893846": {
+      "groups": {
+        "fresh-factored": {
+          "median_wall_s": 72.05317113199271,
+          "runs": [
+            {
+              "wall_seconds": 72.05317113199271,
+              "simulation_seconds": 67.74,
+              "steps": 20,
+              "ranks": 1,
+              "nonlinear_iterations": 184,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 0.0,
+                "amg_refreshes": 0.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.38909657300002093
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 1.541611701999999,
+                  "cache_s": 0.2995437509999999,
+                  "state_s": 0.05456515600000001,
+                  "kernel_s": 1.1873475449999995,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.029882200999913795,
+                  "export_s": 0.02864775300009016
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 3.69309900500004,
+                "operator_setup_s": 0.0,
+                "scaling_s": 0.1341374340000007,
+                "cg_s": 21.476304246,
+                "cg_failures": 0.0,
+                "cg_iterations": 52530.0,
+                "block_setup_s": 0.8023220779999712,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 4.69448494799993,
+                "cg_calls": 716.0,
+                "pressure_setup_s": 32.103866594,
+                "gmres_iterations": 12054.0,
+                "total_s": 64.858476822
+              }
+            }
+          ]
+        },
+        "legacy-assembly": {
+          "median_wall_s": 184.64176289411262,
+          "runs": [
+            {
+              "wall_seconds": 184.64176289411262,
+              "simulation_seconds": 180.3,
+              "steps": 20,
+              "ranks": 1,
+              "nonlinear_iterations": 184,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 183.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3909929020001205
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 143.92408023199997
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.7898916630000351,
+                  "export_s": 0.0352889089999257
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 3.69847564299997,
+                "operator_setup_s": 0.1875569620000068,
+                "scaling_s": 0.1467558090000341,
+                "cg_s": 19.2846861650002,
+                "cg_failures": 0.0,
+                "cg_iterations": 52359.0,
+                "block_setup_s": 0.847712885000022,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 5.04559037499997,
+                "cg_calls": 715.0,
+                "pressure_setup_s": 3.07918188500007,
+                "gmres_iterations": 12037.0,
+                "total_s": 34.805082045
+              }
+            }
+          ]
+        },
+        "profile": {
+          "median_wall_s": 21.89801197592169,
+          "runs": [
+            {
+              "wall_seconds": 21.89801197592169,
+              "simulation_seconds": 6.442,
+              "steps": 2,
+              "ranks": 1,
+              "nonlinear_iterations": 21,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 20.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.31570089800000006
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.42614711,
+                  "cache_s": 0.27886892299999994,
+                  "state_s": 0.007377419,
+                  "kernel_s": 0.139884338,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.004902439000000183,
+                  "export_s": 0.007220907000000052
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 0.522871373,
+                "operator_setup_s": 0.0309009409999986,
+                "scaling_s": 0.0246244199999997,
+                "cg_s": 2.847049677,
+                "cg_failures": 0.0,
+                "cg_iterations": 5810.0,
+                "block_setup_s": 0.61596946,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 0.653652927,
+                "cg_calls": 78.0,
+                "pressure_setup_s": 0.497391909,
+                "gmres_iterations": 1323.0,
+                "total_s": 5.449277734
+              }
+            }
+          ]
+        },
+        "reuse-explicit": {
+          "median_wall_s": 40.47949184989557,
+          "runs": [
+            {
+              "wall_seconds": 40.510629057884216,
+              "simulation_seconds": 36.24,
+              "steps": 20,
+              "ranks": 1,
+              "nonlinear_iterations": 184,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 183.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3788270799999896
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 1.4940547379999995,
+                  "cache_s": 0.25988227099999994,
+                  "state_s": 0.05315682299999999,
+                  "kernel_s": 1.1808739840000004,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.031229141000002184,
+                  "export_s": 0.031115170000038876
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 3.66687024099999,
+                "operator_setup_s": 0.1831647979999853,
+                "scaling_s": 0.1311533450000012,
+                "cg_s": 19.36403705099998,
+                "cg_failures": 0.0,
+                "cg_iterations": 52908.0,
+                "block_setup_s": 0.8338809619999598,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 4.68977795799997,
+                "cg_calls": 716.0,
+                "pressure_setup_s": 2.92917599599999,
+                "gmres_iterations": 12058.0,
+                "total_s": 33.516947762
+              }
+            },
+            {
+              "wall_seconds": 40.44835464190692,
+              "simulation_seconds": 36.12,
+              "steps": 20,
+              "ranks": 1,
+              "nonlinear_iterations": 184,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 183.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3811355809999609
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 1.4979193939999995,
+                  "cache_s": 0.2605353740000004,
+                  "state_s": 0.05640093199999999,
+                  "kernel_s": 1.180816848000001,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.030325517999985854,
+                  "export_s": 0.031403849000024416
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 3.67365618500005,
+                "operator_setup_s": 0.1823958350000124,
+                "scaling_s": 0.132973389000002,
+                "cg_s": 19.419758688,
+                "cg_failures": 0.0,
+                "cg_iterations": 53017.0,
+                "block_setup_s": 0.8076674709999998,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 4.72199987200001,
+                "cg_calls": 716.0,
+                "pressure_setup_s": 2.75353995299999,
+                "gmres_iterations": 12052.0,
+                "total_s": 33.398021476
+              }
+            }
+          ]
+        },
+        "reuse-factored": {
+          "median_wall_s": 42.377550720004365,
+          "runs": [
+            {
+              "wall_seconds": 42.377550720004365,
+              "simulation_seconds": 38.01,
+              "steps": 20,
+              "ranks": 1,
+              "nonlinear_iterations": 184,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 183.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.37906930599996996
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 1.549948275,
+                  "cache_s": 0.31324706600000024,
+                  "state_s": 0.05474182200000002,
+                  "kernel_s": 1.1818076769999997,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.031111054000024018,
+                  "export_s": 0.031049777999963026
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 3.66537370300003,
+                "operator_setup_s": 0.0,
+                "scaling_s": 0.131238404999978,
+                "cg_s": 21.31327329000003,
+                "cg_failures": 0.0,
+                "cg_iterations": 52486.0,
+                "block_setup_s": 0.7987506849999992,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 4.71244335400002,
+                "cg_calls": 716.0,
+                "pressure_setup_s": 2.72557175400001,
+                "gmres_iterations": 12054.0,
+                "total_s": 35.267672688
+              }
+            }
+          ]
+        },
+        "runtime-details": {
+          "median_wall_s": 9.604265404865146,
+          "runs": [
+            {
+              "wall_seconds": 9.604265404865146,
+              "simulation_seconds": 5.496,
+              "steps": 2,
+              "ranks": 1,
+              "nonlinear_iterations": 21,
+              "completed": true,
+              "returncode": 0,
+              "amg_counters": {
+                "amg_builds": 1.0,
+                "amg_refreshes": 20.0
+              },
+              "phase_totals": {
+                "ASSEMBLY_ALLOC_STATS": {
+                  "total_s": 0.3195855819999996
+                },
+                "ASSEMBLY_STATS": {
+                  "total_s": 0.432315848,
+                  "cache_s": 0.2859360930000001,
+                  "state_s": 0.007116304999999999,
+                  "kernel_s": 0.139239269,
+                  "rebuilt": 1.0
+                },
+                "ASSEMBLY_EXPORT_STATS": {
+                  "stage_s": 0.0038168080000003635,
+                  "export_s": 0.007123120999999718
+                }
+              },
+              "solver_totals": {
+                "gmres_s": 0.406004823,
+                "operator_setup_s": 0.025495527,
+                "scaling_s": 0.0206250840000003,
+                "cg_s": 2.140845753,
+                "cg_failures": 0.0,
+                "cg_iterations": 5833.0,
+                "block_setup_s": 0.6536700120000003,
+                "cg_true_residual_failures": 0.0,
+                "schur_setup_s": 0.607054852,
+                "cg_calls": 78.0,
+                "pressure_setup_s": 0.477470894,
+                "gmres_iterations": 1320.0,
+                "total_s": 4.525300021
+              }
+            }
+          ]
+        }
+      },
+      "field_checks": {
+        "fresh-factored/run-1": {
+          "Velocity": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "passed": true
+          }
+        },
+        "legacy-assembly/run-1": {
+          "Velocity": {
+            "relative_l2": 2.5994391855083096e-14,
+            "maximum_absolute": 3.923084079815453e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 1.0871418027686574e-15,
+            "maximum_absolute": 2.2118911147117615e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.3925268009876834e-14,
+            "maximum_absolute": 4.898303984646191e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 1.0239668303256841e-15,
+            "maximum_absolute": 2.3283064365386963e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.3360027463755624e-14,
+            "maximum_absolute": 2.48157050464215e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.444670301511417e-13,
+            "maximum_absolute": 1.233591007121504e-11,
+            "passed": true
+          }
+        },
+        "reuse-explicit/run-1": {
+          "Velocity": {
+            "relative_l2": 2.497236974546071e-14,
+            "maximum_absolute": 3.7836400679225335e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 1.8710426966525804e-15,
+            "maximum_absolute": 2.7939677238464355e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.3239974936867814e-14,
+            "maximum_absolute": 4.2810199829546036e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 1.7724136905108005e-15,
+            "maximum_absolute": 2.6775524020195007e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.2254967111059182e-14,
+            "maximum_absolute": 1.674038685450796e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.337437533061822e-13,
+            "maximum_absolute": 1.3137935184204252e-11,
+            "passed": true
+          }
+        },
+        "reuse-explicit/run-2": {
+          "Velocity": {
+            "relative_l2": 2.4693189221125503e-14,
+            "maximum_absolute": 4.172662215751188e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 7.992546470922754e-16,
+            "maximum_absolute": 1.7462298274040222e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.3459596851470218e-14,
+            "maximum_absolute": 5.155875726359227e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 7.543930183902938e-16,
+            "maximum_absolute": 1.6298145055770874e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.2186637486057834e-14,
+            "maximum_absolute": 1.7575274569026078e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.35095916849618e-13,
+            "maximum_absolute": 1.3990586467116373e-11,
+            "passed": true
+          }
+        },
+        "reuse-factored/run-1": {
+          "Velocity": {
+            "relative_l2": 2.480213640598633e-14,
+            "maximum_absolute": 4.732214620162267e-12,
+            "passed": true
+          },
+          "Pressure": {
+            "relative_l2": 1.1627394004238624e-15,
+            "maximum_absolute": 1.979060471057892e-09,
+            "passed": true
+          },
+          "WSS": {
+            "relative_l2": 1.3287553860790434e-14,
+            "maximum_absolute": 4.645173135031655e-13,
+            "passed": true
+          },
+          "Traction": {
+            "relative_l2": 1.1367256802406586e-15,
+            "maximum_absolute": 1.862645149230957e-09,
+            "passed": true
+          },
+          "Vorticity": {
+            "relative_l2": 2.2171349689663595e-14,
+            "maximum_absolute": 1.581312858434103e-11,
+            "passed": true
+          },
+          "Divergence": {
+            "relative_l2": 3.3421569024789384e-13,
+            "maximum_absolute": 1.738698074404965e-11,
+            "passed": true
+          }
+        }
+      },
+      "failures": [],
+      "field_check_status": "completed"
+    }
+  },
+  "profiles": {
+    "sherlock-49893347": {
+      "scope": "Separate two-step profiled run; timings are not benchmark wall times.",
+      "kernels": {
+        "calls": 205574,
+        "total_s": 2.12657518,
+        "mean_us": 10.344572659966726
+      },
+      "cuda_api": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "calls": 58035,
+          "total_s": 1.155108763
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "calls": 205574,
+          "total_s": 0.879110284
+        },
+        {
+          "name": "cudaDeviceSynchronize_v3020",
+          "calls": 48126,
+          "total_s": 0.560961954
+        },
+        {
+          "name": "cudaMemcpy_v3020",
+          "calls": 17238,
+          "total_s": 0.361503596
+        },
+        {
+          "name": "cudaMalloc_v3020",
+          "calls": 103368,
+          "total_s": 0.153030371
+        },
+        {
+          "name": "cudaFree_v3020",
+          "calls": 3756,
+          "total_s": 0.132866595
+        },
+        {
+          "name": "cudaMemsetAsync_v3020",
+          "calls": 5210,
+          "total_s": 0.02320062
+        },
+        {
+          "name": "cudaMemcpyAsync_v3020",
+          "calls": 4438,
+          "total_s": 0.023136153
+        }
+      ],
+      "top_kernels": [
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<Tpetra::Details::LocalResidualFunctor<KokkosSparse::CrsMatrix<double, int, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, void, unsigned long>, Kokkos::View<double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::Experimental::EmptyViewHooks, Kokkos::MemoryTraits<(unsigned int)0>>, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::Experimental::EmptyViewHooks, Kokkos::MemoryTraits<(unsigned int)0>>, Kokkos::View<const unsigned long *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, (bool)0, (bool)0, (bool)0>, Kokkos::TeamPolicy<Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 47088,
+          "total_s": 0.793471196,
+          "mean_us": 16.85081540944614,
+          "registers_per_thread": 30
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosSparse::Impl::SPMV_Functor<Kokkos::Cuda, KokkosSparse::CrsMatrix<const double, const int, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>, const int>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)3>>, Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, (int)0, (bool)0>, Kokkos::TeamPolicy<Kokkos::Cuda, Kokkos::Schedule<Kokkos::Static>>, Kokkos::Cuda>>(T1)",
+          "calls": 19834,
+          "total_s": 0.368185225,
+          "mean_us": 18.563336946657255,
+          "registers_per_thread": 28
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosBlas::Impl::DotBasedGEMM<Kokkos::Cuda, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>>, Kokkos::TeamPolicy<KokkosBlas::Impl::TagMult, Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 7750,
+          "total_s": 0.148505362,
+          "mean_us": 19.16198219354839,
+          "registers_per_thread": 27
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<MueLu::ExpansionFunctor<Kokkos::View<unsigned int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int *, Kokkos::CudaSpace>, const MueLu::LWGraph_kokkos<int, int, Tpetra::KokkosCompat::KokkosDeviceWrapperNode<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, int, (bool)0, (bool)0>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda>, MueLu::ExpansionFunctor<Kokkos::View<unsigned int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int *, Kokkos::CudaSpace>, const MueLu::LWGraph_kokkos<int, int, Tpetra::KokkosCompat::KokkosDeviceWrapperNode<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, int, (bool)0, (bool)0>, int>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 200,
+          "total_s": 0.13615656,
+          "mean_us": 680.7828000000001,
+          "registers_per_thread": 30
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_constant_memory<Kokkos::Impl::ParallelFor<trilinos_backend::<unnamed>::AssembleFluid<(int)4>, Kokkos::RangePolicy<Kokkos::Cuda>, Kokkos::Cuda>>()",
+          "calls": 21,
+          "total_s": 0.134154418,
+          "mean_us": 6388.305619047619,
+          "registers_per_thread": 255
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<KokkosBlas::Impl::DotFunctor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::HostSpace, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda, int>, KokkosBlas::Impl::DotFunctor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::HostSpace, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, double>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 17555,
+          "total_s": 0.132187955,
+          "mean_us": 7.529931928225577,
+          "registers_per_thread": 25
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosBlas::Impl::V_MultFunctor<Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, (int)2, (int)2, int>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 35316,
+          "total_s": 0.07292831,
+          "mean_us": 2.0650218031487144,
+          "registers_per_thread": 16
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<KokkosBlas::Impl::V_Nrm2_Functor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Serial, Kokkos::HostSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda, int>, KokkosBlas::Impl::V_Nrm2_Functor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Serial, Kokkos::HostSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, double>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 6729,
+          "total_s": 0.048446808,
+          "mean_us": 7.199703967900134,
+          "registers_per_thread": 25
+        }
+      ],
+      "copies": [
+        {
+          "direction": "Host-to-Device",
+          "calls": 12810,
+          "bytes": 747381392,
+          "total_s": 0.074460734
+        },
+        {
+          "direction": "Device-to-Host",
+          "calls": 8666,
+          "bytes": 649215756,
+          "total_s": 0.097576285
+        },
+        {
+          "direction": "Device-to-Device",
+          "calls": 616,
+          "bytes": 713125880,
+          "total_s": 0.003214409
+        }
+      ]
+    },
+    "sherlock-49893846": {
+      "scope": "Separate two-step profiled run; timings are not benchmark wall times.",
+      "kernels": {
+        "calls": 208045,
+        "total_s": 2.160062734,
+        "mean_us": 10.382670739503475
+      },
+      "cuda_api": [
+        {
+          "name": "cudaStreamSynchronize_v3020",
+          "calls": 58537,
+          "total_s": 1.131714519
+        },
+        {
+          "name": "cudaLaunchKernel_v7000",
+          "calls": 208045,
+          "total_s": 0.814546514
+        },
+        {
+          "name": "cudaDeviceSynchronize_v3020",
+          "calls": 48529,
+          "total_s": 0.557212312
+        },
+        {
+          "name": "cudaMemcpy_v3020",
+          "calls": 17422,
+          "total_s": 0.346121201
+        },
+        {
+          "name": "cudaMalloc_v3020",
+          "calls": 104607,
+          "total_s": 0.169411437
+        },
+        {
+          "name": "cudaFree_v3020",
+          "calls": 3756,
+          "total_s": 0.135252676
+        },
+        {
+          "name": "cudaMemsetAsync_v3020",
+          "calls": 5222,
+          "total_s": 0.023555517
+        },
+        {
+          "name": "cudaMemcpyAsync_v3020",
+          "calls": 4438,
+          "total_s": 0.023321226
+        }
+      ],
+      "top_kernels": [
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<Tpetra::Details::LocalResidualFunctor<KokkosSparse::CrsMatrix<double, int, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, void, unsigned long>, Kokkos::View<double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::Experimental::EmptyViewHooks, Kokkos::MemoryTraits<(unsigned int)0>>, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::Experimental::EmptyViewHooks, Kokkos::MemoryTraits<(unsigned int)0>>, Kokkos::View<const unsigned long *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, (bool)0, (bool)0, (bool)0>, Kokkos::TeamPolicy<Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 47728,
+          "total_s": 0.80760167,
+          "mean_us": 16.920920005028496,
+          "registers_per_thread": 30
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosSparse::Impl::SPMV_Functor<Kokkos::Cuda, KokkosSparse::CrsMatrix<const double, const int, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>, const int>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)3>>, Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, (int)0, (bool)0>, Kokkos::TeamPolicy<Kokkos::Cuda, Kokkos::Schedule<Kokkos::Static>>, Kokkos::Cuda>>(T1)",
+          "calls": 20079,
+          "total_s": 0.381011427,
+          "mean_us": 18.975617660242044,
+          "registers_per_thread": 28
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosBlas::Impl::DotBasedGEMM<Kokkos::Cuda, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<double **, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>>, Kokkos::TeamPolicy<KokkosBlas::Impl::TagMult, Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 7835,
+          "total_s": 0.150729384,
+          "mean_us": 19.23795583918315,
+          "registers_per_thread": 27
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<MueLu::ExpansionFunctor<Kokkos::View<unsigned int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int *, Kokkos::CudaSpace>, const MueLu::LWGraph_kokkos<int, int, Tpetra::KokkosCompat::KokkosDeviceWrapperNode<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, int, (bool)0, (bool)0>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda>, MueLu::ExpansionFunctor<Kokkos::View<unsigned int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int **, Kokkos::LayoutStride, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<int *, Kokkos::CudaSpace>, const MueLu::LWGraph_kokkos<int, int, Tpetra::KokkosCompat::KokkosDeviceWrapperNode<Kokkos::Cuda, Kokkos::CudaSpace>>, Kokkos::View<int *, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>>, int, (bool)0, (bool)0>, int>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda>, Kokkos::Cuda>>(T1)",
+          "calls": 197,
+          "total_s": 0.136103299,
+          "mean_us": 690.87969035533,
+          "registers_per_thread": 30
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_constant_memory<Kokkos::Impl::ParallelFor<trilinos_backend::<unnamed>::AssembleFluid<(int)4>, Kokkos::RangePolicy<Kokkos::Cuda>, Kokkos::Cuda>>()",
+          "calls": 21,
+          "total_s": 0.134139982,
+          "mean_us": 6387.618190476191,
+          "registers_per_thread": 255
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<KokkosBlas::Impl::DotFunctor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::HostSpace, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda, int>, KokkosBlas::Impl::DotFunctor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::HostSpace, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, double>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 17729,
+          "total_s": 0.133300316,
+          "mean_us": 7.5187724067911335,
+          "registers_per_thread": 25
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<KokkosBlas::Impl::V_MultFunctor<Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, (int)2, (int)2, int>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 35796,
+          "total_s": 0.073602892,
+          "mean_us": 2.0561764442954518,
+          "registers_per_thread": 16
+        },
+        {
+          "name": "void Kokkos::Impl::cuda_parallel_launch_local_memory<Kokkos::Impl::ParallelReduce<Kokkos::Impl::CombinedFunctorReducer<KokkosBlas::Impl::V_Nrm2_Functor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Serial, Kokkos::HostSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, Kokkos::Impl::FunctorAnalysis<Kokkos::Impl::FunctorPatternInterface::REDUCE, Kokkos::RangePolicy<Kokkos::Cuda, int>, KokkosBlas::Impl::V_Nrm2_Functor<Kokkos::View<double, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Serial, Kokkos::HostSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, Kokkos::View<const double *, Kokkos::LayoutLeft, Kokkos::Device<Kokkos::Cuda, Kokkos::CudaSpace>, Kokkos::MemoryTraits<(unsigned int)1>>, int>, double>::Reducer, void>, Kokkos::RangePolicy<Kokkos::Cuda, int>, Kokkos::Cuda>>(T1)",
+          "calls": 6809,
+          "total_s": 0.04887426,
+          "mean_us": 7.177891026582464,
+          "registers_per_thread": 25
+        }
+      ],
+      "copies": [
+        {
+          "direction": "Host-to-Device",
+          "calls": 12902,
+          "bytes": 747444016,
+          "total_s": 0.073729937
+        },
+        {
+          "direction": "Device-to-Host",
+          "calls": 8758,
+          "bytes": 649281428,
+          "total_s": 0.086981001
+        },
+        {
+          "direction": "Device-to-Device",
+          "calls": 616,
+          "bytes": 713125664,
+          "total_s": 0.003220452
+        }
+      ]
+    }
+  },
+  "historical_comparison": {
+    "old_wall_s": [
+      84.82155211595818,
+      86.80023060878739
+    ],
+    "old_median_wall_s": 85.81089136237279,
+    "new_median_wall_s": 40.47949184989557,
+    "speedup": 2.119860883643829,
+    "limitation": "Earlier job, not an old-binary control in the new allocation; old directory absent from both new jobs."
+  },
+  "remaining_configuration": {
+    "gpu_architecture": "AMPERE80 on A40 capability 8.6",
+    "build_type": "RelWithDebInfo -O2 -g -DNDEBUG",
+    "kokkos": "4.7.1 CUDA; debug bounds check disabled",
+    "unit_tests": "Unavailable in both GPU jobs",
+    "hierarchy_rows": [
+      15334,
+      286,
+      21
+    ],
+    "coarse_solver": "KLU2"
+  }
+}
