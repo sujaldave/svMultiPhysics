@@ -1,0 +1,568 @@
+{
+  "field_checks": "completed",
+  "field_tolerances": {
+    "scalar": 0.0001,
+    "solid": 0.0001,
+    "fsi": 1e-07
+  },
+  "failures": [
+    "fsi/gmres-ml/fsils/run-1: solver failed, timed out, or missing final output",
+    "fsi/gmres-ml/fsils/run-2: solver failed, timed out, or missing final output",
+    "fsi/gmres-ml/trilinos/run-1: solver failed, timed out, or missing final output",
+    "fsi/gmres-ml/trilinos/run-2: solver failed, timed out, or missing final output",
+    "scalar/gmres-ml/fsils/run-1: solver failed, timed out, or missing final output",
+    "scalar/gmres-ml/fsils/run-2: solver failed, timed out, or missing final output",
+    "scalar/gmres-ml/trilinos/run-1: solver failed, timed out, or missing final output",
+    "scalar/gmres-ml/trilinos/run-2: solver failed, timed out, or missing final output",
+    "scalar/gmres-riluk0/fsils/run-1: solver failed, timed out, or missing final output",
+    "scalar/gmres-riluk0/fsils/run-2: solver failed, timed out, or missing final output",
+    "scalar/gmres-riluk0/trilinos/run-1: solver failed, timed out, or missing final output",
+    "scalar/gmres-riluk0/trilinos/run-2: solver failed, timed out, or missing final output"
+  ],
+  "groups": [
+    {
+      "case": "fsi",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 30.698430611751974,
+      "simulation_seconds": 26.995,
+      "wall_range": [
+        30.06989830173552,
+        31.326962921768427
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25639.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 24.390938767232,
+      "simulation_seconds": 20.555,
+      "wall_range": [
+        24.31991584878415,
+        24.461961685679853
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25641.5,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 29.99719466501847,
+      "simulation_seconds": 26.33,
+      "wall_range": [
+        29.81783502176404,
+        30.176554308272898
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25638.5,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 23.663649085443467,
+      "simulation_seconds": 19.825,
+      "wall_range": [
+        23.55957562942058,
+        23.767722541466355
+      ],
+      "linear_failures": 270,
+      "nonlinear_failures": 0,
+      "linear_iterations": 25640.0,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 5.432869294192642,
+      "simulation_seconds": null,
+      "wall_range": [
+        5.07687474321574,
+        5.788863845169544
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 0.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 5.22787926113233,
+      "simulation_seconds": null,
+      "wall_range": [
+        4.826216721907258,
+        5.629541800357401
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 0.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 54.09974995395169,
+      "simulation_seconds": 50.335,
+      "wall_range": [
+        54.070779191330075,
+        54.1287207165733
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15768.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 49.5617686198093,
+      "simulation_seconds": 45.74,
+      "wall_range": [
+        48.20443159341812,
+        50.91910564620048
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15766.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.091562134696069
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0-mesh-gmres",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 56.621903244871646,
+      "simulation_seconds": 52.775,
+      "wall_range": [
+        56.567246600054204,
+        56.67655988968909
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 17670.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "fsi",
+      "variant": "gmres-riluk0-mesh-gmres",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 50.772216801997274,
+      "simulation_seconds": 46.905,
+      "wall_range": [
+        50.708412506617606,
+        50.83602109737694
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 17671.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.1152143201800135
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 161.63813200686127,
+      "simulation_seconds": 157.25,
+      "wall_range": [
+        161.03666309826076,
+        162.23960091546178
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15923.5,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 178.43633233057335,
+      "simulation_seconds": 173.89999999999998,
+      "wall_range": [
+        178.07586850970984,
+        178.79679615143687
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15933.5,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.9058588567456569
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 158.659562505316,
+      "simulation_seconds": 154.05,
+      "wall_range": [
+        157.96646277979016,
+        159.35266223084182
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15924.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 175.64870762685314,
+      "simulation_seconds": 170.85,
+      "wall_range": [
+        173.1048405598849,
+        178.19257469382137
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15928.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.9032777106585449
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 183.409084119834,
+      "simulation_seconds": 168.7,
+      "wall_range": [
+        182.68070299737155,
+        184.13746524229646
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 2,
+      "linear_iterations": 2629.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 185.84745773021132,
+      "simulation_seconds": 181.4,
+      "wall_range": [
+        181.6807138826698,
+        190.01420157775283
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 2,
+      "linear_iterations": 2891.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 184.11003367882222,
+      "simulation_seconds": 177.3,
+      "wall_range": [
+        184.08476839400828,
+        184.13529896363616
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 2,
+      "linear_iterations": 4538.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "scalar",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 184.45043240813538,
+      "simulation_seconds": 178.25,
+      "wall_range": [
+        184.22435567714274,
+        184.67650913912803
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 2,
+      "linear_iterations": 4318.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "cg-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 5.403102254960686,
+      "simulation_seconds": 1.671,
+      "wall_range": [
+        5.328161399811506,
+        5.478043110109866
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15568.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "cg-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 5.5031769960187376,
+      "simulation_seconds": 1.645,
+      "wall_range": [
+        5.427392824552953,
+        5.578961167484522
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15568.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.9818150967831035
+    },
+    {
+      "case": "solid",
+      "variant": "cg-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 5.428295677993447,
+      "simulation_seconds": 1.6265,
+      "wall_range": [
+        5.37708605825901,
+        5.479505297727883
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15440.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "cg-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 5.276362654287368,
+      "simulation_seconds": 1.524,
+      "wall_range": [
+        5.2761335503309965,
+        5.27659175824374
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 15440.0,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 1.0287950305278246
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-blockjacobi",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 82.30870800372213,
+      "simulation_seconds": 78.5,
+      "wall_range": [
+        81.96197480335832,
+        82.65544120408595
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-blockjacobi",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 81.5275909602642,
+      "simulation_seconds": 77.895,
+      "wall_range": [
+        81.2475141203031,
+        81.80766780022532
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-diagonal",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 80.67449349397793,
+      "simulation_seconds": 76.96000000000001,
+      "wall_range": [
+        80.04363198950887,
+        81.305354998447
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-diagonal",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 79.44325313251466,
+      "simulation_seconds": 75.81,
+      "wall_range": [
+        79.24700832925737,
+        79.63949793577194
+      ],
+      "linear_failures": 800,
+      "nonlinear_failures": 40,
+      "linear_iterations": 400000.0,
+      "state_checks_passed": false,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-ml",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 28.048013617284596,
+      "simulation_seconds": 24.325,
+      "wall_range": [
+        27.977389349602163,
+        28.11863788496703
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 9814.5,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-ml",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 28.11611456470564,
+      "simulation_seconds": 24.335,
+      "wall_range": [
+        27.913968056440353,
+        28.318261072970927
+      ],
+      "linear_failures": 0,
+      "nonlinear_failures": 0,
+      "linear_iterations": 9890.5,
+      "state_checks_passed": true,
+      "validated": true,
+      "speedup_vs_fsils_assembly": 0.9975778677646117
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-riluk0",
+      "assembly": "fsils",
+      "repeats": 2,
+      "wall_seconds": 31.79829521290958,
+      "simulation_seconds": 27.990000000000002,
+      "wall_range": [
+        31.72063454426825,
+        31.875955881550908
+      ],
+      "linear_failures": 88,
+      "nonlinear_failures": 0,
+      "linear_iterations": 51356.5,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    },
+    {
+      "case": "solid",
+      "variant": "gmres-riluk0",
+      "assembly": "trilinos",
+      "repeats": 2,
+      "wall_seconds": 31.6253248648718,
+      "simulation_seconds": 27.89,
+      "wall_range": [
+        31.523115776479244,
+        31.727533953264356
+      ],
+      "linear_failures": 81,
+      "nonlinear_failures": 0,
+      "linear_iterations": 50826.5,
+      "state_checks_passed": true,
+      "validated": false,
+      "speedup_vs_fsils_assembly": null
+    }
+  ],
+  "attempted_runs": 60,
+  "completed_runs": 48,
+  "timeouts": 8,
+  "failed_fsi_muelu_runs": 4
+}

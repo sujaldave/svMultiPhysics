@@ -1,0 +1,422 @@
+{
+  "groups": {
+    "chebyshev": {
+      "median_wall_s": 113.84904054201616,
+      "runs": [
+        {
+          "schur_coarse": "chebyshev",
+          "gpu_aware_mpi": "auto",
+          "schur_reuse": "transfers",
+          "schur_operator": "explicit",
+          "profiled": false,
+          "executable": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+          "preconditioner": "schur-amg",
+          "gmres_preconditioner": "resistance",
+          "assembly_mode": "kokkos",
+          "steps": 20,
+          "ranks": 2,
+          "threads": 1,
+          "command": [
+            "mpirun",
+            "-np",
+            "2",
+            "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+            "solver.xml"
+          ],
+          "wall_seconds": 113.3505542090279,
+          "returncode": 0,
+          "completed": true,
+          "nonlinear_iterations": 184,
+          "simulation_seconds": 112.4,
+          "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+          "path": "chebyshev/run-1/measurement.json",
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.15745400000007972
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 10.042091926000003,
+              "cache_s": 0.05433842100000001,
+              "state_s": 0.0036758269999999987,
+              "kernel_s": 9.984076171999995,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0015600000000543111,
+              "export_s": 0.43781499999997614
+            }
+          },
+          "solver_totals": {
+            "pressure_setup_s": 0.515089000000248,
+            "cg_calls": 717.0,
+            "cg_true_residual_failures": 0.0,
+            "operator_setup_s": 0.27812000000005,
+            "cg_iterations": 80883.0,
+            "scaling_s": 0.5521429999999949,
+            "total_s": 101.957099,
+            "gmres_s": 4.46365800000032,
+            "cg_failures": 0.0,
+            "cg_s": 89.987295,
+            "block_setup_s": 0.458576999999948,
+            "gmres_iterations": 9546.0,
+            "schur_setup_s": 2.60319000000004
+          },
+          "amg_counters": {
+            "amg_builds": 1.0,
+            "amg_refreshes": 183.0
+          },
+          "boundary_setup_s": 0.12411600000001172,
+          "failed_ri_solves": 0,
+          "execution_spaces": [
+            "Serial"
+          ]
+        },
+        {
+          "schur_coarse": "chebyshev",
+          "gpu_aware_mpi": "auto",
+          "schur_reuse": "transfers",
+          "schur_operator": "explicit",
+          "profiled": false,
+          "executable": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+          "preconditioner": "schur-amg",
+          "gmres_preconditioner": "resistance",
+          "assembly_mode": "kokkos",
+          "steps": 20,
+          "ranks": 2,
+          "threads": 1,
+          "command": [
+            "mpirun",
+            "-np",
+            "2",
+            "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+            "solver.xml"
+          ],
+          "wall_seconds": 114.3475268750044,
+          "returncode": 0,
+          "completed": true,
+          "nonlinear_iterations": 184,
+          "simulation_seconds": 112.4,
+          "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+          "path": "chebyshev/run-2/measurement.json",
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.16114199999995832
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 10.098734669000006,
+              "cache_s": 0.05222345900000001,
+              "state_s": 0.0037966299999999996,
+              "kernel_s": 10.042832875999995,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0016410000000728817,
+              "export_s": 0.4349939999999762
+            }
+          },
+          "solver_totals": {
+            "pressure_setup_s": 0.516147000000128,
+            "cg_calls": 717.0,
+            "cg_true_residual_failures": 0.0,
+            "operator_setup_s": 0.280028000000077,
+            "cg_iterations": 80883.0,
+            "scaling_s": 0.56941000000007,
+            "total_s": 101.849932,
+            "gmres_s": 4.44934499999993,
+            "cg_failures": 0.0,
+            "cg_s": 89.881508,
+            "block_setup_s": 0.457443999999972,
+            "gmres_iterations": 9546.0,
+            "schur_setup_s": 2.606501
+          },
+          "amg_counters": {
+            "amg_builds": 1.0,
+            "amg_refreshes": 183.0
+          },
+          "boundary_setup_s": 0.12465100000008006,
+          "failed_ri_solves": 0,
+          "execution_spaces": [
+            "Serial"
+          ]
+        }
+      ],
+      "speedup_vs_klu": 0.7107838344376886
+    },
+    "klu": {
+      "median_wall_s": 80.9220575835061,
+      "runs": [
+        {
+          "schur_coarse": "klu",
+          "gpu_aware_mpi": "auto",
+          "schur_reuse": "transfers",
+          "schur_operator": "explicit",
+          "profiled": false,
+          "executable": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+          "preconditioner": "schur-amg",
+          "gmres_preconditioner": "resistance",
+          "assembly_mode": "kokkos",
+          "steps": 20,
+          "ranks": 2,
+          "threads": 1,
+          "command": [
+            "mpirun",
+            "-np",
+            "2",
+            "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+            "solver.xml"
+          ],
+          "wall_seconds": 80.80663329199888,
+          "returncode": 0,
+          "completed": true,
+          "nonlinear_iterations": 184,
+          "simulation_seconds": 78.77,
+          "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+          "path": "klu/run-1/measurement.json",
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.15467200000005785
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 10.008984293000003,
+              "cache_s": 0.051625870999999976,
+              "state_s": 0.0036827120000000003,
+              "kernel_s": 9.953674370000005,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0016079999999319685,
+              "export_s": 0.43057999999999585
+            }
+          },
+          "solver_totals": {
+            "pressure_setup_s": 0.502971000000067,
+            "cg_calls": 716.0,
+            "cg_true_residual_failures": 0.0,
+            "operator_setup_s": 0.280778999999975,
+            "cg_iterations": 51254.0,
+            "scaling_s": 0.551175999999986,
+            "total_s": 68.368188,
+            "gmres_s": 4.44053600000022,
+            "cg_failures": 0.0,
+            "cg_s": 56.470191,
+            "block_setup_s": 0.45445999999998,
+            "gmres_iterations": 9530.0,
+            "schur_setup_s": 2.59132399999998
+          },
+          "amg_counters": {
+            "amg_builds": 1.0,
+            "amg_refreshes": 183.0
+          },
+          "boundary_setup_s": 0.12117200000001577,
+          "failed_ri_solves": 0,
+          "execution_spaces": [
+            "Serial"
+          ]
+        },
+        {
+          "schur_coarse": "klu",
+          "gpu_aware_mpi": "auto",
+          "schur_reuse": "transfers",
+          "schur_operator": "explicit",
+          "profiled": false,
+          "executable": "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+          "preconditioner": "schur-amg",
+          "gmres_preconditioner": "resistance",
+          "assembly_mode": "kokkos",
+          "steps": 20,
+          "ranks": 2,
+          "threads": 1,
+          "command": [
+            "mpirun",
+            "-np",
+            "2",
+            "/Users/sujaldave/Documents/ChatGPT/svmpWithGPU/svMultiPhysics/build/svMultiPhysics-build/bin/svmultiphysics",
+            "solver.xml"
+          ],
+          "wall_seconds": 81.03748187501333,
+          "returncode": 0,
+          "completed": true,
+          "nonlinear_iterations": 184,
+          "simulation_seconds": 79.07,
+          "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+          "path": "klu/run-2/measurement.json",
+          "phase_totals": {
+            "ASSEMBLY_ALLOC_STATS": {
+              "total_s": 0.15745700000007082
+            },
+            "ASSEMBLY_STATS": {
+              "total_s": 10.012954541000001,
+              "cache_s": 0.05298400200000002,
+              "state_s": 0.00363788,
+              "kernel_s": 9.956405207999998,
+              "rebuilt": 1.0
+            },
+            "ASSEMBLY_EXPORT_STATS": {
+              "stage_s": 0.0015529999999856724,
+              "export_s": 0.43709299999997514
+            }
+          },
+          "solver_totals": {
+            "pressure_setup_s": 0.503518000000149,
+            "cg_calls": 716.0,
+            "cg_true_residual_failures": 0.0,
+            "operator_setup_s": 0.278345000000018,
+            "cg_iterations": 51254.0,
+            "scaling_s": 0.5482170000000129,
+            "total_s": 68.659652,
+            "gmres_s": 4.43534400000005,
+            "cg_failures": 0.0,
+            "cg_s": 56.757851,
+            "block_setup_s": 0.459337999999987,
+            "gmres_iterations": 9530.0,
+            "schur_setup_s": 2.59541199999993
+          },
+          "amg_counters": {
+            "amg_builds": 1.0,
+            "amg_refreshes": 183.0
+          },
+          "boundary_setup_s": 0.12352300000003782,
+          "failed_ri_solves": 0,
+          "execution_spaces": [
+            "Serial"
+          ]
+        }
+      ],
+      "speedup_vs_klu": 1.0
+    }
+  },
+  "failures": [],
+  "warnings": [],
+  "field_checks": {
+    "chebyshev/run-1": {
+      "Velocity": {
+        "relative_l2": 2.5267077997374653e-14,
+        "maximum_absolute": 3.9754866065777605e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 2.648270350425211e-15,
+        "maximum_absolute": 3.3760443329811096e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 1.3764237311277963e-14,
+        "maximum_absolute": 5.084821452783217e-13,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 2.563203279856485e-15,
+        "maximum_absolute": 3.259629011154175e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 2.266915643288611e-14,
+        "maximum_absolute": 2.1117330106790178e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.395118408712107e-13,
+        "maximum_absolute": 1.0770051517283719e-11,
+        "passed": true
+      }
+    },
+    "chebyshev/run-2": {
+      "Velocity": {
+        "relative_l2": 2.5267077997374653e-14,
+        "maximum_absolute": 3.9754866065777605e-12,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 2.648270350425211e-15,
+        "maximum_absolute": 3.3760443329811096e-09,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 1.3764237311277963e-14,
+        "maximum_absolute": 5.084821452783217e-13,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 2.563203279856485e-15,
+        "maximum_absolute": 3.259629011154175e-09,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 2.266915643288611e-14,
+        "maximum_absolute": 2.1117330106790178e-11,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 3.395118408712107e-13,
+        "maximum_absolute": 1.0770051517283719e-11,
+        "passed": true
+      }
+    },
+    "klu/run-1": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    },
+    "klu/run-2": {
+      "Velocity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Pressure": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "WSS": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Traction": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Vorticity": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      },
+      "Divergence": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "passed": true
+      }
+    }
+  },
+  "reference": "klu/run-1/2-procs/result_020.vtu",
+  "field_check_status": "completed"
+}

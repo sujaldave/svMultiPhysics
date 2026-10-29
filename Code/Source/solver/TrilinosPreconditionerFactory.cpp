@@ -226,6 +226,14 @@ double schur_spectral_bound(
   return bound;
 }
 
+std::string schur_coarse_policy() {
+  const char* value=std::getenv("SV_TRILINOS_SCHUR_COARSE");
+  const std::string policy=value ? value : "klu";
+  if (policy!="klu" && policy!="chebyshev")
+    throw std::runtime_error("SV_TRILINOS_SCHUR_COARSE must be klu or chebyshev");
+  return policy;
+}
+
 Teuchos::RCP<Tpetra_Operator> create_schur_amg(
     const Teuchos::RCP<Tpetra_CrsMatrix>& matrix, double bound, bool reuse_transfers)
 {
@@ -244,13 +252,32 @@ Teuchos::RCP<Tpetra_Operator> create_schur_amg(
   smoother.set("relaxation: type", "Jacobi");
   smoother.set("relaxation: sweeps", 2);
   smoother.set("relaxation: damping factor", 1.8 / bound);
-  parameters.set("coarse: type", "KLU");
+  const auto coarse=schur_coarse_policy();
+  parameters.set("coarse: type", coarse=="klu" ? "KLU" : "CHEBYSHEV");
+  if (coarse=="chebyshev") {
+    auto& polynomial=parameters.sublist("coarse: params");
+    // For an SPD coarse matrix, D^-1 A has positive eigenvalues and
+    // trace equal to its dimension. The coarse cap bounds lambda_max by
+    // 200, avoiding random power estimates and preserving scaling on reuse.
+    polynomial.set("chebyshev: max eigenvalue", 200.0);
+    polynomial.set("chebyshev: degree", 8);
+    polynomial.set("chebyshev: ratio eigenvalue", 30.0);
+    polynomial.set("chebyshev: zero starting solution", true);
+  }
   parameters.set("coarse: max size", 200);
   // RP retains transfers, but recomputes every coarse matrix and smoother.
   // RAP would retain coarse numerical matrices and is unsuitable here.
   parameters.set("reuse: type", reuse_transfers ? "RP" : "none");
   auto result=MueLu::CreateTpetraPreconditioner(
       Teuchos::rcp_static_cast<Tpetra_Operator>(matrix), parameters);
+  if (coarse=="chebyshev") {
+    using Matrix=Xpetra::Matrix<double,LO,GO,Node>;
+    auto hierarchy=result->GetHierarchy();
+    const auto coarse_matrix=hierarchy->GetLevel(hierarchy->GetNumLevels()-1)
+        ->Get<Teuchos::RCP<Matrix>>("A");
+    if (coarse_matrix->getGlobalNumRows()>200)
+      throw std::runtime_error("Polynomial Schur coarse solver requires at most 200 coarse rows");
+  }
   if (std::getenv("SV_TRILINOS_AMG_DETAILS")) {
     auto stream=Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
     result->GetHierarchy()->describe(*stream,Teuchos::VERB_HIGH);
@@ -529,6 +556,7 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
     const std::string policy=std::getenv("SV_TRILINOS_SCHUR_REUSE") ? std::getenv("SV_TRILINOS_SCHUR_REUSE") : "transfers";
     if (policy!="transfers" && policy!="fresh")
       throw std::runtime_error("SV_TRILINOS_SCHUR_REUSE must be transfers or fresh");
+    const auto coarse_policy=schur_coarse_policy();
     const double bound=schur_spectral_bound(matrix);
     if (policy=="fresh" || reuse.muelu_cache==Teuchos::null) {
       handle->muelu_operator_=create_schur_amg(matrix,bound*1.05,false);
@@ -540,7 +568,7 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
       // Rebuild collectively if any rank detects a changed graph or unsafe
       // damping bound. Transfer reuse is valid across time steps on fixed mesh.
       int mismatch=1;
-      if (cache.schur_ && cache.hierarchy_!=Teuchos::null &&
+      if (cache.schur_ && cache.coarse_policy_==coarse_policy && cache.hierarchy_!=Teuchos::null &&
           cache.topology_generation_==reuse.topology_generation &&
           cache.schur_graph_!=Teuchos::null && bound<=cache.damping_bound_ &&
           same_local_map(*matrix->getDomainMap(),*cache.domain_map_) &&
@@ -563,6 +591,7 @@ Teuchos::RCP<PreconditionerHandle> create_preconditioner(
       Teuchos::reduceAll(*matrix->getComm(),Teuchos::REDUCE_MAX,1,&mismatch,&global_mismatch);
       if (global_mismatch) {
         cache.hierarchy_=Teuchos::null;
+        cache.coarse_policy_=coarse_policy;
         cache.damping_bound_=bound*1.05;
         cache.hierarchy_=create_schur_amg(matrix,cache.damping_bound_,true);
         cache.store_signature(role,matrix,reuse);

@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--schur-reuse', choices=['transfers','fresh'], default='transfers')
     parser.add_argument('--schur-operator', choices=['explicit','factored'], default='explicit')
     parser.add_argument('--runtime-details', action='store_true')
+    parser.add_argument('--profile-mpi', action='store_true', help='Include MPI tracing in a separate Nsight profile.')
     parser.add_argument('--profile', choices=['nsys'], help='Profile a separate short run; not a timing benchmark.')
     parser.add_argument('--stats', action='store_true', help='Enable per-Jacobian stats (new executable only).')
     args = parser.parse_args()
@@ -76,7 +77,7 @@ def main():
         tree.write(run / 'solver.xml', encoding='utf-8', xml_declaration=True)
         command = [str(exe), 'solver.xml']
         if args.profile == 'nsys':
-            command = ['nsys','profile','--trace=cuda,nvtx,osrt','--sample=none',
+            command = ['nsys','profile','--trace='+('cuda,nvtx,mpi,osrt' if args.profile_mpi else 'cuda,nvtx,osrt'),'--sample=none',
                        '--stats=true','--output='+str(run/'trace')] + command
         if args.launcher == 'srun':
             prefix = ['srun','--ntasks',str(args.ranks),'--cpus-per-task',str(args.threads)]
@@ -131,7 +132,7 @@ def main():
                 assembly_stats.append(dict(kind=line.split()[0], **item))
         boundary_stats = [dict(re.findall(r'(\w+)=([^\s]+)', line))
                           for line in log.splitlines() if line.startswith('BOUNDARY_SETUP_STATS ')]
-        record = dict(schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
+        record = dict(schur_coarse=env.get('SV_TRILINOS_SCHUR_COARSE','klu'), gpu_aware_mpi=env.get('TPETRA_ASSUME_GPU_AWARE_MPI','auto'), schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
                       profiled=bool(args.profile), boundary_stats=boundary_stats,
                       executable=str(exe), preconditioner=args.preconditioner,
                       gmres_preconditioner=args.gmres_preconditioner,

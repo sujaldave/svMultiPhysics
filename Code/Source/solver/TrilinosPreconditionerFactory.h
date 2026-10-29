@@ -90,6 +90,7 @@ class MueLuReuseCache
 
     std::shared_ptr<SchurMatrixStorage> schur_storage_;
     bool schur_ = false;
+    std::string coarse_policy_;
     double damping_bound_ = 0.0;
     Teuchos::RCP<const Tpetra_CrsGraph> schur_graph_;
     bool initialized_ = false;
