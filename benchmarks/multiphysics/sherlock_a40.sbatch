@@ -22,9 +22,9 @@ config=${output}-config
 mkdir -p "$(dirname "$config")"
 mkdir "$config"
 cp "$repo/benchmarks/multiphysics/run_suite.py" "$repo/benchmarks/multiphysics/summarize.py" "$config/"
-git -C "$repo" rev-parse HEAD > "$config/commit.txt"
-git -C "$repo" status --short > "$config/git-status.txt"
-git -C "$repo" diff > "$config/source.diff"
+(cd "$repo" && git rev-parse HEAD) > "$config/commit.txt" 2>&1 || true
+(cd "$repo" && git status --short) > "$config/git-status.txt" 2>&1 || true
+(cd "$repo" && git diff) > "$config/source.diff" 2>&1 || true
 sha256sum "$exe" > "$config/executable.sha256"
 nvidia-smi -q > "$config/nvidia-smi.txt"
 scontrol show job "$SLURM_JOB_ID" > "$config/slurm-job.txt"

@@ -24,9 +24,9 @@ ranks=${SVMP_RANKS:-1}
 mkdir -p "$output/config"
 [[ -x "$exe" && -f "$repo/benchmarks/schur_amg/run_benchmark.py" ]]
 
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
-git -C "$repo" status --short > "$output/config/git-status.txt"
-git -C "$repo" diff > "$output/config/source.diff"
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
+(cd "$repo" && git status --short) > "$output/config/git-status.txt" 2>&1 || true
+(cd "$repo" && git diff) > "$output/config/source.diff" 2>&1 || true
 uname -a > "$output/config/uname.txt"
 nvidia-smi -q > "$output/config/nvidia-smi.txt"
 scontrol show job "$SLURM_JOB_ID" > "$output/config/slurm-job.txt"

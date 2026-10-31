@@ -46,9 +46,9 @@ keys = ['CUDA_VISIBLE_DEVICES','CUDA_LAUNCH_BLOCKING','TPETRA_ASSUME_GPU_AWARE_M
 Path(sys.argv[1],'config','selected-environment.json').write_text(
     json.dumps({key:os.environ.get(key) for key in keys}, indent=2)+'\n')
 PY
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
-git -C "$repo" status --short > "$output/config/git-status.txt"
-git -C "$repo" diff > "$output/config/source.diff"
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
+(cd "$repo" && git status --short) > "$output/config/git-status.txt" 2>&1 || true
+(cd "$repo" && git diff) > "$output/config/source.diff" 2>&1 || true
 sha256sum "$exe" > "$output/config/executable.sha256"
 uname -a > "$output/config/uname.txt"
 scontrol show job "$SLURM_JOB_ID" > "$output/config/slurm-job.txt"

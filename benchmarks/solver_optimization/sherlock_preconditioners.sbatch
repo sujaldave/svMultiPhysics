@@ -20,9 +20,9 @@ steps=${SVMP_STEPS:-20}
 repeat=${SVMP_REPEAT:-2}
 [[ -x "$exe" && ! -e "$output" ]]
 mkdir -p "$output/config"
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
-git -C "$repo" status --short > "$output/config/git-status.txt"
-git -C "$repo" diff > "$output/config/source.diff"
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
+(cd "$repo" && git status --short) > "$output/config/git-status.txt" 2>&1 || true
+(cd "$repo" && git diff) > "$output/config/source.diff" 2>&1 || true
 sha256sum "$exe" > "$output/config/executable.sha256"
 nvidia-smi -q > "$output/config/nvidia-smi.txt"
 scontrol show job "$SLURM_JOB_ID" > "$output/config/slurm-job.txt"

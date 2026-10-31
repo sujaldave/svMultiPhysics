@@ -22,8 +22,8 @@ cp "$repo/benchmarks/amg_application/sherlock_a40.sbatch" "$output/config/"
 for cache in "$repo/build/CMakeCache.txt" "$repo/build/svMultiPhysics-build/CMakeCache.txt"; do
   if [[ -f "$cache" ]]; then cp "$cache" "$output/config/$(basename "$(dirname "$cache")")-CMakeCache.txt"; fi
 done
-git -C "$repo" diff > "$output/config/source.diff"
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
+(cd "$repo" && git diff) > "$output/config/source.diff" 2>&1 || true
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
 sha256sum "$exe" > "$output/config/executable.sha256"
 nvidia-smi topo -m > "$output/config/topology.txt"
 nvidia-smi -q > "$output/config/nvidia-smi.txt"

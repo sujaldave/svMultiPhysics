@@ -1,0 +1,130 @@
+{
+ "description": "One Sherlock A40 (job 50440494), one rank/host core, Kokkos CUDA (AMPERE80 library), same pipe case and policies as cpu_results.json. Field checks rerun locally with VTK; GPU vs M4 10-rank pipe fields: velocity 5.3e-13, pressure 4.8e-15 relative L2.",
+ "commit": "fd262c4a109d4117c95b12fc478479af030f2e52",
+ "cases": {
+  "pipe": {
+   "failures": [
+    "gpu-classic-resistance/run-1/measurement.json: incomplete or failed solve",
+    "gpu-classic-resistance/run-1: field comparison failed"
+   ],
+   "groups": {
+    "gpu-amg-resistance": {
+     "median_wall_s": 112.10722528002225,
+     "runs": [
+      {
+       "wall_s": 112.06601550895721,
+       "simulation_s": 100.6,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "execution_spaces": [
+        "Cuda"
+       ],
+       "assembly_s": 8.478743028999999,
+       "assembly_alloc_s": 4.0781025360000065,
+       "total_s": 84.55980801,
+       "cg_iterations": 21184.0,
+       "cg_calls": 381.0,
+       "cg_s": 35.402507686,
+       "gmres_s": 9.56692716100006,
+       "gmres_iterations": 6576.0,
+       "schur_setup_s": 24.233979086,
+       "pressure_setup_s": 2.4714928400000202,
+       "block_setup_s": 7.907418064999991,
+       "scaling_s": 0.680376778000031,
+       "operator_setup_s": 0.818456690999993,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      },
+      {
+       "wall_s": 112.14843505108729,
+       "simulation_s": 100.6,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "execution_spaces": [
+        "Cuda"
+       ],
+       "assembly_s": 8.55514088,
+       "assembly_alloc_s": 4.018453888999996,
+       "total_s": 84.634684371,
+       "cg_iterations": 21023.0,
+       "cg_calls": 381.0,
+       "cg_s": 35.089796523,
+       "gmres_s": 9.55773618300002,
+       "gmres_iterations": 6577.0,
+       "schur_setup_s": 23.708807354,
+       "pressure_setup_s": 2.49132789099992,
+       "block_setup_s": 7.533626927999978,
+       "scaling_s": 0.677727503999981,
+       "operator_setup_s": 0.817576776000039,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ]
+    },
+    "gpu-classic-resistance": {
+     "median_wall_s": 394.32043880294077,
+     "runs": [
+      {
+       "wall_s": 394.32043880294077,
+       "simulation_s": 382.9,
+       "newton": 107,
+       "failed_ri_solves": 88,
+       "execution_spaces": [
+        "Cuda"
+       ],
+       "assembly_s": 10.248037899000002,
+       "assembly_alloc_s": 4.254480383999887,
+       "total_s": 363.426377974,
+       "cg_iterations": 445200.0,
+       "cg_calls": 1484.0,
+       "cg_s": 304.112117603,
+       "gmres_s": 36.5400307010007,
+       "gmres_iterations": 24911.0,
+       "schur_setup_s": 0.0,
+       "pressure_setup_s": 7.15199999437023e-05,
+       "block_setup_s": 7.6174399540003375,
+       "scaling_s": 0.941284532999629,
+       "operator_setup_s": 0.0,
+       "cg_failures": 1484.0,
+       "cg_true_residual_failures": 1484.0
+      }
+     ]
+    }
+   }
+  },
+  "iliac": {
+   "failures": [],
+   "groups": {
+    "gpu-amg-resistance": {
+     "median_wall_s": 40.023967559915036,
+     "runs": [
+      {
+       "wall_s": 40.023967559915036,
+       "simulation_s": 35.68,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "execution_spaces": [
+        "Cuda"
+       ],
+       "assembly_s": 1.4809591420000012,
+       "assembly_alloc_s": 0.37905854100000413,
+       "total_s": 33.032329468,
+       "cg_iterations": 52326.0,
+       "cg_calls": 716.0,
+       "cg_s": 19.485134518999992,
+       "gmres_s": 3.333223191000063,
+       "gmres_iterations": 9531.0,
+       "schur_setup_s": 4.62364375199999,
+       "pressure_setup_s": 2.79544239,
+       "block_setup_s": 0.8180472370000215,
+       "scaling_s": 0.132772462000024,
+       "operator_setup_s": 0.1771571380000209,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ]
+    }
+   }
+  }
+ }
+}

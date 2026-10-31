@@ -20,10 +20,13 @@
 #   gpu-classic-resistance  pipe, classical diagonal pressure CG (weak baseline)
 #   iliac/gpu-amg-resistance  iliac control, compare with the earlier ~39.5 s
 #   profile              pipe, 1 step under Nsight Systems (SVMP_PROFILE=1 only)
+#   old-amg-resistance   pipe and iliac with SVMP_BASELINE_EXE (only when set):
+#                        same-allocation before/after control for a rebuilt binary
 #
 # Overrides: SVMP_REPO, SVMP_BUILD_DIR, SVMP_EXE, SVMP_OUTPUT, SVMP_PIPE_CASE,
 # SVMP_PYTHON (needs NumPy, only to generate the case), SVMP_STEPS (10),
-# SVMP_REPEAT (2), SVMP_CLASSIC (1), SVMP_ILIAC (1), SVMP_PROFILE (0).
+# SVMP_REPEAT (2), SVMP_CLASSIC (1), SVMP_ILIAC (1), SVMP_PROFILE (0),
+# SVMP_BASELINE_EXE (unset).
 
 set -euo pipefail
 repo=${SVMP_REPO:-${SLURM_SUBMIT_DIR:?Submit from the repository root}}
@@ -95,6 +98,19 @@ benchmark=(python3 "$repo/benchmarks/schur_amg/run_benchmark.py"
 if [[ ${SVMP_ILIAC:-1} == 1 ]]; then
   "${benchmark[@]}" --preconditioner schur-amg --gmres-preconditioner resistance \
     --steps 20 --output "$output/iliac/gpu-amg-resistance"
+fi
+
+# A later --exe overrides the executable in the shared argument list.
+if [[ -n ${SVMP_BASELINE_EXE:-} ]]; then
+  sha256sum "$SVMP_BASELINE_EXE" > "$output/config/baseline.sha256"
+  ldd "$SVMP_BASELINE_EXE" > "$output/config/baseline-ldd.txt" 2>&1 || true
+  "${benchmark[@]}" --exe "$SVMP_BASELINE_EXE" --case "$case_dir" \
+    --preconditioner schur-amg --gmres-preconditioner resistance \
+    --steps "$steps" --repeat "$repeat" --output "$output/pipe/old-amg-resistance"
+  if [[ ${SVMP_ILIAC:-1} == 1 ]]; then
+    "${benchmark[@]}" --exe "$SVMP_BASELINE_EXE" --preconditioner schur-amg \
+      --gmres-preconditioner resistance --steps 20 --output "$output/iliac/old-amg-resistance"
+  fi
 fi
 
 # The classical pressure CG usually stops at its 300-iteration cap; it is the

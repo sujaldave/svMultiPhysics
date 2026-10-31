@@ -83,6 +83,41 @@ node ratio. On one A40 the iliac costs 368 µs per iteration, mostly fixed launc
 and synchronization cost, so the pipe should cost much less than 11× that on the
 GPU. The Sherlock job measures this.
 
+## One-A40 results (job 50440494)
+
+Same commit and scripts, one A40 and one host core, Kokkos 4.7.1 CUDA (the
+library was built for `AMPERE80`). Both AMG pipe repeats took 112.1 s. The
+iliac control took 40.0 s, matching the earlier 39.5–40.4 s, so this node
+behaves like the earlier A40 runs.
+
+| Pipe phase (10 steps, 85 Newton) | 1× A40 | M4 Pro, 10 ranks | GPU advantage |
+|---|---:|---:|---:|
+| Wall | **112.1 s** | **128.1 s** | 1.14× |
+| Simulation (wall minus startup) | 100.6 s | 122.5 s | 1.22× |
+| Pressure CG | 35.4 s (1,670 µs/iter, 55.4 per call) | 77.9 s (3,683 µs/iter) | 2.2× |
+| Schur `S0 = L + BᵀB` setup | **24.2 s** (~285 ms per Jacobian) | 4.2 s | 0.17× |
+| Block extraction | 7.9 s (7.5 s one-time, first Jacobian) | 1.5 s | 0.18× |
+| Momentum GMRES | 9.6 s | 14.9 s | 1.6× |
+| Element assembly (cache build 2.1 s) | 8.5 s | 13.5 s | 1.6× |
+| Assembly storage reset | 4.1 s | 0.6 s | 0.14× |
+| AMG refresh | 2.5 s | 0.7 s | 0.29× |
+| Startup (mesh read, CUDA init) | 11.5 s | 5.6 s | 0.49× |
+
+Final GPU fields agree with the M4 10-rank fields to 5.3e-13 (velocity) and
+4.8e-15 (pressure) relative L2; all six fields pass. Newton and pressure-CG
+iteration counts are the same on both. The classical diagonal-CG run fails
+on the GPU as it does on the CPU (1,484 capped pressure solves, outer-solve
+failures, 394 s).
+
+The GPU wins every iterative kernel phase but loses on setup. Setup phases
+(Schur product, block extraction, storage reset, AMG refresh: 38.7 s) now cost
+more than the pressure CG (35.4 s). The Schur product calls
+`Tpetra::MatrixMatrix::Multiply(B, true, B, false)` for every Jacobian, which
+forms the transpose of B again each time. The AMG hierarchy is
+181,875 → 2,303 → 154 rows (59.8 nnz/row on the fine level), with a fine-level
+Jacobi damping of 0.4528, which is 1.8/(1.05 × 3.79). 3.79 is the Gershgorin
+bound, not λmax.
+
 ## Run on one Sherlock A40
 
 No C++ rebuild is needed; the existing `1227395`+ GPU executable is fine
