@@ -29,7 +29,7 @@ ranks=${SVMP_RANKS:-"8 16 32"}
 "$repo/benchmarks/large_pipe/prepare_case.sh" "$case_dir" "${SVMP_PYTHON:-python3}"
 
 mkdir -p "$output/config" "$output/pipe" "$output/iliac"
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
 sha256sum "$exe" "$case_dir/mesh/mesh-complete.mesh.vtu" > "$output/config/sha256.txt"
 lscpu > "$output/config/lscpu.txt"
 scontrol show job "$SLURM_JOB_ID" > "$output/config/slurm-job.txt"

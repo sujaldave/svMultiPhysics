@@ -41,9 +41,9 @@ repeat=${SVMP_REPEAT:-2}
 "$repo/benchmarks/large_pipe/prepare_case.sh" "$case_dir" "${SVMP_PYTHON:-python3}"
 
 mkdir -p "$output/config" "$output/pipe" "$output/iliac"
-git -C "$repo" rev-parse HEAD > "$output/config/commit.txt"
-git -C "$repo" status --short > "$output/config/git-status.txt"
-git -C "$repo" diff > "$output/config/source.diff"
+(cd "$repo" && git rev-parse HEAD) > "$output/config/commit.txt" 2>&1 || true
+(cd "$repo" && git status --short) > "$output/config/git-status.txt" 2>&1 || true
+(cd "$repo" && git diff) > "$output/config/source.diff" 2>&1 || true
 sha256sum "$exe" > "$output/config/executable.sha256"
 sha256sum "$case_dir/mesh/mesh-complete.mesh.vtu" > "$output/config/pipe-mesh.sha256"
 nvidia-smi -q > "$output/config/nvidia-smi.txt"

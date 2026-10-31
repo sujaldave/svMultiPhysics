@@ -24,7 +24,7 @@ runner=$repo/benchmarks/schur_amg/run_benchmark.py
 [[ -e "$out" ]] && { echo "ERROR: $out exists; choose a new SVMP_OUTPUT" >&2; exit 1; }
 "$repo/benchmarks/large_pipe/prepare_case.sh" "$case_dir" "${SVMP_PYTHON:-python3}"
 mkdir -p "$out/pipe" "$out/iliac"
-{ git -C "$repo" rev-parse HEAD; git -C "$repo" status --short; } > "$out/source.txt"
+(cd "$repo" && git rev-parse HEAD && git status --short) > "$out/source.txt" 2>&1 || true
 shasum -a 256 "$exe" > "$out/executable.sha256"
 sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize > "$out/machine.txt" 2>/dev/null || uname -a > "$out/machine.txt"
 
