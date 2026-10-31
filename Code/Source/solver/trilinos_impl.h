@@ -367,6 +367,16 @@ struct Trilinos
   Teuchos::RCP<Ifpack2_Preconditioner> ifpackPrec;
   Teuchos::RCP<Tpetra_Operator> resistancePrec;
 
+  /// Generic MueLu hierarchy kept across solves (SV_TRILINOS_MUELU_REUSE).
+  /// Valid only for the same matrix object and topology generation.
+  Teuchos::RCP<Tpetra_Operator> muelu_cache;
+  const Tpetra_CrsMatrix* muelu_cache_matrix = nullptr;
+  std::size_t muelu_cache_generation = 0;
+  int muelu_cache_step = -1;
+  std::size_t muelu_builds = 0, muelu_refreshes = 0, muelu_skips = 0;
+  /// Time step of the current solve, used for per-step AMG refresh.
+  int time_step = -1;
+
   // Per-face diagnostic and coefficient data for the resistance
   // Sherman-Morrison inverse:
   // alpha_f = -R_f / (1 + R_f * ||S_f||^2).
@@ -461,6 +471,8 @@ public:
 void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType, 
   Teuchos::RCP<Belos_LinearProblem>& BelosProblem);
 
+Teuchos::ParameterList mueluParameters(int dof, const std::string& reuse);
+void setCachedMueLuPreconditioner(const Teuchos::RCP<Trilinos>& trilinos_);
 void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner>& MueLuPrec,
   const Teuchos::RCP<Tpetra_CrsMatrix>& A, int dof);
 

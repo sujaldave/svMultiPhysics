@@ -936,6 +936,53 @@ TEST(TrilinosSchurAMG, CachedSchurGraphRefreshesNumericValues)
   for (double value:error) EXPECT_LT(value,1.e-9);
 }
 
+TEST(TrilinosSchurAMG, CachedProductMatchesTpetraProductAfterValueChanges)
+{
+  make_serial_map(1);
+  auto comm=Tpetra::getDefaultComm();
+  const GO n=5*comm->getSize();
+  auto pressure=Teuchos::rcp(new Tpetra_Map(n,0,comm));
+  auto velocity=Teuchos::rcp(new Tpetra_Map(3*n,0,comm));
+  // Rectangular B (velocity rows, pressure columns) with off-diagonal coupling.
+  auto B=Teuchos::rcp(new Tpetra_CrsMatrix(velocity,3));
+  auto fill_b=[&](double scale,bool insert) {
+    for (LO i=0;i<static_cast<LO>(velocity->getLocalNumElements());++i) {
+      const GO row=velocity->getGlobalElement(i),p=row/3;
+      const auto columns=Teuchos::tuple<GO>(p,(p+1)%n,(p+n-2)%n);
+      const auto values=Teuchos::tuple(scale*(1.0+row),-0.5*scale,0.25+0.1*scale*row);
+      if (insert) B->insertGlobalValues(row,columns,values);
+      else B->replaceGlobalValues(row,columns,values);
+    }
+    B->fillComplete(pressure,velocity);
+  };
+  fill_b(1.0,true);
+  auto L=make_diagonal_matrix(pressure,std::vector<double>(pressure->getLocalNumElements(),2.0));
+  trilinos_bipartition::preconditioners::MueLuReuseCache cached,reference;
+  setenv("SV_TRILINOS_SCHUR_PRODUCT","cached",1);
+  cached.schur_matrix(L,B,1);
+  setenv("SV_TRILINOS_SCHUR_PRODUCT","tpetra",1);
+  reference.schur_matrix(L,B,1);
+  unsetenv("SV_TRILINOS_SCHUR_PRODUCT");
+  EXPECT_EQ(cached.schur_product_cached(),comm->getSize()==1);
+  EXPECT_FALSE(reference.schur_product_cached());
+
+  // New numerical values on the same graphs exercise the numeric-only path.
+  B->resumeFill();
+  fill_b(-1.7,false);
+  L->scale(0.3);
+  const auto a=cached.schur_matrix(L,B,1);
+  const auto b=reference.schur_matrix(L,B,1);
+  Tpetra_MultiVector x(pressure,2),ya(pressure,2),yb(pressure,2);
+  x.randomize();
+  a->apply(x,ya);
+  b->apply(x,yb);
+  ya.update(-1.0,yb,1.0);
+  Teuchos::Array<double> error(2),scale(2);
+  ya.norm2(error());
+  yb.norm2(scale());
+  for (int j=0;j<2;++j) EXPECT_LT(error[j],1.e-13*scale[j]);
+}
+
 TEST(TrilinosSchurAMG, ExplicitCorrectionsMatchFactoredWithDistributedCapsAndMultipleRHS)
 {
   make_serial_map(1);

@@ -73,7 +73,9 @@ def measure(run, args, case, variant, assembly):
             del env[name]
     env.update(OMP_NUM_THREADS='1', KOKKOS_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
                VECLIB_MAXIMUM_THREADS='1', SV_TRILINOS_ASSEMBLY='auto',
-               SV_TRILINOS_ASSEMBLY_STATS='1', SV_TRILINOS_RUNTIME_DETAILS='1')
+               SV_TRILINOS_ASSEMBLY_STATS='1', SV_TRILINOS_RUNTIME_DETAILS='1',
+               SV_TRILINOS_SOLVER_STATS='1')
+    env.update(args.solver_env)
     start = time.perf_counter()
     timed_out = False
     with (run/'stdout.log').open('w') as log:
@@ -104,9 +106,27 @@ def measure(run, args, case, variant, assembly):
                   nonlinear_warnings=history.count('has exceeded the maximum'),
                   linear_iterations=sum(int(m.group(1)) for l in rows
                                         if (m := re.search(r'[\]!][ \t]+[\[!]\s*(\d+)', l))),
-                  assembly_stats=[l for l in log.splitlines() if l.startswith(('ASSEMBLY_', 'TRILINOS_RUNTIME'))])
+                  assembly_stats=[l for l in log.splitlines() if l.startswith(('ASSEMBLY_', 'TRILINOS_RUNTIME'))],
+                  solver_env=args.solver_env, solve_stats=solve_totals(log))
     (run/'measurement.json').write_text(json.dumps(record, indent=2)+'\n')
     print(f'{case}/{variant[0]}/{assembly}/{run.name}: {elapsed:.3f}s completed={record["completed"]} linear_failures={record["linear_failures"]}', flush=True)
+
+def solve_totals(log):
+    """Sum GENERIC_SOLVE_STATS lines (preconditioner setup and Krylov time) per DOF count."""
+    totals = {}
+    for line in log.splitlines():
+        if not line.startswith('GENERIC_SOLVE_STATS '):
+            continue
+        item = dict(re.findall(r'(\w+)=([-+\deE.]+)', line))
+        key = 'dof'+item.get('dof', '?')
+        entry = totals.setdefault(key, dict(solves=0, setup_s=0.0, krylov_s=0.0, iterations=0))
+        entry['solves'] += 1
+        entry['setup_s'] += float(item.get('setup_s', 0))
+        entry['krylov_s'] += float(item.get('krylov_s', 0))
+        entry['iterations'] += int(float(item.get('iterations', 0)))
+        for counter in ('muelu_builds', 'muelu_refreshes', 'muelu_skips'):
+            entry[counter] = int(float(item.get(counter, 0)))
+    return totals
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -119,7 +139,15 @@ def main():
     p.add_argument('--repeat', type=int, default=2)
     p.add_argument('--timeout', type=float, default=300)
     p.add_argument('--launcher', choices=['local', 'srun'], default='local')
+    p.add_argument('--env', action='append', default=[], metavar='SV_TRILINOS_NAME=VALUE',
+                   help='Solver option passed to every run (all other SV_TRILINOS_* are cleared).')
     args = p.parse_args()
+    args.solver_env = {}
+    for item in args.env:
+        name, sep, value = item.partition('=')
+        if not sep or not name.startswith('SV_TRILINOS_'):
+            p.error('--env expects SV_TRILINOS_NAME=VALUE')
+        args.solver_env[name] = value
     if not args.exe.is_file() or min(args.steps, args.repeat, args.timeout) <= 0:
         p.error('Executable must exist; steps/repeat/timeout must be positive')
     if args.variants and not any(v[0] in args.variants for case in args.cases for v in variants(case)):
@@ -127,7 +155,7 @@ def main():
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     manifest = dict(platform=platform.platform(), python=platform.python_version(), steps=args.steps, repeat=args.repeat, cases=args.cases,
-                    assemblies=args.assemblies, variants=args.variants,
+                    assemblies=args.assemblies, variants=args.variants, solver_env=args.solver_env,
                     executable=str(args.exe.resolve()),
                     sha256=hashlib.sha256(args.exe.read_bytes()).hexdigest(),
                     expected_groups=[(case, v[0], a) for case in args.cases for v in variants(case) if not args.variants or v[0] in args.variants for a in args.assemblies],

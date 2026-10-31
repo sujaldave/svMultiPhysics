@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "TrilinosBipartitionNS.h"
+#include "TrilinosSolverOptions.h"
 
 #ifdef WITH_TRILINOS
 
@@ -192,6 +193,7 @@ BelosSolveStats solve_with_belos(
   } else {
     parameters.set("Maximum Iterations",
         make_belos_cg_max_iterations(max_iterations));
+    trilinos_options::configure_cg(parameters);
   }
 
   Belos_SolverFactory factory;
@@ -808,6 +810,8 @@ void TrilinosBipartitionNSSolver::solve_tpetra_system(
           << " scaling_s=" << times[6] << " block_setup_s=" << times[7]
           << " amg_builds=" << pressure_muelu_cache_->build_count()
           << " amg_refreshes=" << pressure_muelu_cache_->reuse_count()
+          << " amg_skips=" << pressure_muelu_cache_->skip_count()
+          << " schur_product_cached=" << pressure_muelu_cache_->schur_product_cached()
           << " pressure_setup_s=" << times[2] << " cg_s=" << times[3]
           << " gmres_s=" << times[4] << " cg_iterations=" << linear_solver.CG.itr
           << " cg_calls=" << cg_calls << " cg_failures=" << cg_failures

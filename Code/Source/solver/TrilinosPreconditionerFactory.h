@@ -59,6 +59,9 @@ class MueLuReuseCache
         const Teuchos::RCP<Tpetra_CrsMatrix>& L,
         const Teuchos::RCP<Tpetra_CrsMatrix>& B, std::size_t generation);
 
+    /// @brief Whether S0 = L + B^T B uses the cached single-rank product.
+    bool schur_product_cached() const;
+
     /// @brief Release the hierarchy and reset all reuse metadata and counters.
     void clear();
 
@@ -76,6 +79,10 @@ class MueLuReuseCache
 
     /// @brief Return the number of hierarchy refreshes (RP for Schur AMG).
     std::size_t reuse_count() const;
+
+    /// @brief Return the number of Jacobians that kept this step's hierarchy
+    ///        (SV_TRILINOS_AMG_REFRESH=step).
+    std::size_t skip_count() const;
 
   private:
     bool matches(
@@ -104,6 +111,8 @@ class MueLuReuseCache
     std::size_t local_entries_ = 0;
     std::size_t build_count_ = 0;
     std::size_t reuse_count_ = 0;
+    std::size_t skip_count_ = 0;
+    Teuchos::RCP<Tpetra_Vector> power_vector_;
     Teuchos::RCP<const Tpetra_Map> domain_map_;
     Teuchos::RCP<const Tpetra_Map> range_map_;
     Teuchos::RCP<Tpetra_Operator> hierarchy_;

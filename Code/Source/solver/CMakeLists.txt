@@ -211,6 +211,7 @@ set(CSRCS
   FluidElementKernel.h
   TrilinosNSBlockOperators.h TrilinosNSBlockOperators.cpp
   TrilinosPreconditionerFactory.h TrilinosPreconditionerFactory.cpp
+  TrilinosSolverOptions.h TrilinosSolverOptions.cpp
   TrilinosResistanceOperator.h TrilinosResistanceOperator.cpp
   TrilinosLowRankUpdate.h TrilinosLowRankUpdate.cpp
   TrilinosTopology.cpp

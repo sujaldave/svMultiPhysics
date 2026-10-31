@@ -1,0 +1,12 @@
+# label  SV_TRILINOS_* settings for the generic Trilinos solve (trilinos-ml = MueLu)
+# ml_old reproduces the code before these changes (hierarchy rebuilt every solve).
+# RP keeps aggregates and transfers; tP re-smooths transfers and can fail to
+# refresh with dropped connections (FSI), falling back to a rebuild.
+ml_old               SV_TRILINOS_CG_FOLD=0
+ml_tP                SV_TRILINOS_MUELU_REUSE=tP
+ml_RP                SV_TRILINOS_MUELU_REUSE=RP
+ml_RP_step           SV_TRILINOS_MUELU_REUSE=RP SV_TRILINOS_AMG_REFRESH=step
+ml_RP_mtgs           SV_TRILINOS_MUELU_REUSE=RP SV_TRILINOS_MUELU_SMOOTHER=mt-gauss-seidel
+ml_RP_twostage       SV_TRILINOS_MUELU_REUSE=RP SV_TRILINOS_MUELU_SMOOTHER=two-stage-gauss-seidel
+ml_RP_cheb2          SV_TRILINOS_MUELU_REUSE=RP SV_TRILINOS_MUELU_SMOOTHER=chebyshev SV_TRILINOS_MUELU_SWEEPS=2
+ml_RP_tacho          SV_TRILINOS_MUELU_REUSE=RP SV_TRILINOS_MUELU_COARSE=tacho

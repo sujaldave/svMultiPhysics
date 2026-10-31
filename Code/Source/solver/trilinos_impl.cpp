@@ -18,6 +18,7 @@
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 #include "TrilinosFluidAssembly.h"
+#include "TrilinosSolverOptions.h"
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -368,7 +369,10 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   */
   auto BelosProblem = Teuchos::rcp(new Belos_LinearProblem(K_bdry, trilinos_->X, trilinos_->F));
 
+  const double preconditioner_start = MPI_Wtime();
   setPreconditioner(trilinos_, precondType, BelosProblem);
+  Kokkos::fence("generic_preconditioner_ready");
+  const double preconditioner_seconds = MPI_Wtime() - preconditioner_start;
 
   bool set = BelosProblem->setProblem();
   if (!set) {
@@ -410,6 +414,7 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   }
   else if (lsType == TRILINOS_CG_SOLVER) {
     solverType = "Pseudoblock CG";
+    trilinos_options::configure_cg(belosParams);
   }
   else {
     throw std::runtime_error("Unknown solver type requested");
@@ -431,6 +436,19 @@ void trilinos_solve_(const Teuchos::RCP<Trilinos> &trilinos_, double *x, const d
   timer.stop();
 
   solverTime = timer.totalElapsedTime();
+  if (std::getenv("SV_TRILINOS_SOLVER_STATS")) {
+    const double local[] = {preconditioner_seconds, solverTime};
+    double global[2];
+    Teuchos::reduceAll(*trilinos_->comm, Teuchos::REDUCE_MAX, 2, local, global);
+    if (trilinos_->comm->getRank() == 0)
+      std::cout << "GENERIC_SOLVE_STATS dof=" << trilinos_->topology.dof()
+                << " preconditioner=" << precondType << " setup_s=" << global[0]
+                << " krylov_s=" << global[1] << " iterations=" << solverManager->getNumIters()
+                << " converged=" << (result == Belos::Converged)
+                << " muelu_builds=" << trilinos_->muelu_builds
+                << " muelu_refreshes=" << trilinos_->muelu_refreshes
+                << " muelu_skips=" << trilinos_->muelu_skips << std::endl;
+  }
 
   if (result == Belos::Converged) {
     converged = true;
@@ -571,7 +589,13 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
 
   } else if (precondType == TRILINOS_ML_PRECONDITIONER) {
     checkDiagonalIsZero(trilinos_);
-    setMueLuPreconditioner(trilinos_->MueluPrec, trilinos_->K, trilinos_->topology.dof());
+    const auto reuse = trilinos_options::choice("SV_TRILINOS_MUELU_REUSE", "none", {"none", "tP", "RP"});
+    // A user options file defines the whole hierarchy, so it is rebuilt each solve.
+    if (reuse == "none" || std::ifstream("mueluOptions.xml").good()) {
+      setMueLuPreconditioner(trilinos_->MueluPrec, trilinos_->K, trilinos_->topology.dof());
+    } else {
+      setCachedMueLuPreconditioner(trilinos_);
+    }
     BelosProblem->setLeftPrec(trilinos_->MueluPrec);
     return;
   } else {
@@ -592,12 +616,8 @@ void setPreconditioner(const Teuchos::RCP<Trilinos> &trilinos_, int precondType,
  * For a complete guide, refer to the MueLu documentation:
  * https://trilinos.github.io/pdfs/mueluguide.pdf
  */
-void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
-                            const Teuchos::RCP<Tpetra_CrsMatrix> &A, int dof)
+Teuchos::ParameterList mueluParameters(int dof, const std::string& reuse)
 {
-  // MueLuPrec is now a Tpetra::Operator that can be plug into BelosProblem
-  std::string optionsFile = "mueluOptions.xml";
-
   // The following built-in parameters proved to be generally good for big FSI problems
   Teuchos::ParameterList mueluParams;
 
@@ -631,17 +651,80 @@ void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
   mueluParams.set("sa: use filtered matrix", false);
 
   // Smoother
-  mueluParams.set("smoother: type", "RELAXATION");
   mueluParams.set("smoother: pre or post", "both");
   mueluParams.set("smoother: overlap", 0);
 
-  Teuchos::ParameterList &smootherParams = mueluParams.sublist("smoother: params");
-  smootherParams.set("relaxation: type", "Gauss-Seidel");
-  smootherParams.set("relaxation: sweeps", 2);
+  // Plain Gauss-Seidel runs on the host; mt-/two-stage Gauss-Seidel and
+  // Chebyshev run on the device (SV_TRILINOS_MUELU_SMOOTHER).
+  trilinos_options::set_smoother(mueluParams,
+      trilinos_options::choice("SV_TRILINOS_MUELU_SMOOTHER", "gauss-seidel",
+          trilinos_options::smoother_names()),
+      trilinos_options::positive_integer("SV_TRILINOS_MUELU_SWEEPS", 2));
 
   // Coarse solver
-  mueluParams.set("coarse: type", "KLU"); // robust direct solver for FSI
+  trilinos_options::set_direct_coarse(mueluParams, trilinos_options::choice(
+      "SV_TRILINOS_MUELU_COARSE", "klu", {"klu", "tacho", "cusolver"})); // KLU: robust for FSI
   mueluParams.set("coarse: max size", 2000);
+
+  // tP keeps aggregates and the tentative prolongator; RP also keeps the
+  // smoothed transfers. Both recompute coarse operators and smoothers.
+  mueluParams.set("reuse: type", reuse);
+  return mueluParams;
+}
+
+// ----------------------------------------------------------------------------
+/// Generic MueLu with hierarchy reuse across Newton iterations and time steps:
+/// rebuilt only for a new matrix object or topology generation.
+void setCachedMueLuPreconditioner(const Teuchos::RCP<Trilinos>& trilinos_)
+{
+  auto& t = *trilinos_;
+  const auto build = [&]() {
+    t.muelu_cache = Teuchos::null;
+    auto parameters = mueluParameters(t.topology.dof(),
+        trilinos_options::choice("SV_TRILINOS_MUELU_REUSE", "none", {"none", "tP", "RP"}));
+    t.muelu_cache = MueLu::CreateTpetraPreconditioner(
+        Teuchos::rcp_static_cast<Tpetra_Operator>(t.K), parameters);
+    t.muelu_cache_matrix = t.K.get();
+    t.muelu_cache_generation = t.topology.generation();
+    ++t.muelu_builds;
+  };
+  const bool valid = t.muelu_cache != Teuchos::null && t.muelu_cache_matrix == t.K.get() &&
+      t.muelu_cache_generation == t.topology.generation();
+  if (!valid) {
+    build();
+  } else if (trilinos_options::refresh_once_per_step() && t.muelu_cache_step == t.time_step) {
+    ++t.muelu_skips;
+  } else {
+    auto muelu = Teuchos::rcp_dynamic_cast<MueLu::TpetraOperator<Scalar_d, LO, GO, Node>>(
+        t.muelu_cache, true);
+    try {
+      MueLu::ReuseTpetraPreconditioner(t.K, *muelu);
+      ++t.muelu_refreshes;
+    } catch (const std::exception& error) {
+      // tP re-smooths the prolongator; with strength-of-connection dropping its
+      // sparsity can change, which a reused coarse graph cannot hold. Rebuild
+      // (the original behavior) instead of failing the simulation.
+      static bool warned = false;
+      if (!warned && t.comm->getRank() == 0) {
+        std::cerr << "[MueLu] WARNING: hierarchy refresh failed (" << error.what()
+                  << "); rebuilding. SV_TRILINOS_MUELU_REUSE=RP avoids this." << std::endl;
+      }
+      warned = true;
+      build();
+    }
+  }
+  t.muelu_cache_step = t.time_step;
+  t.MueluPrec = t.muelu_cache;
+}
+
+// ----------------------------------------------------------------------------
+void setMueLuPreconditioner(Teuchos::RCP<MueLu_Preconditioner> &MueLuPrec,
+                            const Teuchos::RCP<Tpetra_CrsMatrix> &A, int dof)
+{
+  // MueLuPrec is now a Tpetra::Operator that can be plug into BelosProblem
+  std::string optionsFile = "mueluOptions.xml";
+
+  Teuchos::ParameterList mueluParams = mueluParameters(dof, "none");
 
   // Create MueLu preconditioner from matrix and parameter list, as Tpetra::Operator
   std::ifstream ifs(optionsFile.c_str());
@@ -1236,6 +1319,8 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   // Every Tpetra object must be released before the final equation shuts down
   // the process-wide Kokkos runtime.
   trilinos_->MueluPrec = Teuchos::null;
+  trilinos_->muelu_cache = Teuchos::null;
+  trilinos_->muelu_cache_matrix = nullptr;
   trilinos_->ifpackPrec = Teuchos::null;
   trilinos_->resistancePrec = Teuchos::null;
   trilinos_->K = Teuchos::null;
@@ -1285,6 +1370,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve(ComMod& com_mod, eqType& lEq, co
     const Vector<double>& res)
 {
   init_dir_and_coup_neu(com_mod, incL, res);
+  trilinos_->time_step = com_mod.cTS;
 
   auto& Val = com_mod.Val;
   auto& R = com_mod.R;
@@ -1361,6 +1447,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::solve_assembled(ComMod& com_mod, eqTyp
   }
 
   init_dir_and_coup_neu(com_mod, incL, res);
+  trilinos_->time_step = com_mod.cTS;
 
   if (lEq.ls.LS_type == consts::SolverType::lSolver_NS) {
     trilinos_bipartition::TrilinosBipartitionNSSolver ns_solver(

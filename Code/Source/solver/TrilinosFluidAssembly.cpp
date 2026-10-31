@@ -33,7 +33,7 @@ struct MeshCache {
   Kokkos::View<double***, Kokkos::LayoutRight, Device> geometry;
   View2<double> shapes, state;
   Kokkos::View<double*, Device> weights;
-  typename View2<double>::HostMirror host_state;
+  typename View2<double>::host_mirror_type host_state;
 
   static std::vector<double> quadrature(const mshType& mesh) {
     std::vector<double> data;
