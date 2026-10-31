@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Run an isolated iliac artery CPU/GPU comparison without modifying the source case.
+"""Run an isolated CPU/GPU comparison without modifying the source case.
+
+The default case is the iliac artery; --case selects any directory with
+solver.xml and mesh/ (for example the generated large pipe).
 
 Each run gets its own directory, solver XML, full log, and JSON timings.
 The mesh is reused by symlink. Timed runs must be run sequentially.
@@ -19,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--exe', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--case', type=Path, help='Case directory with solver.xml and mesh/ (default: iliac artery).')
     parser.add_argument('--preconditioner', choices=['diagonal', 'schur-amg', 'ml', 'fsils'], required=True)
     parser.add_argument('--gmres-preconditioner', choices=['diagonal','resistance'], default='diagonal')
     parser.add_argument('--steps', type=int, default=20)
@@ -50,7 +54,9 @@ def main():
     exe = args.exe.resolve()
     if not exe.is_file():
         parser.error(f"executable does not exist: {exe}")
-    case = Path(__file__).resolve().parents[2] / 'tests/cases/fluid/iliac_artery'
+    case = (args.case or Path(__file__).resolve().parents[2] / 'tests/cases/fluid/iliac_artery').resolve()
+    if not (case / 'solver.xml').is_file() or not (case / 'mesh').is_dir():
+        parser.error(f'case needs solver.xml and mesh/: {case}')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     for i in range(args.repeat):
@@ -134,7 +140,7 @@ def main():
                           for line in log.splitlines() if line.startswith('BOUNDARY_SETUP_STATS ')]
         record = dict(schur_coarse=env.get('SV_TRILINOS_SCHUR_COARSE','klu'), gpu_aware_mpi=env.get('TPETRA_ASSUME_GPU_AWARE_MPI','auto'), schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
                       profiled=bool(args.profile), boundary_stats=boundary_stats,
-                      executable=str(exe), preconditioner=args.preconditioner,
+                      executable=str(exe), case=str(case), preconditioner=args.preconditioner,
                       gmres_preconditioner=args.gmres_preconditioner,
                       assembly_mode=args.assembly, assembly_stats=assembly_stats,
                       steps=args.steps, ranks=args.ranks, threads=args.threads, command=command,

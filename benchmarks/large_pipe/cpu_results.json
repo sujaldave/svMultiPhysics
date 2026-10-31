@@ -1,0 +1,408 @@
+{
+ "description": "Apple M4 Pro CPU sweep, current branch, Schur AMG + resistance GMRES, native Kokkos Serial assembly, one thread per rank. Pipe: Lasso make_pipe.py (181,875 nodes, 1,002,240 TET4), 10 steps. Iliac: 20 steps. classic-cpu-10 is diagonal pressure CG (weak baseline) and fails outer/field checks.",
+ "machine": [
+  "Apple M4 Pro",
+  "14",
+  "51539607552"
+ ],
+ "source": "244b697b9472c927ebc559815b2e252cba270472",
+ "cases": {
+  "pipe": {
+   "reference": "cpu-10/run-1/10-procs/result_010.vtu",
+   "failures": [
+    "classic-cpu-10/run-1/measurement.json: incomplete or failed solve",
+    "classic-cpu-10/run-1: field comparison failed"
+   ],
+   "groups": {
+    "classic-cpu-10": {
+     "median_wall_s": 718.7221788329998,
+     "runs": [
+      {
+       "ranks": 10,
+       "wall_s": 718.7221788329998,
+       "simulation_s": 713.2,
+       "newton": 106,
+       "failed_ri_solves": 89,
+       "assembly_s": 18.152358338000003,
+       "cg_iterations": 444900.0,
+       "cg_calls": 1483.0,
+       "cg_s": 608.553237,
+       "gmres_s": 58.1797960000039,
+       "gmres_iterations": 24781.0,
+       "schur_setup_s": 0.0,
+       "pressure_setup_s": 9.400000009662519e-05,
+       "total_s": 693.585154,
+       "cg_failures": 1483.0,
+       "cg_true_residual_failures": 1483.0
+      }
+     ],
+     "field_checks": {
+      "classic-cpu-10/run-1": "failed"
+     }
+    },
+    "cpu-1": {
+     "median_wall_s": 701.059479083,
+     "runs": [
+      {
+       "ranks": 1,
+       "wall_s": 701.059479083,
+       "simulation_s": 695.6,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 95.61084446000001,
+       "cg_iterations": 21568.0,
+       "cg_calls": 381.0,
+       "cg_s": 484.726898,
+       "gmres_s": 55.1605250000002,
+       "gmres_iterations": 6575.0,
+       "schur_setup_s": 17.0567480000003,
+       "pressure_setup_s": 3.23825800000008,
+       "total_s": 597.06944,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-1/run-1": {
+       "Velocity": 2.679424935377751e-13,
+       "Pressure": 5.589807312617601e-15,
+       "WSS": 4.740323588056273e-13,
+       "Traction": 5.58868566096613e-15,
+       "Vorticity": 5.816250562223181e-13,
+       "Divergence": 8.344734305587752e-11
+      }
+     }
+    },
+    "cpu-10": {
+     "median_wall_s": 128.09128062499985,
+     "runs": [
+      {
+       "ranks": 10,
+       "wall_s": 126.97038658299971,
+       "simulation_s": 121.3,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 13.448807666999997,
+       "cg_iterations": 21142.0,
+       "cg_calls": 381.0,
+       "cg_s": 76.959715,
+       "gmres_s": 14.858126,
+       "gmres_iterations": 6575.0,
+       "schur_setup_s": 4.22351100000002,
+       "pressure_setup_s": 0.721812000000048,
+       "total_s": 106.62978,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      },
+      {
+       "ranks": 10,
+       "wall_s": 129.212174667,
+       "simulation_s": 123.7,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 13.701760208,
+       "cg_iterations": 21142.0,
+       "cg_calls": 381.0,
+       "cg_s": 78.792714,
+       "gmres_s": 15.02385599999998,
+       "gmres_iterations": 6575.0,
+       "schur_setup_s": 4.38419299999998,
+       "pressure_setup_s": 0.696370000000001,
+       "total_s": 108.795896,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-10/run-1": {
+       "Velocity": 0.0,
+       "Pressure": 0.0,
+       "WSS": 0.0,
+       "Traction": 0.0,
+       "Vorticity": 0.0,
+       "Divergence": 0.0
+      },
+      "cpu-10/run-2": {
+       "Velocity": 0.0,
+       "Pressure": 0.0,
+       "WSS": 0.0,
+       "Traction": 0.0,
+       "Vorticity": 0.0,
+       "Divergence": 0.0
+      }
+     }
+    },
+    "cpu-2": {
+     "median_wall_s": 391.1126623750006,
+     "runs": [
+      {
+       "ranks": 2,
+       "wall_s": 391.1126623750006,
+       "simulation_s": 385.4,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 50.144893500000016,
+       "cg_iterations": 21890.0,
+       "cg_calls": 381.0,
+       "cg_s": 261.798365,
+       "gmres_s": 33.8391349999995,
+       "gmres_iterations": 6569.0,
+       "schur_setup_s": 12.5947430000001,
+       "pressure_setup_s": 1.8001740000005,
+       "total_s": 333.052187,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-2/run-1": {
+       "Velocity": 2.719698219402625e-13,
+       "Pressure": 6.119979861380985e-15,
+       "WSS": 4.2404533551716894e-13,
+       "Traction": 6.113066470378948e-15,
+       "Vorticity": 5.450655850677207e-13,
+       "Divergence": 8.542504626568743e-11
+      }
+     }
+    },
+    "cpu-4": {
+     "median_wall_s": 205.5683731250001,
+     "runs": [
+      {
+       "ranks": 4,
+       "wall_s": 205.5683731250001,
+       "simulation_s": 200.4,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 26.633956545000004,
+       "cg_iterations": 22256.0,
+       "cg_calls": 381.0,
+       "cg_s": 135.13564,
+       "gmres_s": 16.38615499999971,
+       "gmres_iterations": 6574.0,
+       "schur_setup_s": 6.88312200000001,
+       "pressure_setup_s": 1.0231409999999,
+       "total_s": 172.287202,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-4/run-1": {
+       "Velocity": 2.7050320409049904e-13,
+       "Pressure": 1.1726753862378951e-15,
+       "WSS": 4.3295970617166163e-13,
+       "Traction": 1.2115426531400554e-15,
+       "Vorticity": 5.53174320760387e-13,
+       "Divergence": 8.418187939926829e-11
+      }
+     }
+    },
+    "cpu-8": {
+     "median_wall_s": 135.81215591599994,
+     "runs": [
+      {
+       "ranks": 8,
+       "wall_s": 135.81215591599994,
+       "simulation_s": 130.6,
+       "newton": 85,
+       "failed_ri_solves": 0,
+       "assembly_s": 15.843738499000002,
+       "cg_iterations": 21574.0,
+       "cg_calls": 381.0,
+       "cg_s": 83.54028,
+       "gmres_s": 14.591434000000019,
+       "gmres_iterations": 6575.0,
+       "schur_setup_s": 4.56778299999998,
+       "pressure_setup_s": 0.701609000000058,
+       "total_s": 113.451973,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-8/run-1": {
+       "Velocity": 2.6368266682033977e-13,
+       "Pressure": 5.028312852750627e-15,
+       "WSS": 3.8720639845745464e-13,
+       "Traction": 5.034065998221346e-15,
+       "Vorticity": 5.192561902102753e-13,
+       "Divergence": 7.941059345682978e-11
+      }
+     }
+    }
+   }
+  },
+  "iliac": {
+   "reference": "cpu-10/run-1/10-procs/result_020.vtu",
+   "failures": [],
+   "groups": {
+    "cpu-1": {
+     "median_wall_s": 138.81629749999956,
+     "runs": [
+      {
+       "ranks": 1,
+       "wall_s": 138.81629749999956,
+       "simulation_s": 138.0,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "assembly_s": 18.627836503000005,
+       "cg_iterations": 50313.0,
+       "cg_calls": 717.0,
+       "cg_s": 100.800028,
+       "gmres_s": 7.47847899999991,
+       "gmres_iterations": 9544.0,
+       "schur_setup_s": 3.14604499999996,
+       "pressure_setup_s": 0.723361000000017,
+       "total_s": 118.939437,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-1/run-1": {
+       "Velocity": 2.4878387714146744e-14,
+       "Pressure": 1.7830811497746362e-15,
+       "WSS": 1.3163717195244988e-14,
+       "Traction": 1.7415473558944856e-15,
+       "Vorticity": 2.2397319892097126e-14,
+       "Divergence": 3.16603612533612e-13
+      }
+     }
+    },
+    "cpu-10": {
+     "median_wall_s": 25.326465834001283,
+     "runs": [
+      {
+       "ranks": 10,
+       "wall_s": 25.326465834001283,
+       "simulation_s": 24.18,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "assembly_s": 2.1715823700000008,
+       "cg_iterations": 51044.0,
+       "cg_calls": 717.0,
+       "cg_s": 17.68567000000002,
+       "gmres_s": 1.511822000000176,
+       "gmres_iterations": 9546.0,
+       "schur_setup_s": 0.82083000000002,
+       "pressure_setup_s": 0.2108080000000191,
+       "total_s": 21.798402,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-10/run-1": {
+       "Velocity": 0.0,
+       "Pressure": 0.0,
+       "WSS": 0.0,
+       "Traction": 0.0,
+       "Vorticity": 0.0,
+       "Divergence": 0.0
+      }
+     }
+    },
+    "cpu-2": {
+     "median_wall_s": 76.13914266599932,
+     "runs": [
+      {
+       "ranks": 2,
+       "wall_s": 76.13914266599932,
+       "simulation_s": 75.21,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "assembly_s": 9.167332507000003,
+       "cg_iterations": 51254.0,
+       "cg_calls": 716.0,
+       "cg_s": 54.260888,
+       "gmres_s": 4.28274800000021,
+       "gmres_iterations": 9530.0,
+       "schur_setup_s": 2.48885900000001,
+       "pressure_setup_s": 0.444256000000136,
+       "total_s": 65.649349,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-2/run-1": {
+       "Velocity": 2.5444082919009724e-14,
+       "Pressure": 2.631853216959463e-15,
+       "WSS": 1.368493090971564e-14,
+       "Traction": 2.54316239310943e-15,
+       "Vorticity": 2.279527851231396e-14,
+       "Divergence": 3.433699608564234e-13
+      }
+     }
+    },
+    "cpu-4": {
+     "median_wall_s": 43.41370187499888,
+     "runs": [
+      {
+       "ranks": 4,
+       "wall_s": 43.41370187499888,
+       "simulation_s": 42.5,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "assembly_s": 4.731670916000001,
+       "cg_iterations": 50915.0,
+       "cg_calls": 717.0,
+       "cg_s": 30.35371300000001,
+       "gmres_s": 2.758724000000172,
+       "gmres_iterations": 9544.0,
+       "schur_setup_s": 1.461931000000013,
+       "pressure_setup_s": 0.27738800000006203,
+       "total_s": 37.48419,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-4/run-1": {
+       "Velocity": 2.5351726081613778e-14,
+       "Pressure": 8.249680792817014e-16,
+       "WSS": 1.365004424904611e-14,
+       "Traction": 8.325167352840785e-16,
+       "Vorticity": 2.268106653506299e-14,
+       "Divergence": 3.3426702157416545e-13
+      }
+     }
+    },
+    "cpu-8": {
+     "median_wall_s": 26.984171249998326,
+     "runs": [
+      {
+       "ranks": 8,
+       "wall_s": 26.984171249998326,
+       "simulation_s": 25.97,
+       "newton": 184,
+       "failed_ri_solves": 0,
+       "assembly_s": 2.5068807029999998,
+       "cg_iterations": 50911.0,
+       "cg_calls": 716.0,
+       "cg_s": 18.73232499999997,
+       "gmres_s": 1.674579000000021,
+       "gmres_iterations": 9531.0,
+       "schur_setup_s": 0.920148000000007,
+       "pressure_setup_s": 0.209264000000023,
+       "total_s": 23.246748,
+       "cg_failures": 0.0,
+       "cg_true_residual_failures": 0.0
+      }
+     ],
+     "field_checks": {
+      "cpu-8/run-1": {
+       "Velocity": 2.5703672588493434e-14,
+       "Pressure": 8.206878582474473e-16,
+       "WSS": 1.3820008357385877e-14,
+       "Traction": 7.973280100923004e-16,
+       "Vorticity": 2.309034275621356e-14,
+       "Divergence": 3.350253991195535e-13
+      }
+     }
+    }
+   }
+  }
+ }
+}
