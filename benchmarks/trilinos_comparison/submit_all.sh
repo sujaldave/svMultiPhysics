@@ -18,7 +18,10 @@
 #   SVMP_PYTHON       Python with NumPy, only needed to generate a missing pipe case
 #   SVMP_DRY_RUN=1    print the sbatch commands without submitting
 # After all jobs finish, copy SVMP_OUTPUT_ROOT back and run compare_builds.py.
-set -euo pipefail
+set -Eeuo pipefail
+# Never fail silently: report the failing line on the original stderr.
+exec 3>&2
+trap 'echo "submit_all.sh: stopped at line $LINENO: $BASH_COMMAND" >&3' ERR
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo"   # every suite uses SLURM_SUBMIT_DIR as the repository root
@@ -56,19 +59,25 @@ describe_build() {
     grep -E '^(Trilinos_DIR|Kokkos_DIR|CMAKE_BUILD_TYPE|CMAKE_CXX_COMPILER)[:=]' "$cache" 2>/dev/null || true
     prefix=$(grep -E '^Trilinos_DIR[:=]' "$cache" 2>/dev/null | sed 's/^[^=]*=//; s#/lib6\{0,1\}4\{0,1\}/cmake/Trilinos$##' || true)
     for config in "$prefix"/include/KokkosCore_config.h "$prefix"/include/kokkos/KokkosCore_config.h; do
-      [[ -f $config ]] && grep -E 'define KOKKOS_(ARCH_[A-Z0-9_]+|ENABLE_CUDA|VERSION)\b' "$config"
+      [[ -f $config ]] && { grep -E 'define KOKKOS_(ARCH_[A-Z0-9_]+|ENABLE_CUDA|VERSION)\b' "$config" || true; }
     done
     grep -hE 'set\(Trilinos_VERSION ' "$prefix"/lib*/cmake/Trilinos/TrilinosConfig.cmake 2>/dev/null || true
     echo "--- ldd (Trilinos/Kokkos/CUDA/MPI)"
     ldd "$build/svMultiPhysics-build/bin/svmultiphysics" | grep -iE 'tpetra|kokkoscore|muelu|belos|cudart|libmpi' || true
   } > "$root/build-$name.txt" 2>&1
 }
-describe_build "$new_build" new
-describe_build "$old_build" old
+echo "New build: $new_build"
+echo "Old build: $old_build"
+echo "Results:   $root"
+# Build descriptions are informational and must never stop the submission.
+describe_build "$new_build" new || echo "warning: incomplete $root/build-new.txt" >&2
+describe_build "$old_build" old || echo "warning: incomplete $root/build-old.txt" >&2
+grep -E 'KOKKOS_ARCH|Trilinos_VERSION' "$root/build-new.txt" || echo "warning: Kokkos arch/Trilinos version not found for the new build" >&2
 module list > "$root/modules.txt" 2>&1 || true
 (git rev-parse HEAD && git status --short) > "$root/source.txt" 2>&1 || true
 
-# Each job starts from a clean SVMP_* environment plus the variables given here.
+# Each job starts without SVMP_* variables except those given here, and without
+# the SLURM_*/SBATCH_* settings of an enclosing (e.g. interactive) allocation.
 submit() {
   local name=$1 script=$2 time=$3; shift 3
   local cmd=(sbatch --parsable --time="$time")
@@ -78,7 +87,8 @@ submit() {
   echo "[$name] ${vars[*]} ${cmd[*]}" | tee -a "$root/submissions.txt"
   if [[ ${SVMP_DRY_RUN:-0} == 1 ]]; then return; fi
   local id
-  id=$(env $(compgen -e | grep '^SVMP_' | sed 's/^/-u /') "${vars[@]}" "${cmd[@]}")
+  id=$(env $(compgen -e | grep -E '^(SVMP|SLURM|SBATCH)_' | grep -vx 'SLURM_CONF' | sed 's/^/-u /') \
+         "${vars[@]}" "${cmd[@]}")
   id=${id%%;*}
   echo "$name $id" >> "$root/jobs.txt"
   last_job=$id
