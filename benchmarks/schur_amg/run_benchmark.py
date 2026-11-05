@@ -13,6 +13,8 @@ import os
 import platform
 from pathlib import Path
 import re
+import shlex
+import signal
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -32,7 +34,13 @@ def main():
     parser.add_argument('--gpus-per-task', type=int, default=0)
     parser.add_argument('--gpus-per-node', type=int, default=0, help='Explicit GPU count for each Slurm step.')
     parser.add_argument('--srun-exact', action='store_true', help='Limit each Slurm step to its requested CPU resources.')
-    parser.add_argument('--cpu-bind', choices=['cores'], help='Optional Slurm CPU binding.')
+    parser.add_argument('--cpu-bind', choices=['cores', 'none'], help='Optional Slurm CPU binding.')
+    parser.add_argument('--mpirun-args', default='',
+                        help='Extra mpirun options (mapping/binding), e.g. "--map-by ppr:8:node --bind-to none".')
+    parser.add_argument('--rank-wrapper', type=Path,
+                        help='Executable that starts each rank (selects its GPU/CPUs), then execs the solver.')
+    parser.add_argument('--timeout', type=float, default=0,
+                        help='Kill a run after this many seconds (0: no limit); it is recorded as failed.')
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--assembly', choices=['auto','legacy','kokkos'], default='auto')
     parser.add_argument('--assembly-stats', action='store_true')
@@ -51,6 +59,10 @@ def main():
         parser.error("gpus-per-task requires srun and a nonnegative count")
     if args.gpus_per_node < 0 or (args.gpus_per_node and args.launcher != 'srun'):
         parser.error('gpus-per-node requires srun and a nonnegative count')
+    if (args.mpirun_args or args.rank_wrapper) and args.launcher != 'mpirun':
+        parser.error('mpirun-args and rank-wrapper require the mpirun launcher')
+    if args.rank_wrapper and not os.access(args.rank_wrapper, os.X_OK):
+        parser.error(f'rank wrapper is not executable: {args.rank_wrapper}')
     exe = args.exe.resolve()
     if not exe.is_file():
         parser.error(f"executable does not exist: {exe}")
@@ -82,6 +94,8 @@ def main():
             ET.SubElement(la, 'CG_Preconditioner').text = 'trilinos-' + args.preconditioner
         tree.write(run / 'solver.xml', encoding='utf-8', xml_declaration=True)
         command = [str(exe), 'solver.xml']
+        if args.rank_wrapper:
+            command = [str(args.rank_wrapper.resolve())] + command
         if args.profile == 'nsys':
             command = ['nsys','profile','--trace='+('cuda,nvtx,mpi,osrt' if args.profile_mpi else 'cuda,nvtx,osrt'),'--sample=none',
                        '--stats=true','--output='+str(run/'trace')] + command
@@ -96,8 +110,8 @@ def main():
             if args.gpus_per_node:
                 prefix += ['--gpus-per-node',str(args.gpus_per_node)]
             command = prefix + command
-        elif args.ranks > 1:
-            command = ['mpirun', '-np', str(args.ranks)] + command
+        elif args.ranks > 1 or args.mpirun_args or args.rank_wrapper:
+            command = ['mpirun', '-np', str(args.ranks)] + shlex.split(args.mpirun_args) + command
         env = os.environ.copy()
         env['OMP_NUM_THREADS'] = str(args.threads)
         env['KOKKOS_NUM_THREADS'] = str(args.threads)
@@ -118,8 +132,27 @@ def main():
         if args.stats:
             env['SV_TRILINOS_BIPN_STATS'] = '1'
         start = time.perf_counter()
+        timed_out = False
         with (run / 'stdout.log').open('w') as log:
-            result = subprocess.run(command, cwd=run, env=env, stdout=log, stderr=subprocess.STDOUT)
+            # A separate session lets a timeout stop mpirun and every rank it started.
+            process = subprocess.Popen(command, cwd=run, env=env, stdout=log,
+                                       stderr=subprocess.STDOUT, start_new_session=True)
+            try:
+                returncode = process.wait(timeout=args.timeout or None)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                for sig in (signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(process.pid, sig)
+                    except ProcessLookupError:
+                        break
+                    try:
+                        process.wait(timeout=30)
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+                returncode = process.returncode if process.returncode is not None else -9
+                log.write(f'\nTIMEOUT: killed after {args.timeout:g} s\n')
         elapsed = time.perf_counter() - start
         log = (run / 'stdout.log').read_text()
         history_path = run / f'{args.ranks}-procs/histor.dat'
@@ -138,19 +171,23 @@ def main():
                 assembly_stats.append(dict(kind=line.split()[0], **item))
         boundary_stats = [dict(re.findall(r'(\w+)=([^\s]+)', line))
                           for line in log.splitlines() if line.startswith('BOUNDARY_SETUP_STATS ')]
-        record = dict(schur_coarse=env.get('SV_TRILINOS_SCHUR_COARSE','klu'), gpu_aware_mpi=env.get('TPETRA_ASSUME_GPU_AWARE_MPI','auto'), schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
+        communication = {key: env[key] for key in sorted(env)
+                         if key.startswith(('UCX_', 'OMPI_MCA_', 'TPETRA_', 'NCCL_'))
+                         or key in ('CUDA_DEVICE_ORDER', 'SVMP_BIND', 'SVMP_COMM')}
+        record = dict(schur_coarse=env.get('SV_TRILINOS_SCHUR_COARSE','klu'), gpu_aware_mpi=env.get('TPETRA_ASSUME_GPU_AWARE_MPI','auto'),
+                      communication=communication, timed_out=timed_out, timeout_s=args.timeout or None, schur_reuse=args.schur_reuse, schur_operator=args.schur_operator,
                       profiled=bool(args.profile), boundary_stats=boundary_stats,
                       executable=str(exe), case=str(case), preconditioner=args.preconditioner,
                       gmres_preconditioner=args.gmres_preconditioner,
                       assembly_mode=args.assembly, assembly_stats=assembly_stats,
                       steps=args.steps, ranks=args.ranks, threads=args.threads, command=command,
-                      wall_seconds=elapsed, returncode=result.returncode,
+                      wall_seconds=elapsed, returncode=returncode,
                       completed=completed, nonlinear_iterations=len(nonlinear_lines),
                       simulation_seconds=float(nonlinear_lines[-1].split()[2]) if nonlinear_lines else None,
                       platform=platform.platform(), jacobians=stats)
         (run / 'measurement.json').write_text(json.dumps(record, indent=2) + '\n')
-        print(f'{run}: {elapsed:.3f} s, exit={result.returncode}', flush=True)
-        if result.returncode or not completed:
+        print(f'{run}: {elapsed:.3f} s, exit={returncode}' + (' (timeout)' if timed_out else ''), flush=True)
+        if returncode or not completed:
             raise SystemExit(f'Run failed; see {run / "stdout.log"}')
 
 
