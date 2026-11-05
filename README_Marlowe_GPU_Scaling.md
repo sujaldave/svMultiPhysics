@@ -1,4 +1,4 @@
-# Marlowe H100 strong scaling: 1, 4, 8 GPUs (one node) and 16 GPUs (two nodes)
+# Marlowe H100 strong scaling: 1, 2, 4, 8 GPUs (one node) and 16 GPUs (two nodes)
 
 This is the Marlowe counterpart of the Sherlock A40 scaling suite
 (`benchmarks/gpu_scaling/sherlock_a40_scaling.sbatch`). It uses the same solver
@@ -95,7 +95,7 @@ That submits four independent jobs into one campaign root:
 
 | Job | Nodes | GPU counts | Configurations |
 |---|---:|---|---|
-| `iliac-nodes1`, `pipe-nodes1` | 1 (exclusive) | 1, 4, 8 | 1 GPU × 3 bindings, plus {4, 8} × 3 bindings × 2 comm modes = 15 |
+| `iliac-nodes1`, `pipe-nodes1` | 1 (exclusive) | 1, 2, 4, 8 | 1 GPU × 3 bindings, plus {2, 4, 8} × 3 bindings × 2 comm modes = 21 |
 | `iliac-nodes2`, `pipe-nodes2` | 2 (exclusive) | 16 | 3 bindings × 2 comm modes = 6 |
 
 Each configuration runs `SVMP_REPEAT=3` independent solver processes. Each
@@ -115,7 +115,7 @@ Useful overrides (all `SVMP_*` variables pass through `submit_marlowe.sh`):
 |---|---|---|
 | `SVMP_BIND_MODES` | `core numa none` | `numa` once the winner is known |
 | `SVMP_COMM_MODES` | `ucx-best gpuaware-ipc` | `"ucx-best ucx-cache-on"` on two nodes |
-| `SVMP_GPU_COUNTS` | `1 4 8` (1 node), `16` (2 nodes) | `8` on 2 nodes = 4+4 GPUs, isolates the inter-node cost |
+| `SVMP_GPU_COUNTS` | `1 2 4 8` (1 node), `16` (2 nodes) | `8` on 2 nodes = 4+4 GPUs, isolates the inter-node cost |
 | `SVMP_SCHUR_COARSE` | KLU2 | `chebyshev`: device coarse solve, tests the KLU2-gather hypothesis |
 | `SVMP_MPIRUN_EXTRA` | none | `"--mca coll ^ucc,hcoll"` if a GPU-aware run fails with UCC `Message truncated` |
 | `SVMP_REPEAT`, `SVMP_RUN_TIMEOUT` | 3, 900 s | |
@@ -175,7 +175,7 @@ The summary contains one table per case, with these columns:
 
 1. **1 GPU, all bindings:** the direct H100 vs A40 comparison. Compare with
    35.7 s for iliac and 82.0 s for the pipe on one A40 (`build3`).
-2. **4 and 8 GPUs, `ucx-best` vs `gpuaware-ipc`:** whether NVLink helps. If
+2. **2, 4 and 8 GPUs, `ucx-best` vs `gpuaware-ipc`:** whether NVLink helps. If
    CG ms/iteration stays flat from 1 to 4 GPUs here but blew up on the A40,
    the A40 stall was the PCIe/cross-socket path.
 3. **`core` vs `numa` at 8 and 16 GPUs:** whether the old binding recipe costs
