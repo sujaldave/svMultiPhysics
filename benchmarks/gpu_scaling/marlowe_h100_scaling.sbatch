@@ -17,7 +17,7 @@
 # Marlowe DGX H100 nodes: the Marlowe counterpart of sherlock_a40_scaling.sbatch.
 # One MPI rank per GPU, launched with HPC-X mpirun (as in all earlier Marlowe runs).
 #
-#   1 node  (default):  1, 2, 4, 8 GPUs   sbatch benchmarks/gpu_scaling/marlowe_h100_scaling.sbatch
+#   1 node  (default):  1, 4, 8 GPUs     sbatch benchmarks/gpu_scaling/marlowe_h100_scaling.sbatch
 #   2 nodes:            16 GPUs          sbatch --nodes=2 benchmarks/gpu_scaling/marlowe_h100_scaling.sbatch
 #   (benchmarks/gpu_scaling/submit_marlowe.sh submits both, one job per case)
 #
@@ -94,7 +94,7 @@ fi
 IFS=, read -r -a node_gpus <<< "${CUDA_VISIBLE_DEVICES:?Slurm did not assign GPUs}"
 gpus_per_node=${#node_gpus[@]}
 export SVMP_NODE_GPUS=$CUDA_VISIBLE_DEVICES
-if (( nodes == 1 )); then default_counts="1 2 4 8"; else default_counts=$((nodes * gpus_per_node)); fi
+if (( nodes == 1 )); then default_counts="1 4 8"; else default_counts=$((nodes * gpus_per_node)); fi
 read -r -a counts <<< "${SVMP_GPU_COUNTS:-$default_counts}"
 read -r -a cases <<< "${SVMP_CASES:-iliac pipe}"
 read -r -a binds <<< "${SVMP_BIND_MODES:-core numa none}"

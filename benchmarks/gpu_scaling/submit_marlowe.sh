@@ -1,6 +1,6 @@
 #!/bin/bash
 # Submit the Marlowe H100 scaling campaign: for every case, one 1-node job
-# (1, 2, 4, 8 GPUs) and one 2-node job (16 GPUs), all under one campaign root.
+# (1, 4, 8 GPUs) and one 2-node job (16 GPUs), all under one campaign root.
 #
 # Run from anywhere on a Marlowe login node:
 #   SVMP_BUILD_DIR=/path/to/svMultiPhysics/build benchmarks/gpu_scaling/submit_marlowe.sh
