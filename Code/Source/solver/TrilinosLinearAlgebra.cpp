@@ -93,6 +93,15 @@ bool TrilinosLinearAlgebra::assemble_fluid(ComMod& com_mod, const mshType& mesh,
   return false;
 }
 
+bool TrilinosLinearAlgebra::assemble_heatf(ComMod& com_mod, const mshType& mesh,
+    const SolutionStates& solutions)
+{
+#ifdef WITH_TRILINOS
+  if (!use_fsils_assembly) return impl->assemble_heatf(com_mod, mesh, solutions);
+#endif
+  return false;
+}
+
 /// @brief Check the validity of the precondition and assembly options. 
 /// 
 /// Trilinos can use fsils or trilinos for assembly.

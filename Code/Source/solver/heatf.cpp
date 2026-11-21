@@ -44,6 +44,7 @@ void b_heatf(ComMod& com_mod, const int eNoN, const double w, const Vector<doubl
 
 void construct_heatf(ComMod& com_mod, const mshType& lM, const SolutionStates& solutions)
 {
+  if (com_mod.eq[com_mod.cEq].linear_algebra->assemble_heatf(com_mod, lM, solutions)) return;
   const auto& Ag = solutions.intermediate.get_acceleration();
   const auto& Yg = solutions.intermediate.get_velocity();
   #define n_debug_construct_heatf 

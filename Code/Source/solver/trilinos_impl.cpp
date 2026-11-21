@@ -18,6 +18,7 @@
 #include "TrilinosPreconditionerFactory.h"
 #include "TrilinosResistanceOperator.h"
 #include "TrilinosFluidAssembly.h"
+#include "TrilinosHeatFAssembly.h"
 #include "TrilinosSolverOptions.h"
 #include <cmath>
 #include <fstream>
@@ -1074,6 +1075,7 @@ class TrilinosLinearAlgebra::TrilinosImpl {
     void assemble(ComMod& com_mod, const int num_elem_nodes, const Vector<int>& eqN,
         const Array3<double>& lK, const Array<double>& lR);
     bool assemble_fluid(ComMod& c, const mshType& m, const SolutionStates& s) { return fluid_assembly_.assemble(c, m, s, *trilinos_); }
+    bool assemble_heatf(ComMod& c, const mshType& m, const SolutionStates& s) { return heatf_assembly_.assemble(c, m, s, *trilinos_); }
     void initialize(ComMod& com_mod);
     void solve(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vector<double>& res);
     void solve_assembled(ComMod& com_mod, eqType& lEq, const Vector<int>& incL, const Vector<double>& res);
@@ -1103,6 +1105,7 @@ class TrilinosLinearAlgebra::TrilinosImpl {
     Teuchos::RCP<trilinos_bipartition::TrilinosNSBlockTopologyCache>
         block_topology_cache_;
     trilinos_backend::FluidAssembly fluid_assembly_;
+    trilinos_backend::HeatFAssembly heatf_assembly_;
     bool runtime_registered_ = false;
 };
 
@@ -1342,6 +1345,7 @@ void TrilinosLinearAlgebra::TrilinosImpl::finalize()
   boundary_values_.clear();
   cap_values_.clear();
   fluid_assembly_.clear();
+  heatf_assembly_.clear();
   trilinos_->local_assembly.clear();
   trilinos_->topology.clear();
   trilinos_->comm = Teuchos::null;

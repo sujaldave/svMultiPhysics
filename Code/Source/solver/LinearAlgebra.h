@@ -26,6 +26,8 @@ class LinearAlgebra {
         const Array3<double>& lK, const Array<double>& lR) = 0;
     // Optional batched fluid assembly into backend-owned storage.
     virtual bool assemble_fluid(ComMod&, const mshType&, const SolutionStates&) { return false; }
+    // Optional batched heatF (scalar transport) volume assembly.
+    virtual bool assemble_heatf(ComMod&, const mshType&, const SolutionStates&) { return false; }
     virtual void check_options(const consts::PreconditionerType prec_cond_type, const consts::LinearAlgebraType assembly_type) = 0;
     virtual void initialize(ComMod& com_mod, eqType& lEq) = 0;
     virtual void set_assembly(consts::LinearAlgebraType assembly_type) = 0;

@@ -208,6 +208,7 @@ set(CSRCS
   TrilinosBipartitionNS.h TrilinosBipartitionNS.cpp
   TrilinosAssembly.cpp
   TrilinosFluidAssembly.h TrilinosFluidAssembly.cpp
+  TrilinosHeatFAssembly.h TrilinosHeatFAssembly.cpp
   FluidElementKernel.h
   TrilinosNSBlockOperators.h TrilinosNSBlockOperators.cpp
   TrilinosPreconditionerFactory.h TrilinosPreconditionerFactory.cpp

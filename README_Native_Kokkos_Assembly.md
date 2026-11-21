@@ -24,6 +24,20 @@ and RIS/URIS retain the existing assembly path in automatic mode. This change
 does not add FSI/ALE device element kernels. The shared host element functions
 still support their existing viscosity models and moving-mesh inputs.
 
+### Scalar transport (heatF)
+
+`scalarTransport` / heatF equations also have a Kokkos volume kernel
+(`TrilinosHeatFAssembly.cpp`, a port of `heatf::heatf_3d`: SUPG test function,
+`tau = 1/sqrt(4/dt^2 + u.G.u + 3 nu^2 G:G)`, and discontinuity capturing).
+It is used for 3D TET4 meshes with one domain, constant conductivity, and no
+moving mesh; velocity is read from the state rows `0..2` (e.g. a precomputed
+velocity). Neumann/backflow terms (`b_heatf`) stay on the host and are flushed
+through `LocalAssemblyBuffer` as for fluid. The same `SV_TRILINOS_ASSEMBLY`
+values apply. On the Mac (Serial Kokkos, 1 rank) the Fontan AD case
+(242k nodes, 1.4M tets, `precomputed_velocity_25.vtu`, 5 steps, GMRES +
+trilinos-diagonal) went from 18.7 s/step (legacy host loop) to 2.14 s/step,
+with bitwise-identical output; the kernel takes 0.16 s per Newton iteration.
+
 Select native Trilinos assembly in the solver XML:
 
 ```xml
